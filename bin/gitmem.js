@@ -183,7 +183,7 @@ function cmdConfigure() {
       mcpServers: {
         gitmem: {
           command: "npx",
-          args: ["-y", "gitmem"],
+          args: ["-y", "@nteg-dev/gitmem"],
         },
       },
     };
@@ -202,7 +202,7 @@ function cmdConfigure() {
       mcpServers: {
         gitmem: {
           command: "npx",
-          args: ["-y", "gitmem"],
+          args: ["-y", "@nteg-dev/gitmem"],
           env: {
             SUPABASE_URL: "https://YOUR_PROJECT.supabase.co",
             SUPABASE_SERVICE_ROLE_KEY: "eyJ...",

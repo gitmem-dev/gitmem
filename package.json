@@ -1,0 +1,60 @@
+{
+  "name": "gitmem",
+  "version": "0.1.0",
+  "description": "Institutional memory for AI coding agents. Never repeat the same mistake.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "gitmem": "bin/gitmem.js",
+    "gitmem-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "schema",
+    "CLAUDE.md.template",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "mcp",
+    "gitmem",
+    "claude",
+    "cursor",
+    "institutional-memory",
+    "ai-coding",
+    "scars",
+    "semantic-search"
+  ],
+  "author": "nTEG Labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nTEG-dev/gitmem.git"
+  },
+  "homepage": "https://github.com/nTEG-dev/gitmem#readme"
+}

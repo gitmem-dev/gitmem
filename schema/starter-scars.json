@@ -1,0 +1,206 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "learning_type": "scar",
+    "title": "Tests Pass Locally But Fail in CI",
+    "description": "Local test environments often differ from CI (different OS, Node version, env vars, timing). Code that passes locally may fail in CI due to missing environment variables, hardcoded paths, race conditions, or dependency version differences. Always verify in CI before declaring 'it works'.",
+    "severity": "high",
+    "scar_type": "verification",
+    "counter_arguments": [
+      "Our CI config matches local exactly — but environment variables, caching, and timing can still differ",
+      "We have good test coverage so local passing is enough — but coverage doesn't catch environment-specific issues"
+    ],
+    "keywords": ["tests", "ci", "local", "environment", "flaky"],
+    "domain": ["testing", "ci-cd"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000002",
+    "learning_type": "scar",
+    "title": "Done != Deployed != Verified Working",
+    "description": "Code being 'done' (merged) doesn't mean it's deployed, and being deployed doesn't mean it's working correctly in production. The full loop is: merge → deploy → verify the feature works end-to-end in the target environment. Skipping verification leads to silent failures.",
+    "severity": "critical",
+    "scar_type": "verification",
+    "counter_arguments": [
+      "Our deployment pipeline is automated so merge = deploy — but automated doesn't mean verified working",
+      "We have monitoring that would catch issues — but monitoring has blind spots and alert fatigue is real"
+    ],
+    "keywords": ["deployment", "verification", "production", "done"],
+    "domain": ["deployment", "operations"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000003",
+    "learning_type": "scar",
+    "title": "Environment Variables Missing in Production",
+    "description": "New features that rely on environment variables frequently fail in production because the variables were set locally but never added to the production environment. Always document required env vars and verify they exist in all target environments before deploying.",
+    "severity": "high",
+    "scar_type": "deployment",
+    "counter_arguments": [
+      "We have a .env.example that tracks all variables — but .env.example and actual production config drift apart",
+      "Our deployment checklist covers env vars — but checklists get skipped under time pressure"
+    ],
+    "keywords": ["environment", "variables", "production", "config", "missing"],
+    "domain": ["deployment", "configuration"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000004",
+    "learning_type": "scar",
+    "title": "Database Migration Without Rollback Plan",
+    "description": "Running database migrations without a tested rollback plan risks data loss or extended downtime. Destructive migrations (dropping columns, changing types) are especially dangerous. Always write and test the down migration before running the up migration in production.",
+    "severity": "critical",
+    "scar_type": "architectural",
+    "counter_arguments": [
+      "This migration is additive so it's safe — but even additive migrations can fail and leave the schema in a partial state",
+      "We can always restore from backup — but backup restoration takes time and may lose recent data"
+    ],
+    "keywords": ["database", "migration", "rollback", "schema", "data-loss"],
+    "domain": ["database", "operations"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000005",
+    "learning_type": "scar",
+    "title": "Hardcoded Secrets in Source Code",
+    "description": "API keys, database passwords, and other secrets hardcoded in source code inevitably leak — through git history, logs, error messages, or public repos. Always use environment variables or a secrets manager. If a secret was ever committed, rotate it immediately.",
+    "severity": "critical",
+    "scar_type": "security",
+    "counter_arguments": [
+      "This is a private repo so it's fine — but private repos get forked, team members change, and git history is forever",
+      "It's just a dev/test key — but dev keys often have more permissions than expected and habits carry to production"
+    ],
+    "keywords": ["secrets", "api-keys", "security", "hardcoded", "credentials"],
+    "domain": ["security", "configuration"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000006",
+    "learning_type": "scar",
+    "title": "API Breaking Change Without Versioning",
+    "description": "Changing API response shapes, removing fields, or modifying behavior without versioning breaks downstream consumers silently. Even 'internal' APIs often have more consumers than expected. Use API versioning and deprecation periods for any breaking change.",
+    "severity": "high",
+    "scar_type": "architectural",
+    "counter_arguments": [
+      "Only our own frontend uses this API — but other teams, scripts, and integrations may depend on it too",
+      "We can coordinate the change with all consumers — but coordinated deploys are fragile and someone always gets missed"
+    ],
+    "keywords": ["api", "breaking-change", "versioning", "backwards-compatibility"],
+    "domain": ["api", "architecture"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000007",
+    "learning_type": "scar",
+    "title": "Cache Invalidation After Data Update",
+    "description": "When data is updated but cached values aren't invalidated, users see stale data. This is especially insidious because it works 'sometimes' (when the cache expires naturally). Always identify all caches that need invalidation when changing underlying data.",
+    "severity": "medium",
+    "scar_type": "operational",
+    "counter_arguments": [
+      "Our cache TTL is short enough that staleness is acceptable — but even short TTLs cause confusion during testing and demos",
+      "We don't use caching in this part of the system — but CDNs, browser caches, and ORM-level caches are often invisible"
+    ],
+    "keywords": ["cache", "invalidation", "stale-data", "ttl"],
+    "domain": ["caching", "data"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000008",
+    "learning_type": "scar",
+    "title": "Off-by-One Errors in Pagination",
+    "description": "Pagination logic is a common source of off-by-one errors: skipping the first item, duplicating items at page boundaries, or returning empty last pages. Always test pagination with 0 items, 1 item, exactly page-size items, and page-size + 1 items.",
+    "severity": "medium",
+    "scar_type": "verification",
+    "counter_arguments": [
+      "Our pagination uses a well-tested library — but the integration between your offset/cursor logic and the library is where bugs hide",
+      "We tested with a few pages and it works — but edge cases at boundaries and with concurrent modifications are where pagination breaks"
+    ],
+    "keywords": ["pagination", "off-by-one", "cursor", "offset", "boundary"],
+    "domain": ["api", "data"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000009",
+    "learning_type": "scar",
+    "title": "Timezone Bugs Between Server and Client",
+    "description": "Timezone handling between server (usually UTC) and client (user's local timezone) is a frequent source of bugs. Dates that 'look right' in development (same timezone) break for users in different timezones. Always store dates as UTC and convert only at the display layer.",
+    "severity": "medium",
+    "scar_type": "operational",
+    "counter_arguments": [
+      "We already use UTC everywhere — but date libraries and database functions sometimes apply local timezone implicitly",
+      "Our users are all in one timezone — but that assumption breaks when the product grows or developers travel"
+    ],
+    "keywords": ["timezone", "utc", "date", "time", "client-server"],
+    "domain": ["frontend", "backend", "data"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000010",
+    "learning_type": "scar",
+    "title": "Silent Error Swallowing Hides Real Failures",
+    "description": "Empty catch blocks and generic error handlers that log but don't surface errors lead to silent failures. The system appears to work while data is lost or corrupted. At minimum, log errors with enough context to diagnose the issue. Better: fail visibly so problems are caught early.",
+    "severity": "high",
+    "scar_type": "operational",
+    "counter_arguments": [
+      "We catch errors to prevent crashes — but catching without handling is worse than crashing because the problem is hidden",
+      "The error is non-critical so swallowing it is fine — but 'non-critical' errors compound and mask the root cause of critical issues"
+    ],
+    "keywords": ["error-handling", "catch", "silent-failure", "logging"],
+    "domain": ["error-handling", "debugging"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000011",
+    "learning_type": "scar",
+    "title": "Long-Lived Feature Branches Create Merge Hell",
+    "description": "Feature branches that diverge from main for more than a few days accumulate merge conflicts and integration issues. The longer a branch lives, the harder and riskier the merge. Break large features into small, mergeable increments behind feature flags if needed.",
+    "severity": "medium",
+    "scar_type": "process",
+    "counter_arguments": [
+      "This feature is too big to merge incrementally — but that means the feature should be broken into smaller deliverables",
+      "We'll merge when it's fully done to avoid shipping incomplete features — but feature flags solve this without the merge risk"
+    ],
+    "keywords": ["git", "branch", "merge", "conflict", "feature-flag"],
+    "domain": ["git", "process"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000012",
+    "learning_type": "scar",
+    "title": "Premature Abstraction Increases Complexity",
+    "description": "Creating abstractions, helpers, and shared utilities before you have at least 3 concrete use cases leads to wrong abstractions that are harder to change than duplicated code. Wait until patterns emerge naturally. Three similar implementations reveal the right abstraction; one guess rarely does.",
+    "severity": "medium",
+    "scar_type": "architectural",
+    "counter_arguments": [
+      "DRY principle says we should never duplicate code — but WET (Write Everything Twice) is better than wrong abstractions",
+      "Good architecture means planning ahead — but over-engineering for hypothetical futures wastes time and adds complexity"
+    ],
+    "keywords": ["abstraction", "dry", "complexity", "over-engineering", "refactoring"],
+    "domain": ["architecture", "design"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  }
+]

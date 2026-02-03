@@ -1,0 +1,47 @@
+# GitMem — Institutional Memory
+
+## What is this?
+GitMem gives your AI coding agent persistent memory across sessions. It remembers mistakes (scars), successes (wins), and decisions — so you never repeat the same mistake twice.
+
+## Automatic behaviors
+
+When working on this project, follow these memory protocols:
+
+### Before any task
+- Call `recall` with a brief description of what you're about to do
+- Review any scars that surface — they're warnings from past experience
+- Acknowledge relevant scars before proceeding
+
+### At session start
+- Call `session_start` to load context from the last session
+- Review open threads from the previous session
+
+### When mistakes happen
+- If something breaks unexpectedly, suggest creating a scar with `create_learning`
+- Include counter-arguments (why someone might think the mistake is OK)
+- Scars need: title, description, severity, and at least 2 counter_arguments
+
+### When things go well
+- If a pattern or approach works particularly well, capture it as a win
+- Wins help replicate success across sessions
+
+### When making decisions
+- For architectural or significant operational decisions, log them with `create_decision`
+- Include what alternatives were considered and why they were rejected
+
+### At session end
+- On "closing", "done for now", or "wrapping up", call `session_close`
+- Reflect on what worked, what broke, and what to do differently
+- Record which scars you applied during the session
+
+## Tool quick reference
+
+| Tool | Alias | When to use |
+|------|-------|-------------|
+| `recall` | `gitmem-r` | Before any task — check for relevant warnings |
+| `session_start` | `gitmem-ss` | Beginning of session — load context |
+| `session_close` | `gitmem-sc` | End of session — persist learnings |
+| `create_learning` | `gitmem-cl` | After mistakes or successes — capture knowledge |
+| `create_decision` | `gitmem-cd` | When making choices — log the reasoning |
+| `record_scar_usage` | `gitmem-rs` | Track which scars helped |
+| `help` | `gitmem-help` | Show all commands |

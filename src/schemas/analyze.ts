@@ -8,7 +8,7 @@ import { ProjectSchema, PositiveIntSchema } from "./common.js";
 /**
  * Analyze lens enum
  */
-export const AnalyzeLensSchema = z.enum(["summary", "reflections"]);
+export const AnalyzeLensSchema = z.enum(["summary", "reflections", "blindspots"]);
 export type AnalyzeLens = z.infer<typeof AnalyzeLensSchema>;
 
 /**

@@ -14,6 +14,10 @@ describe("AnalyzeLensSchema", () => {
     expect(AnalyzeLensSchema.safeParse("reflections").success).toBe(true);
   });
 
+  it("accepts blindspots", () => {
+    expect(AnalyzeLensSchema.safeParse("blindspots").success).toBe(true);
+  });
+
   it("rejects invalid lens", () => {
     expect(AnalyzeLensSchema.safeParse("unknown").success).toBe(false);
   });

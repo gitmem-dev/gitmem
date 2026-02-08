@@ -14,6 +14,9 @@ import {
   querySessionsByDateRange,
   computeSummary,
   aggregateClosingReflections,
+  queryScarUsageByDateRange,
+  queryRepeatMistakes,
+  computeBlindspots,
 } from "../services/analytics.js";
 import { hasSupabase } from "../services/tier.js";
 import {
@@ -23,11 +26,11 @@ import {
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
 import type { Project, PerformanceData } from "../types/index.js";
-import type { SummaryAnalytics } from "../services/analytics.js";
+import type { SummaryAnalytics, BlindspotsData } from "../services/analytics.js";
 
 // --- Types ---
 
-export type AnalyzeLens = "summary" | "reflections";
+export type AnalyzeLens = "summary" | "reflections" | "blindspots";
 
 export interface AnalyzeParams {
   lens?: AnalyzeLens;
@@ -39,7 +42,7 @@ export interface AnalyzeParams {
 export interface AnalyzeResult {
   success: boolean;
   lens: string;
-  data: SummaryAnalytics | ReflectionsData | null;
+  data: SummaryAnalytics | ReflectionsData | BlindspotsData | null;
   error?: string;
   performance: PerformanceData;
 }
@@ -78,32 +81,42 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
     const endDate = new Date().toISOString();
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    // Fetch sessions
-    const sessions = await querySessionsByDateRange(startDate, endDate, project, params.agent);
-
-    let data: SummaryAnalytics | ReflectionsData | null = null;
+    let data: SummaryAnalytics | ReflectionsData | BlindspotsData | null = null;
 
     switch (lens) {
       case "summary":
-        data = computeSummary(sessions, days);
-        break;
-
       case "reflections": {
-        const reflections = aggregateClosingReflections(sessions);
-        const sessionsWithReflections = sessions.filter(
-          s => s.closing_reflection?.what_broke
-        ).length;
+        // Both summary and reflections need sessions
+        const sessions = await querySessionsByDateRange(startDate, endDate, project, params.agent);
 
-        data = {
-          period: {
-            start: startDate.slice(0, 10),
-            end: endDate.slice(0, 10),
-            days,
-          },
-          total_sessions_scanned: sessions.length,
-          sessions_with_reflections: sessionsWithReflections,
-          ...reflections,
-        };
+        if (lens === "summary") {
+          data = computeSummary(sessions, days);
+        } else {
+          const reflections = aggregateClosingReflections(sessions);
+          const sessionsWithReflections = sessions.filter(
+            s => s.closing_reflection?.what_broke
+          ).length;
+
+          data = {
+            period: {
+              start: startDate.slice(0, 10),
+              end: endDate.slice(0, 10),
+              days,
+            },
+            total_sessions_scanned: sessions.length,
+            sessions_with_reflections: sessionsWithReflections,
+            ...reflections,
+          };
+        }
+        break;
+      }
+
+      case "blindspots": {
+        const [usages, repeats] = await Promise.all([
+          queryScarUsageByDateRange(startDate, endDate, project, params.agent),
+          queryRepeatMistakes(startDate, endDate, project),
+        ]);
+        data = computeBlindspots(usages, repeats, days);
         break;
       }
 
@@ -112,16 +125,23 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
           success: false,
           lens,
           data: null,
-          error: `Unknown lens: ${lens}. Available: summary, reflections`,
+          error: `Unknown lens: ${lens}. Available: summary, reflections, blindspots`,
           performance: buildPerformanceData("analyze" as any, timer.stop(), 0),
         };
     }
 
     const latencyMs = timer.stop();
+    // Determine result count based on lens type
+    const resultCount = data
+      ? ("total_sessions" in data ? data.total_sessions
+        : "total_sessions_scanned" in data ? data.total_sessions_scanned
+        : "total_scar_usages" in data ? data.total_scar_usages
+        : 0)
+      : 0;
     const perfData = buildPerformanceData(
       "analyze" as any,
       latencyMs,
-      sessions.length
+      resultCount
     );
 
     // Fire-and-forget metrics
@@ -130,7 +150,7 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
       tool_name: "search" as any, // Closest existing tool name for metrics table
       query_text: `analyze:${lens}:${days}d`,
       latency_ms: latencyMs,
-      result_count: sessions.length,
+      result_count: resultCount,
       phase_tag: "ad_hoc",
       metadata: { lens, days, agent: params.agent },
     }).catch(() => {});

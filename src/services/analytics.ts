@@ -101,6 +101,265 @@ export async function querySessionsByDateRange(
   });
 }
 
+// --- Scar Usage & Repeat Mistake Types ---
+
+export interface ScarUsageRecord {
+  scar_id: string;
+  scar_title: string | null;
+  scar_severity: string | null;
+  agent: string | null;
+  reference_type: string;
+  execution_successful: boolean | null;
+  surfaced_at: string;
+}
+
+export interface RepeatMistakeRecord {
+  id: string;
+  title: string;
+  related_scar_id: string | null;
+  repeat_mistake_details: { reason?: string } | null;
+  created_at: string;
+}
+
+export interface BlindspotsData {
+  period: { start: string; end: string; days: number };
+  total_scars_surfaced: number;
+  total_scar_usages: number;
+
+  ignored_scars: Array<{
+    scar_id: string;
+    title: string;
+    severity: string;
+    times_surfaced: number;
+    times_ignored: number;
+    ignore_rate: number;
+    agents: string[];
+  }>;
+
+  failed_applications: Array<{
+    scar_id: string;
+    title: string;
+    times_applied: number;
+    times_failed: number;
+    failure_rate: number;
+  }>;
+
+  repeat_mistakes: Array<{
+    id: string;
+    title: string;
+    original_scar_title: string;
+    reason: string;
+    created_at: string;
+  }>;
+
+  agent_effectiveness: Array<{
+    agent: string;
+    scars_surfaced: number;
+    scars_applied: number;
+    application_rate: number;
+    success_rate: number;
+  }>;
+
+  severity_breakdown: Array<{
+    severity: string;
+    surfaced: number;
+    applied: number;
+    ignored: number;
+    application_rate: number;
+  }>;
+}
+
+// --- Scar Usage & Repeat Mistake Queries ---
+
+/**
+ * Fetch scar_usage records within a date range.
+ */
+export async function queryScarUsageByDateRange(
+  startDate: string,
+  _endDate: string,
+  _project: Project,
+  agentFilter?: string
+): Promise<ScarUsageRecord[]> {
+  const filters: Record<string, string> = {
+    surfaced_at: `gte.${startDate}`,
+  };
+
+  const usages = await directQuery<ScarUsageRecord>("scar_usage", {
+    select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
+    filters,
+    order: "surfaced_at.desc",
+    limit: 500,
+  });
+
+  // Client-side filter for end date and agent
+  return usages.filter(u => {
+    const inRange = u.surfaced_at <= _endDate;
+    const matchesAgent = !agentFilter || u.agent === agentFilter;
+    return inRange && matchesAgent;
+  });
+}
+
+/**
+ * Fetch repeat mistakes from orchestra_learnings within a date range.
+ */
+export async function queryRepeatMistakes(
+  startDate: string,
+  _endDate: string,
+  project: Project
+): Promise<RepeatMistakeRecord[]> {
+  const filters: Record<string, string> = {
+    repeat_mistake: "eq.true",
+    project: `eq.${project}`,
+    created_at: `gte.${startDate}`,
+  };
+
+  const repeats = await directQuery<RepeatMistakeRecord>("orchestra_learnings", {
+    select: "id,title,related_scar_id,repeat_mistake_details,created_at",
+    filters,
+    order: "created_at.desc",
+    limit: 100,
+  });
+
+  // Client-side end date filter
+  return repeats.filter(r => r.created_at <= _endDate);
+}
+
+/**
+ * Compute blindspots analytics from scar usage and repeat mistake data.
+ */
+export function computeBlindspots(
+  usages: ScarUsageRecord[],
+  repeatMistakes: RepeatMistakeRecord[],
+  days: number
+): BlindspotsData {
+  // Unique scars surfaced
+  const scarIds = new Set(usages.map(u => u.scar_id));
+
+  // --- 1. Ignored scars ---
+  const scarGroupMap = new Map<string, ScarUsageRecord[]>();
+  for (const u of usages) {
+    const list = scarGroupMap.get(u.scar_id) || [];
+    list.push(u);
+    scarGroupMap.set(u.scar_id, list);
+  }
+
+  const ignored_scars = Array.from(scarGroupMap.entries())
+    .map(([scar_id, records]) => {
+      const times_surfaced = records.length;
+      const times_ignored = records.filter(r => r.reference_type === "none").length;
+      const agentSet = new Set<string>();
+      for (const r of records) {
+        if (r.reference_type === "none" && r.agent) agentSet.add(r.agent);
+      }
+      return {
+        scar_id,
+        title: records[0]?.scar_title || "Unknown",
+        severity: records[0]?.scar_severity || "unknown",
+        times_surfaced,
+        times_ignored,
+        ignore_rate: times_surfaced > 0 ? times_ignored / times_surfaced : 0,
+        agents: Array.from(agentSet),
+      };
+    })
+    .filter(s => s.times_ignored > 0)
+    .sort((a, b) => b.ignore_rate - a.ignore_rate);
+
+  // --- 2. Failed applications ---
+  const failed_applications = Array.from(scarGroupMap.entries())
+    .map(([scar_id, records]) => {
+      const applied = records.filter(r => r.reference_type !== "none");
+      const times_applied = applied.length;
+      const times_failed = applied.filter(r => r.execution_successful === false).length;
+      return {
+        scar_id,
+        title: records[0]?.scar_title || "Unknown",
+        times_applied,
+        times_failed,
+        failure_rate: times_applied > 0 ? times_failed / times_applied : 0,
+      };
+    })
+    .filter(s => s.times_failed > 0)
+    .sort((a, b) => b.failure_rate - a.failure_rate);
+
+  // --- 3. Repeat mistakes ---
+  // Build a title lookup from usages for related_scar_id resolution
+  const scarTitleMap = new Map<string, string>();
+  for (const u of usages) {
+    if (u.scar_title) scarTitleMap.set(u.scar_id, u.scar_title);
+  }
+
+  const repeat_mistakes = repeatMistakes.map(rm => ({
+    id: rm.id,
+    title: rm.title,
+    original_scar_title: (rm.related_scar_id && scarTitleMap.get(rm.related_scar_id)) || "Unknown",
+    reason: rm.repeat_mistake_details?.reason || "Not specified",
+    created_at: rm.created_at,
+  }));
+
+  // --- 4. Agent effectiveness ---
+  const agentMap = new Map<string, { surfaced: number; applied: number; successful: number }>();
+  for (const u of usages) {
+    const agent = u.agent || "Unknown";
+    const entry = agentMap.get(agent) || { surfaced: 0, applied: 0, successful: 0 };
+    entry.surfaced++;
+    if (u.reference_type !== "none") {
+      entry.applied++;
+      if (u.execution_successful === true) entry.successful++;
+    }
+    agentMap.set(agent, entry);
+  }
+
+  const agent_effectiveness = Array.from(agentMap.entries())
+    .map(([agent, stats]) => ({
+      agent,
+      scars_surfaced: stats.surfaced,
+      scars_applied: stats.applied,
+      application_rate: stats.surfaced > 0 ? stats.applied / stats.surfaced : 0,
+      success_rate: stats.applied > 0 ? stats.successful / stats.applied : 0,
+    }))
+    .sort((a, b) => b.scars_surfaced - a.scars_surfaced);
+
+  // --- 5. Severity breakdown ---
+  const sevMap = new Map<string, { surfaced: number; applied: number; ignored: number }>();
+  for (const u of usages) {
+    const sev = u.scar_severity || "unknown";
+    const entry = sevMap.get(sev) || { surfaced: 0, applied: 0, ignored: 0 };
+    entry.surfaced++;
+    if (u.reference_type === "none") {
+      entry.ignored++;
+    } else {
+      entry.applied++;
+    }
+    sevMap.set(sev, entry);
+  }
+
+  const severity_breakdown = Array.from(sevMap.entries())
+    .map(([severity, stats]) => ({
+      severity,
+      surfaced: stats.surfaced,
+      applied: stats.applied,
+      ignored: stats.ignored,
+      application_rate: stats.surfaced > 0 ? stats.applied / stats.surfaced : 0,
+    }))
+    .sort((a, b) => b.surfaced - a.surfaced);
+
+  // Date range
+  const dates = usages.map(u => u.surfaced_at).sort();
+  const start = dates[0] || new Date().toISOString();
+  const end = dates[dates.length - 1] || new Date().toISOString();
+
+  return {
+    period: { start: start.slice(0, 10), end: end.slice(0, 10), days },
+    total_scars_surfaced: scarIds.size,
+    total_scar_usages: usages.length,
+    ignored_scars,
+    failed_applications,
+    repeat_mistakes,
+    agent_effectiveness,
+    severity_breakdown,
+  };
+}
+
 // --- Aggregation Layer ---
 
 /**

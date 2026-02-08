@@ -1578,13 +1578,13 @@ export const TOOLS = [
   // ============================================================================
   {
     name: "analyze",
-    description: "Session analytics and insights engine. Provides structured analysis of session history, closing reflections, and agent patterns.",
+    description: "Session analytics and insights engine. Provides structured analysis of session history, closing reflections, agent patterns, and scar blindspots.",
     inputSchema: {
       type: "object" as const,
       properties: {
         lens: {
           type: "string",
-          enum: ["summary", "reflections"],
+          enum: ["summary", "reflections", "blindspots"],
           description: "Analysis lens to apply (default: summary)",
         },
         days: {
@@ -1612,7 +1612,7 @@ export const TOOLS = [
       properties: {
         lens: {
           type: "string",
-          enum: ["summary", "reflections"],
+          enum: ["summary", "reflections", "blindspots"],
           description: "Analysis lens to apply (default: summary)",
         },
         days: {
@@ -1640,7 +1640,7 @@ export const TOOLS = [
       properties: {
         lens: {
           type: "string",
-          enum: ["summary", "reflections"],
+          enum: ["summary", "reflections", "blindspots"],
           description: "Analysis lens to apply (default: summary)",
         },
         days: {

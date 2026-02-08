@@ -1,0 +1,25 @@
+# GitMem Clean Room Testing
+#
+# Two services:
+#   smoke  — Automated: runs smoke-test.sh, exits with pass/fail
+#   manual — Interactive: bash shell for driving Claude Code sessions
+#
+# Usage:
+#   docker compose run --rm smoke          # automated
+#   docker compose run --rm manual         # interactive
+
+services:
+  smoke:
+    build: .
+    environment:
+      - NPM_TOKEN
+    command: /home/developer/smoke-test.sh
+
+  manual:
+    build: .
+    environment:
+      - NPM_TOKEN
+      - ANTHROPIC_API_KEY
+    command: bash
+    stdin_open: true
+    tty: true

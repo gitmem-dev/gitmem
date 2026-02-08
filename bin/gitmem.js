@@ -244,8 +244,11 @@ switch (command) {
   case "help":
   case "--help":
   case "-h":
-  case undefined:
     printUsage();
+    break;
+  case undefined:
+    // Default: start MCP server (npx @nteg-dev/gitmem should start serving)
+    import("../dist/index.js");
     break;
   default:
     console.error(`Unknown command: ${command}`);

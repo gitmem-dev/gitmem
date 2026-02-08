@@ -225,6 +225,53 @@ export async function queryRepeatMistakes(
 }
 
 /**
+ * Resolve scar titles and severities from orchestra_learnings for scar_usage
+ * records that have null/missing title data.
+ */
+export async function enrichScarUsageTitles(
+  usages: ScarUsageRecord[]
+): Promise<ScarUsageRecord[]> {
+  // Collect scar_ids that need title resolution
+  const idsNeedingResolution = new Set<string>();
+  for (const u of usages) {
+    if (!u.scar_title) {
+      idsNeedingResolution.add(u.scar_id);
+    }
+  }
+
+  if (idsNeedingResolution.size === 0) return usages;
+
+  // Fetch titles from orchestra_learnings
+  const ids = Array.from(idsNeedingResolution);
+  const learnings = await directQuery<{ id: string; title: string; severity: string }>(
+    "orchestra_learnings",
+    {
+      select: "id,title,severity",
+      filters: {
+        id: `in.(${ids.join(",")})`,
+      },
+    }
+  );
+
+  // Build lookup map
+  const titleMap = new Map<string, { title: string; severity: string }>();
+  for (const l of learnings) {
+    titleMap.set(l.id, { title: l.title, severity: l.severity });
+  }
+
+  // Enrich usages
+  return usages.map(u => {
+    if (!u.scar_title) {
+      const resolved = titleMap.get(u.scar_id);
+      if (resolved) {
+        return { ...u, scar_title: resolved.title, scar_severity: resolved.severity };
+      }
+    }
+    return u;
+  });
+}
+
+/**
  * Compute blindspots analytics from scar usage and repeat mistake data.
  */
 export function computeBlindspots(

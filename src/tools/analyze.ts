@@ -17,6 +17,7 @@ import {
   queryScarUsageByDateRange,
   queryRepeatMistakes,
   computeBlindspots,
+  enrichScarUsageTitles,
 } from "../services/analytics.js";
 import { hasSupabase } from "../services/tier.js";
 import {
@@ -112,10 +113,12 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
       }
 
       case "blindspots": {
-        const [usages, repeats] = await Promise.all([
+        const [rawUsages, repeats] = await Promise.all([
           queryScarUsageByDateRange(startDate, endDate, project, params.agent),
           queryRepeatMistakes(startDate, endDate, project),
         ]);
+        // Resolve missing scar titles from orchestra_learnings
+        const usages = await enrichScarUsageTitles(rawUsages);
         data = computeBlindspots(usages, repeats, days);
         break;
       }

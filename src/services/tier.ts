@@ -92,9 +92,9 @@ export function hasCacheManagement(): boolean {
   return getTier() !== "free";
 }
 
-/** Whether detailed performance metrics recording is active (dev only) */
+/** Whether detailed performance metrics recording is active (pro, dev — aligned with hasVariants) */
 export function hasMetrics(): boolean {
-  return getTier() === "dev";
+  return getTier() !== "free";
 }
 
 /** Whether advanced agent detection (5-agent matrix) is active (dev only) */

@@ -18,7 +18,10 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:perf": "vitest bench --config vitest.perf.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:all": "npm run test:unit && npm run test:integration && npm run test:perf && npm run test:e2e",
+    "test:smoke": "npm run test:smoke:free && npm run test:smoke:pro",
+    "test:smoke:free": "GITMEM_TIER=free vitest run --config vitest.smoke.config.ts tests/smoke/smoke-free.test.ts",
+    "test:smoke:pro": "vitest run --config vitest.smoke.config.ts tests/smoke/smoke-pro.test.ts",
+    "test:all": "npm run test:unit && npm run test:smoke && npm run test:integration && npm run test:perf && npm run test:e2e",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"

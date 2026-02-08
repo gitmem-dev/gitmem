@@ -36,6 +36,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Smoke test (free tier)
+        run: npm run test:smoke:free
+
   publish:
     needs: build
     runs-on: ubuntu-latest

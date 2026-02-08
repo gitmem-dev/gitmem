@@ -23,7 +23,9 @@ export type ToolName =
   | "record_scar_usage_batch"
   | "save_transcript"
   | "get_transcript"
-  | "analyze";
+  | "analyze"
+  | "prepare_context"
+  | "absorb_observations";
 
 /**
  * Phase tags for context
@@ -83,6 +85,8 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   save_transcript: 5000,  // Large payload upload
   get_transcript: 3000,   // Retrieval
   analyze: 3000,          // Session analytics queries
+  prepare_context: 500,   // Same pipeline as search, different formatter
+  absorb_observations: 500, // In-memory + optional upsert
 };
 
 /**

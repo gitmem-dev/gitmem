@@ -10,7 +10,7 @@
  * 5. Metrics Recording Test
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { recall } from "../src/tools/recall.js";
 import {
   getOrAssignVariant,
@@ -26,9 +26,13 @@ const TEST_AGENT_TRADITIONAL = `TEST-AGENT-OD525-TRADITIONAL-${Date.now()}`;
 const TEST_AGENT_KARPATHY = `TEST-AGENT-OD525-KARPATHY-${Date.now()}`;
 const TEST_AGENT_LEGACY = `TEST-AGENT-OD525-LEGACY-${Date.now()}`;
 
-const supabaseConfigured = supabase.isConfigured();
-
-describe.skipIf(!supabaseConfigured)("OD-525: Dual-Enforcement Engine Integration", () => {
+describe("OD-525: Dual-Enforcement Engine Integration", () => {
+  beforeAll(() => {
+    // Verify Supabase is configured
+    if (!supabase.isConfigured()) {
+      throw new Error("Supabase not configured - tests require SUPABASE_URL and SUPABASE_KEY");
+    }
+  });
 
   describe("Test 1: Assignment-Then-Surface (Idempotency)", () => {
     it("should create assignment on first surface and reuse on second surface", async () => {

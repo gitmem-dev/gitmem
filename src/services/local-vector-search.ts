@@ -136,7 +136,7 @@ export class LocalVectorSearch {
 
   private async _doInitialize(scars: ScarRecord[], latestUpdatedAt?: string): Promise<void> {
     const startTime = Date.now();
-    console.log(`[local-vector] Initializing with ${scars.length} scars...`);
+    console.error(`[local-vector] Initializing with ${scars.length} scars...`);
 
     // Parse and filter scars with valid embeddings
     // Note: Supabase REST API returns embeddings as JSON strings, not arrays
@@ -177,7 +177,7 @@ export class LocalVectorSearch {
       return;
     }
 
-    console.log(`[local-vector] ${scarsWithEmbeddings.length} scars have valid embeddings`);
+    console.error(`[local-vector] ${scarsWithEmbeddings.length} scars have valid embeddings`);
 
     // Store scars with normalized embeddings
     this.scars = scarsWithEmbeddings.map(({ scar, parsedEmbedding }) => ({
@@ -191,7 +191,7 @@ export class LocalVectorSearch {
 
     this.initialized = true;
     const elapsed = Date.now() - startTime;
-    console.log(`[local-vector] Initialized in ${elapsed}ms`);
+    console.error(`[local-vector] Initialized in ${elapsed}ms`);
   }
 
 
@@ -250,7 +250,7 @@ export class LocalVectorSearch {
     }));
 
     const elapsed = Date.now() - startTime;
-    console.log(`[local-vector] Search completed in ${elapsed}ms, found ${results.length} results`);
+    console.error(`[local-vector] Search completed in ${elapsed}ms, found ${results.length} results`);
 
     return results;
   }
@@ -282,7 +282,7 @@ export class LocalVectorSearch {
     this.initPromise = null;
     this.loadedAt = null;
     this.latestUpdatedAt = null;
-    console.log("[local-vector] Index cleared");
+    console.error("[local-vector] Index cleared");
   }
 
   /**

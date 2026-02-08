@@ -338,7 +338,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     const searchTimer = new Timer();
 
     if (isLocalSearchReady(project)) {
-      console.log("[recall] Using local vector search");
+      console.error("[recall] Using local vector search");
       search_mode = "local";
       cache_hit = true;
       network_call = false; // LOCAL - no network call!
@@ -346,7 +346,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       const localResults = await localScarSearch(plan, matchCount, project);
       rawScars = localResults;
     } else {
-      console.log("[recall] Local cache not ready, using Supabase fallback");
+      console.error("[recall] Local cache not ready, using Supabase fallback");
       search_mode = "remote";
       network_call = true; // REMOTE - hits Supabase
 
@@ -376,7 +376,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     };
 
     if (hasVariants()) {
-      console.log(`[recall] Assigning variants for agent: ${agentId}`);
+      console.error(`[recall] Assigning variants for agent: ${agentId}`);
 
       // Assign variants in parallel for all scars
       const variantPromises = rawScars.map(async (scar) => {

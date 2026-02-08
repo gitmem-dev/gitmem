@@ -33,6 +33,7 @@ When working on this project, follow these memory protocols:
 - On "closing", "done for now", or "wrapping up", call `session_close`
 - Reflect on what worked, what broke, and what to do differently
 - Record which scars you applied during the session
+- **Run tests before pushing** — `npm run test:unit` at minimum
 
 ## Tool quick reference
 
@@ -45,3 +46,20 @@ When working on this project, follow these memory protocols:
 | `create_decision` | `gitmem-cd` | When making choices — log the reasoning |
 | `record_scar_usage` | `gitmem-rs` | Track which scars helped |
 | `help` | `gitmem-help` | Show all commands |
+
+## Development Commands
+
+When contributing to GitMem itself:
+
+| Command | Purpose |
+|---------|---------|
+| `npm run build` | Build + run unit tests (fails if tests fail) |
+| `npm run test:unit` | Run Tier 1 unit tests (~2s) |
+| `npm run test:integration` | Run Tier 2 integration tests (requires Docker) |
+| `npm run test:perf` | Run Tier 3 performance benchmarks |
+| `npm run test:e2e` | Run Tier 4 E2E smoke tests (requires Docker) |
+| `npm run test:all` | Run all test tiers |
+| `npx gitmem check` | Quick health check (~5s) |
+| `npx gitmem check --full` | Full diagnostic with benchmarks (~30s) |
+
+**Before pushing:** Always run `npm run test:unit` at minimum.

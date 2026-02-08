@@ -8,7 +8,7 @@
  * Now they verify the fix works correctly.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { recall } from "../src/tools/recall.js";
 import { getOrAssignVariant, getActiveVariants } from "../src/services/variant-assignment.js";
 import { getAgentIdentity } from "../src/services/agent-detection.js";
@@ -17,9 +17,12 @@ import * as supabase from "../src/services/supabase-client.js";
 // Test scar that has variants
 const TEST_SCAR_WITH_VARIANTS = "debc6a79-f080-459b-85c6-01f073eca609"; // Containerization scar
 
-const supabaseConfigured = supabase.isConfigured();
-
-describe.skipIf(!supabaseConfigured)("OD-547: Agent-Keyed Variant Assignment", () => {
+describe("OD-547: Agent-Keyed Variant Assignment", () => {
+  beforeAll(() => {
+    if (!supabase.isConfigured()) {
+      throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    }
+  });
 
   describe("Core Fix: Variants assigned without issue_id", () => {
     it("should assign variants when recall is called WITHOUT issue_id", async () => {

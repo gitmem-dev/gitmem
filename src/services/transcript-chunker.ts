@@ -20,10 +20,15 @@ const MAX_TOKENS_PER_CHUNK = 500;
 const TOKEN_OVERLAP = 50;
 const CHARS_PER_TOKEN = 4; // Rough estimate
 
+// Claude Code JSONL format: content is nested under msg.message
 interface TranscriptMessage {
-  type: string;
-  role?: string;
-  content?: Array<{ type: string; text?: string; thinking?: string }> | string;
+  type: string;                    // "user", "assistant", "progress", etc.
+  role?: string;                   // Legacy: direct role field
+  content?: Array<{ type: string; text?: string; thinking?: string }> | string;  // Legacy: direct content
+  message?: {                      // Claude Code format: nested message object
+    role?: string;
+    content?: Array<{ type: string; text?: string; thinking?: string }> | string;
+  };
   name?: string;
   tool_use_id?: string;
 }
@@ -99,13 +104,20 @@ async function generateEmbedding(text: string): Promise<number[]> {
  * Extract text content from a transcript message
  */
 function extractContent(msg: TranscriptMessage): { text: string; type: string } | null {
-  // User messages
-  if (msg.type === "message" && msg.role === "user") {
-    if (typeof msg.content === "string") {
-      return { text: msg.content, type: "user_message" };
+  // Claude Code JSONL format: type is "user"/"assistant" and content is under msg.message
+  // Legacy/API format: type is "message" with role and content at top level
+  const role = msg.message?.role || msg.role;
+  const content = msg.message?.content || msg.content;
+  const msgType = msg.type;
+
+  // User messages (Claude Code: type="user", Legacy: type="message" role="user")
+  if ((msgType === "user" || (msgType === "message" && role === "user"))) {
+    if (typeof content === "string") {
+      return { text: content, type: "user_message" };
     }
-    if (Array.isArray(msg.content)) {
-      const textParts = msg.content
+    if (Array.isArray(content)) {
+      // Extract text blocks (skip tool_result blocks from user messages)
+      const textParts = content
         .filter(c => c.type === "text" && c.text)
         .map(c => c.text!);
       if (textParts.length > 0) {
@@ -114,13 +126,13 @@ function extractContent(msg: TranscriptMessage): { text: string; type: string } 
     }
   }
 
-  // Assistant messages (text blocks only, skip tool_use)
-  if (msg.type === "message" && msg.role === "assistant") {
-    if (typeof msg.content === "string") {
-      return { text: msg.content, type: "assistant_message" };
+  // Assistant messages (Claude Code: type="assistant", Legacy: type="message" role="assistant")
+  if ((msgType === "assistant" || (msgType === "message" && role === "assistant"))) {
+    if (typeof content === "string") {
+      return { text: content, type: "assistant_message" };
     }
-    if (Array.isArray(msg.content)) {
-      const textParts = msg.content
+    if (Array.isArray(content)) {
+      const textParts = content
         .filter(c => c.type === "text" && c.text)
         .map(c => c.text!);
       if (textParts.length > 0) {
@@ -128,7 +140,7 @@ function extractContent(msg: TranscriptMessage): { text: string; type: string } 
       }
 
       // Thinking blocks
-      const thinkingParts = msg.content
+      const thinkingParts = content
         .filter(c => c.type === "thinking" && c.thinking)
         .map(c => c.thinking!);
       if (thinkingParts.length > 0) {
@@ -138,10 +150,10 @@ function extractContent(msg: TranscriptMessage): { text: string; type: string } 
   }
 
   // Tool results (if we want to include them)
-  if (msg.type === "tool_result" && typeof msg.content === "string") {
+  if (msg.type === "tool_result" && typeof content === "string") {
     // Only include short tool results to avoid noise
-    if (msg.content.length < 2000) {
-      return { text: msg.content, type: "tool_result" };
+    if (content.length < 2000) {
+      return { text: content, type: "tool_result" };
     }
   }
 
@@ -208,11 +220,11 @@ export async function processTranscript(
   project: Project = "orchestra_dev"
 ): Promise<{ success: boolean; chunksCreated: number; error?: string }> {
   try {
-    console.log(`[transcript-chunker] Processing transcript for session ${sessionId}`);
+    console.error(`[transcript-chunker] Processing transcript for session ${sessionId}`);
 
     // 1. Parse transcript and extract content
     const extracted = parseTranscript(transcriptContent);
-    console.log(`[transcript-chunker] Extracted ${extracted.length} content blocks`);
+    console.error(`[transcript-chunker] Extracted ${extracted.length} content blocks`);
 
     if (extracted.length === 0) {
       return { success: true, chunksCreated: 0 };
@@ -255,7 +267,7 @@ export async function processTranscript(
       }
     }
 
-    console.log(`[transcript-chunker] Generated ${allChunks.length} chunks with embeddings`);
+    console.error(`[transcript-chunker] Generated ${allChunks.length} chunks with embeddings`);
 
     // 3. Batch insert into database
     if (allChunks.length > 0) {
@@ -285,7 +297,7 @@ export async function processTranscript(
         throw new Error(`Failed to insert chunks: ${response.status} - ${errorText}`);
       }
 
-      console.log(`[transcript-chunker] Successfully stored ${allChunks.length} chunks`);
+      console.error(`[transcript-chunker] Successfully stored ${allChunks.length} chunks`);
     }
 
     return { success: true, chunksCreated: allChunks.length };

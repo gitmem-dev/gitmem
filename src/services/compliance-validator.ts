@@ -15,6 +15,7 @@
  */
 
 import type { SessionCloseParams, CloseType, CloseCompliance, AgentIdentity, TaskCompletion } from "../types/index.js";
+import { CLOSING_QUESTIONS } from "../constants/closing-questions.js";
 
 export interface ValidationResult {
   valid: boolean;
@@ -121,29 +122,48 @@ function validateStandardClose(params: SessionCloseParams): ValidationResult {
 
   // Closing reflection is required for standard close
   if (!params.closing_reflection) {
-    errors.push("Standard close requires closing_reflection with 6 answers");
+    errors.push(`Standard close requires closing_reflection with ${CLOSING_QUESTIONS.length} answers`);
   } else {
-    const reflection = params.closing_reflection;
+    const reflection = params.closing_reflection as unknown as Record<string, unknown>;
 
-    // Check each of the 6 questions
-    if (!reflection.what_broke || reflection.what_broke.trim() === "") {
-      errors.push("Missing: what_broke (Q1: What broke that you didn't expect?)");
+    // Validate each question from the single source of truth
+    for (const q of CLOSING_QUESTIONS) {
+      const value = reflection[q.key];
+      if (q.required) {
+        if (q.fieldType === "string") {
+          if (!value || (typeof value === "string" && value.trim() === "")) {
+            errors.push(`Missing: ${q.key} (Q${q.number}: ${q.question})`);
+          }
+        }
+      } else {
+        // Optional fields: warn if not provided (e.g., scars_applied)
+        if (value === undefined && q.fieldType === "string[]") {
+          warnings.push(`${q.key} not provided (Q${q.number}: ${q.question})`);
+        }
+      }
     }
-    if (!reflection.what_took_longer || reflection.what_took_longer.trim() === "") {
-      errors.push("Missing: what_took_longer (Q2: What took longer than it should have?)");
-    }
-    if (!reflection.do_differently || reflection.do_differently.trim() === "") {
-      errors.push("Missing: do_differently (Q3: What would you do differently next time?)");
-    }
-    if (!reflection.what_worked || reflection.what_worked.trim() === "") {
-      errors.push("Missing: what_worked (Q4: What pattern or approach worked well?)");
-    }
-    if (!reflection.wrong_assumption || reflection.wrong_assumption.trim() === "") {
-      errors.push("Missing: wrong_assumption (Q5: What assumption was wrong?)");
-    }
-    if (!reflection.scars_applied) {
-      // Not an error if empty array, but warn if not provided
-      warnings.push("scars_applied not provided (Q6: Which scars did you apply?)");
+
+    // Warn if Q3 (do_differently) or Q5 (wrong_assumption) have substantive answers
+    // but no learnings were created — suggests scars should be captured
+    const doDifferently = reflection.do_differently;
+    const wrongAssumption = reflection.wrong_assumption;
+    const hasSubstantiveDoDifferently =
+      typeof doDifferently === "string" &&
+      doDifferently.trim().length > 20 &&
+      !/^(nothing|none|n\/a|na)$/i.test(doDifferently.trim());
+    const hasSubstantiveWrongAssumption =
+      typeof wrongAssumption === "string" &&
+      wrongAssumption.trim().length > 20 &&
+      !/^(nothing|none|n\/a|na)$/i.test(wrongAssumption.trim());
+
+    if (
+      (hasSubstantiveDoDifferently || hasSubstantiveWrongAssumption) &&
+      (!params.learnings_created || params.learnings_created.length === 0)
+    ) {
+      warnings.push(
+        "Q3 (do_differently) or Q5 (wrong_assumption) contain substantive answers but no learnings were created. " +
+        "Consider capturing scars from these reflections before closing."
+      );
     }
   }
 

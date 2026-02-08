@@ -152,7 +152,7 @@ export async function createVariantAssignment(
 
     // Handle race condition: unique constraint violation
     if (errorMessage.includes("23505") || errorMessage.includes("duplicate key")) {
-      console.log(`[variant-assignment] Assignment already exists (race condition), fetching...`);
+      console.error(`[variant-assignment] Assignment already exists (race condition), fetching...`);
       return await getExistingAssignment(agentId, scarId);
     }
 

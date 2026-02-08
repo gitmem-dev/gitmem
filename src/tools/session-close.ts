@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars } from "../services/session-state.js"; // OD-547, OD-552
+import { clearCurrentSession, getSurfacedScars, getObservations, getChildren } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -42,11 +42,16 @@ import type {
  * Find the most recently modified transcript file in Claude Code projects directory
  * OD-538: Search by recency, not by filename matching (supports post-compaction)
  */
-function findMostRecentTranscript(projectsDir: string, cwdBasename: string): string | null {
+function findMostRecentTranscript(projectsDir: string, cwdBasename: string, cwdFull: string): string | null {
+  // Claude Code names project dirs by replacing / with - in the full CWD path
+  // e.g., /Users/chriscrawford/nTEG-Labs -> -Users-chriscrawford-nTEG-Labs
+  const claudeCodeDirName = cwdFull.replace(/\//g, "-");
+
   const possibleDirs = [
+    path.join(projectsDir, claudeCodeDirName),  // Primary: full path with dashes (e.g., -Users-chriscrawford-nTEG-Labs)
     path.join(projectsDir, "-workspace"),
     path.join(projectsDir, "workspace"),
-    path.join(projectsDir, cwdBasename),
+    path.join(projectsDir, cwdBasename),         // Legacy fallback
   ];
 
   let allTranscripts: Array<{ path: string; mtime: Date }> = [];
@@ -253,7 +258,7 @@ export async function sessionClose(
       if (fs.existsSync(activeSessionPath)) {
         const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
         if (activeSession.session_id) {
-          console.log(`[session_close] Recovered session_id from active-session.json: ${activeSession.session_id}`);
+          console.error(`[session_close] Recovered session_id from active-session.json: ${activeSession.session_id}`);
           params = { ...params, session_id: activeSession.session_id };
         }
       }
@@ -292,7 +297,7 @@ export async function sessionClose(
       );
 
       if (unclosedToday) {
-        console.log(`[session_close] Found unclosed session from today: ${unclosedToday.id}`);
+        console.error(`[session_close] Found unclosed session from today: ${unclosedToday.id}`);
         params = { ...params, session_id: unclosedToday.id };
       } else {
         // No unclosed session found - STOP and require session_id
@@ -473,6 +478,16 @@ export async function sessionClose(
     sessionData.open_threads = [projectStateThread, ...filtered];
   }
 
+  // v2 Phase 2: Persist observations and children from multi-agent work
+  const observations = getObservations();
+  if (observations.length > 0) {
+    sessionData.task_observations = observations;
+  }
+  const sessionChildren = getChildren();
+  if (sessionChildren.length > 0) {
+    sessionData.children = sessionChildren;
+  }
+
   // Add linear issue if provided
   if (params.linear_issue) {
     sessionData.linear_issue = params.linear_issue;
@@ -511,7 +526,7 @@ export async function sessionClose(
       if (params.transcript_path) {
         if (fs.existsSync(params.transcript_path)) {
           transcriptFilePath = params.transcript_path;
-          console.log(`[session_close] Using explicit transcript path: ${transcriptFilePath}`);
+          console.error(`[session_close] Using explicit transcript path: ${transcriptFilePath}`);
         } else {
           console.warn(`[session_close] Explicit transcript path does not exist: ${params.transcript_path}`);
         }
@@ -524,12 +539,12 @@ export async function sessionClose(
         const cwd = process.cwd();
         const projectDirName = path.basename(cwd);
 
-        transcriptFilePath = findMostRecentTranscript(projectsDir, projectDirName);
+        transcriptFilePath = findMostRecentTranscript(projectsDir, projectDirName, cwd);
 
         if (transcriptFilePath) {
-          console.log(`[session_close] Auto-detected transcript: ${transcriptFilePath}`);
+          console.error(`[session_close] Auto-detected transcript: ${transcriptFilePath}`);
         } else {
-          console.log(`[session_close] No transcript file found in ${projectsDir}`);
+          console.error(`[session_close] No transcript file found in ${projectsDir}`);
         }
       }
 
@@ -541,7 +556,7 @@ export async function sessionClose(
         const claudeSessionId = extractClaudeSessionId(transcriptContent, transcriptFilePath);
         if (claudeSessionId) {
           sessionData.claude_code_session_id = claudeSessionId;
-          console.log(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
+          console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
         }
 
         // Call save_transcript tool
@@ -554,7 +569,7 @@ export async function sessionClose(
 
         if (saveResult.success && saveResult.transcript_path) {
           sessionData.transcript_path = saveResult.transcript_path;
-          console.log(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
+          console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
 
           // OD-540: Process transcript for semantic search (async, don't block session close)
           processTranscript(
@@ -563,7 +578,7 @@ export async function sessionClose(
             isRetroactive ? "orchestra_dev" : (existingSession?.project as "orchestra_dev" | "weekend_warrior" | undefined)
           ).then(result => {
             if (result.success) {
-              console.log(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
+              console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
             } else {
               console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
             }
@@ -599,7 +614,7 @@ export async function sessionClose(
             const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
             if (activeSession.surfaced_scars && Array.isArray(activeSession.surfaced_scars)) {
               surfacedScars = activeSession.surfaced_scars;
-              console.log(`[session_close] Loaded ${surfacedScars.length} surfaced scars from active-session.json`);
+              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from active-session.json`);
             }
           }
         } catch (fileError) {
@@ -654,10 +669,10 @@ export async function sessionClose(
 
         if (autoBridgedScars.length > 0) {
           params = { ...params, scars_to_record: autoBridgedScars };
-          console.log(`[session_close] Auto-bridged ${autoBridgedScars.length} scar usage records (${matchedScarIds.size} acknowledged, ${autoBridgedScars.length - matchedScarIds.size} unmentioned)`);
+          console.error(`[session_close] Auto-bridged ${autoBridgedScars.length} scar usage records (${matchedScarIds.size} acknowledged, ${autoBridgedScars.length - matchedScarIds.size} unmentioned)`);
         }
       } else {
-        console.log("[session_close] No surfaced scars available for auto-bridge");
+        console.error("[session_close] No surfaced scars available for auto-bridge");
       }
     } catch (bridgeError) {
       console.error("[session_close] Auto-bridge failed (non-fatal):", bridgeError);
@@ -742,7 +757,7 @@ export async function sessionClose(
       const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
       if (fs.existsSync(activeSessionPath)) {
         fs.unlinkSync(activeSessionPath);
-        console.log("[session_close] Cleaned up active-session.json");
+        console.error("[session_close] Cleaned up active-session.json");
       }
     } catch (error) {
       console.warn("[session_close] Failed to clean up active-session.json:", error);

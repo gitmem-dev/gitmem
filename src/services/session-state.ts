@@ -12,7 +12,7 @@
  * This allows recall() to always assign variants even without explicit parameters.
  */
 
-import type { SurfacedScar } from "../types/index.js";
+import type { SurfacedScar, Observation, SessionChild } from "../types/index.js";
 
 interface SessionContext {
   sessionId: string;
@@ -20,6 +20,8 @@ interface SessionContext {
   agent?: string;
   startedAt: Date;
   surfacedScars: SurfacedScar[]; // OD-552: Track all scars surfaced during session
+  observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
+  children: SessionChild[];      // v2 Phase 2: Child agent records
 }
 
 // Global session state (single active session per MCP server instance)
@@ -29,12 +31,14 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars'> & { surfacedScars?: SurfacedScar[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'observations' | 'children'> & { surfacedScars?: SurfacedScar[] }): void {
   currentSession = {
     ...context,
-    surfacedScars: context.surfacedScars || [], // OD-552: Initialize empty if not provided
+    surfacedScars: context.surfacedScars || [],
+    observations: [],
+    children: [],
   };
-  console.log(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
+  console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
 }
 
 /**
@@ -51,7 +55,7 @@ export function getCurrentSession(): SessionContext | null {
  */
 export function clearCurrentSession(): void {
   if (currentSession) {
-    console.log(`[session-state] Clearing session: ${currentSession.sessionId}`);
+    console.error(`[session-state] Clearing session: ${currentSession.sessionId}`);
   }
   currentSession = null;
 }
@@ -80,7 +84,7 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
     }
   }
 
-  console.log(`[session-state] Surfaced scars tracked: ${currentSession.surfacedScars.length} total`);
+  console.error(`[session-state] Surfaced scars tracked: ${currentSession.surfacedScars.length} total`);
 }
 
 /**
@@ -88,4 +92,47 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
  */
 export function getSurfacedScars(): SurfacedScar[] {
   return currentSession?.surfacedScars || [];
+}
+
+/**
+ * v2 Phase 2: Add observations from sub-agents/teammates
+ */
+export function addObservations(newObs: Observation[]): number {
+  if (!currentSession) {
+    console.warn("[session-state] Cannot add observations: no active session");
+    return 0;
+  }
+  const timestamped = newObs.map(o => ({
+    ...o,
+    absorbed_at: o.absorbed_at || new Date().toISOString(),
+  }));
+  currentSession.observations.push(...timestamped);
+  console.error(`[session-state] Observations tracked: ${currentSession.observations.length} total`);
+  return timestamped.length;
+}
+
+/**
+ * v2 Phase 2: Get all observations for the current session
+ */
+export function getObservations(): Observation[] {
+  return currentSession?.observations || [];
+}
+
+/**
+ * v2 Phase 2: Register a child agent in the current session
+ */
+export function addChild(child: SessionChild): void {
+  if (!currentSession) {
+    console.warn("[session-state] Cannot add child: no active session");
+    return;
+  }
+  currentSession.children.push(child);
+  console.error(`[session-state] Child registered: ${child.role} (${child.type}), total: ${currentSession.children.length}`);
+}
+
+/**
+ * v2 Phase 2: Get all children for the current session
+ */
+export function getChildren(): SessionChild[] {
+  return currentSession?.children || [];
 }

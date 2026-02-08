@@ -156,7 +156,7 @@ async function loadLastSession(
 
     // Aggregate open threads across last 5 closed sessions (free — data already fetched)
     const aggregated_open_threads = aggregateOpenThreads(sessions);
-    console.log(`[session_start] Aggregated ${aggregated_open_threads.length} open threads from recent sessions`);
+    console.error(`[session_start] Aggregated ${aggregated_open_threads.length} open threads from recent sessions`);
 
     if (sessions.length === 0) {
       return { session: null, aggregated_open_threads, latency_ms, network_call: true };
@@ -167,7 +167,7 @@ async function loadLastSession(
 
     if (!closedSession) {
       // Fall back to most recent if none are closed (shouldn't happen often)
-      console.log("[session_start] No closed sessions found, using most recent");
+      console.error("[session_start] No closed sessions found, using most recent");
       const session = sessions[0];
       return {
         session: {
@@ -259,7 +259,7 @@ async function queryRelevantScars(
 
     // Use local vector search if available (OD-473)
     if (isLocalSearchAvailable(proj)) {
-      console.log("[session_start] Using local vector search");
+      console.error("[session_start] Using local vector search");
       const scars = await localScarSearch(query, 5, proj);
       const latency_ms = timer.stop();
       return {
@@ -271,7 +271,7 @@ async function queryRelevantScars(
     }
 
     // Fallback to Supabase if local search not available
-    console.log("[session_start] Falling back to Supabase scar search");
+    console.error("[session_start] Falling back to Supabase scar search");
     const { results } = await supabase.cachedScarSearch<ScarRecord>(
       query,
       5,
@@ -342,7 +342,7 @@ async function loadRecentDecisions(
     const timeScoped = filtered.filter((d) => d.decision_date >= decisionCutoffStr);
 
     const latency_ms = timer.stop();
-    console.log(`[session_start] Loaded ${decisions.length} decisions, ${filtered.length} after project filter, ${timeScoped.length} after 5-day scope, cache_hit=${cache_hit}`);
+    console.error(`[session_start] Loaded ${decisions.length} decisions, ${filtered.length} after project filter, ${timeScoped.length} after 5-day scope, cache_hit=${cache_hit}`);
 
     const result = timeScoped.slice(0, limit).map((d) => ({
       id: d.id,
@@ -414,7 +414,7 @@ async function loadRecentWins(
       source_issue: r.source_linear_issue,
     }));
 
-    console.log(`[session_start] Loaded ${records.length} wins, ${wins.length} after date filter, cache_hit=${cache_hit}`);
+    console.error(`[session_start] Loaded ${records.length} wins, ${wins.length} after date filter, cache_hit=${cache_hit}`);
 
     return {
       wins,
@@ -449,6 +449,9 @@ async function createSessionRecord(
   const timer = new Timer();
 
   try {
+    // OD-cast: Capture asciinema recording path from Docker entrypoint
+    const recordingPath = process.env.GITMEM_RECORDING_PATH || null;
+
     await supabase.directUpsert("orchestra_sessions", {
       id: sessionId,
       session_date: today,
@@ -456,6 +459,7 @@ async function createSessionRecord(
       project,
       agent,
       linear_issue: linearIssue || null,
+      recording_path: recordingPath,
       // Will be populated on close
       decisions: [],
       open_threads: [],
@@ -667,7 +671,7 @@ function checkExistingSession(
   force?: boolean
 ): SessionStartResult | null {
   if (force) {
-    console.log("[session_start] force=true, skipping active session guard");
+    console.error("[session_start] force=true, skipping active session guard");
     return null;
   }
 
@@ -677,7 +681,7 @@ function checkExistingSession(
       const raw = fs.readFileSync(activeSessionPath, "utf8");
       const existing = JSON.parse(raw);
       if (existing.session_id) {
-        console.log(`[session_start] Existing active session found: ${existing.session_id}`);
+        console.error(`[session_start] Existing active session found: ${existing.session_id}`);
 
         // Restore in-memory session state so subsequent tools work correctly
         setCurrentSession({
@@ -703,7 +707,7 @@ function checkExistingSession(
     }
   } catch (error) {
     // File doesn't exist, is corrupted, or can't be read — proceed normally
-    console.log("[session_start] No valid active session file found, creating new session");
+    console.error("[session_start] No valid active session file found, creating new session");
   }
 
   return null;
@@ -837,6 +841,9 @@ export async function sessionStart(
     }
   );
 
+  // Capture recording path from Docker entrypoint env var
+  const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
+
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -849,6 +856,7 @@ export async function sessionStart(
     relevant_scars: scars,
     recent_decisions: decisions,
     ...(wins.length > 0 && { recent_wins: wins }),
+    ...(recordingPath && { recording_path: recordingPath }),
     performance,
   };
 
@@ -869,9 +877,10 @@ export async function sessionStart(
         started_at: new Date().toISOString(),
         project,
         surfaced_scars: surfacedScars, // OD-552: Persist for session close auto-bridge
+        ...(recordingPath && { recording_path: recordingPath }),
       }, null, 2)
     );
-    console.log(`[session_start] Active session persisted to ${activeSessionPath}`);
+    console.error(`[session_start] Active session persisted to ${activeSessionPath}`);
   } catch (error) {
     // Non-fatal: session works fine without file persistence
     console.warn("[session_start] Failed to persist active session file:", error);

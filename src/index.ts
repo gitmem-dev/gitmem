@@ -2,7 +2,7 @@
 /**
  * GitMem MCP Server Entry Point
  *
- * Run with: npx gitmem server
+ * Run with: npx @nteg/gitmem-mcp
  * Or: node dist/index.js
  *
  * Environment variables:

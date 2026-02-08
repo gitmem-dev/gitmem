@@ -139,6 +139,8 @@ export interface SessionStartResult {
   resumed?: boolean;
   /** OD-558: Message explaining session state */
   message?: string;
+  /** Asciinema recording path for session replay (from GITMEM_RECORDING_PATH env var) */
+  recording_path?: string;
 }
 
 // Session close parameters and result
@@ -151,6 +153,8 @@ export interface ClosingReflection {
   what_worked: string;
   wrong_assumption: string;
   scars_applied: string[];
+  /** Q7: What from this session should be captured as institutional memory? */
+  institutional_memory_items?: string;
 }
 
 /**
@@ -375,5 +379,39 @@ export interface GetTranscriptResult {
   transcript_path?: string;
   size_bytes?: number;
   error?: string;
+  performance: PerformanceData;
+}
+
+// --- GitMem v2 Phase 2: Multi-Agent Observations ---
+
+export type ObservationSeverity = "info" | "warning" | "scar_candidate";
+
+export interface Observation {
+  source: string;
+  text: string;
+  severity: ObservationSeverity;
+  context?: string;
+  absorbed_at?: string;
+}
+
+export interface SessionChild {
+  type: "sub_agent" | "teammate";
+  role: string;
+  task_description: string;
+  scars_inherited: string[];
+  observations_returned: Observation[];
+  started_at: string;
+  ended_at?: string;
+}
+
+export interface AbsorbObservationsParams {
+  task_id?: string;
+  observations: Observation[];
+}
+
+export interface AbsorbObservationsResult {
+  absorbed: number;
+  scar_candidates: number;
+  suggestions: string[];
   performance: PerformanceData;
 }

@@ -7,16 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-08
+
+### Added
+- **Full monorepo sync**: Standalone repo is now source of truth (Option A — OD-574, GIT-1)
+- **Zod schemas**: 14 schema files for all tool parameter validation (`src/schemas/`)
+- **Diagnostics suite**: Health checks, channel instrumentation, anonymization (`src/diagnostics/`)
+- **Single source of truth constants**: Closing questions defined once (`src/constants/closing-questions.ts`)
+- **Multi-agent tools**: `prepare_context` and `absorb_observations` (GitMem v2 Phase 1-2)
+- **Tool definitions module**: Centralized tool registration (`src/tools/definitions.ts`)
+- **Commands module**: `gitmem check` CLI health diagnostics (`src/commands/check.ts`)
+- **Full test suite**: 354+ unit tests across 20 test files, plus integration, e2e, and performance benchmarks
+- **Vitest configs**: Separate configs for unit, integration, e2e, and performance tests
+- **Compliance validator warnings**: Q3/Q5 substantive answers warn if no learnings created
+
 ### Fixed
-- **Critical**: GitMem now loads ALL learning types (scars, patterns, wins, anti-patterns) instead of just scars. Previously only 164 scars were loaded, ignoring ~64 patterns and other learning types (~228 total learnings now loaded). ([OD-532](https://linear.app/nteg-labs/issue/OD-532))
-  - Modified `loadScarsWithEmbeddings()` to use `learning_type: "in.(scar,pattern,win,anti_pattern)"`
-  - Updated `getRemoteScarStats()` to match the same filter
-  - Enhanced `directQuery()` to handle PostgREST operators properly
+- **Critical**: GitMem now loads ALL learning types (scars, patterns, wins, anti-patterns) instead of just scars
+- Closing reflection schema now includes Q7 (`institutional_memory_items`) field
 
-### Known Issues
-- Cache health check may report false "out of sync" warnings when learnings lack embeddings ([OD-542](https://linear.app/nteg-labs/issue/OD-542))
+### Changed
+- `build` script now runs unit tests after compilation (`tsc && npm run test:unit`)
+- Version bumped to 0.2.0 to reflect full feature parity with monorepo
 
-## [0.1.0] - 2026-01-XX
+## [0.1.0] - 2026-02-03
 
 ### Added
 - Initial MCP server implementation
@@ -29,5 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache management (status, flush, health)
 - Agent identity detection
 
-[Unreleased]: https://github.com/nTEG-dev/gitmem/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nTEG-dev/gitmem/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nTEG-dev/gitmem/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nTEG-dev/gitmem/releases/tag/v0.1.0

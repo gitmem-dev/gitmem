@@ -6,7 +6,7 @@
  * Focuses on testing the core variant assignment functionality.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import {
   getOrAssignVariant,
   getActiveVariants,
@@ -18,9 +18,12 @@ import * as supabase from "../src/services/supabase-client.js";
 // Test configuration - use actual scar with variants
 const TEST_SCAR_ID = "debc6a79-f080-459b-85c6-01f073eca609"; // Containerization scar
 
-const supabaseConfigured = supabase.isConfigured();
-
-describe.skipIf(!supabaseConfigured)("OD-525: Variant Assignment Core Logic", () => {
+describe("OD-525: Variant Assignment Core Logic", () => {
+  beforeAll(() => {
+    if (!supabase.isConfigured()) {
+      throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    }
+  });
 
   describe("Variant Retrieval", () => {
     it("should fetch active variants for a scar", async () => {

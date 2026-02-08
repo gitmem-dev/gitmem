@@ -158,13 +158,13 @@ export class CacheService {
           // Ignore delete errors
         }
         this.misses++;
-        console.log(`[cache] EXPIRED: ${key}`);
+        console.error(`[cache] EXPIRED: ${key}`);
         return null;
       }
 
       this.hits++;
       const age_ms = now - entry.created_at;
-      console.log(`[cache] HIT: ${key} (age: ${age_ms}ms)`);
+      console.error(`[cache] HIT: ${key} (age: ${age_ms}ms)`);
       return { data: entry.data, age_ms };
     } catch (error) {
       console.warn(`[cache] Error reading ${key}:`, error);
@@ -193,7 +193,7 @@ export class CacheService {
       const content = JSON.stringify(entry, null, 2);
 
       writeFileSync(filepath, content, { mode: 0o600 });
-      console.log(`[cache] SET: ${key} (TTL: ${ttlMs}ms)`);
+      console.error(`[cache] SET: ${key} (TTL: ${ttlMs}ms)`);
     } catch (error) {
       console.warn(`[cache] Error writing ${key}:`, error);
       // Don't disable cache on write errors - might be transient
@@ -308,7 +308,7 @@ export class CacheService {
       }
 
       if (cleaned > 0) {
-        console.log(`[cache] Cleaned up ${cleaned} expired entries`);
+        console.error(`[cache] Cleaned up ${cleaned} expired entries`);
       }
     } catch (error) {
       console.warn("[cache] Error during cleanup:", error);
@@ -330,7 +330,7 @@ export class CacheService {
           // Ignore individual file errors
         }
       }
-      console.log("[cache] Cache cleared");
+      console.error("[cache] Cache cleared");
     } catch (error) {
       console.warn("[cache] Error clearing cache:", error);
     }

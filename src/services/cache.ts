@@ -22,6 +22,8 @@ const TTL = {
   SCAR_SEARCH: 15 * 60 * 1000,    // 15 minutes
   DECISIONS: 5 * 60 * 1000,       // 5 minutes
   WINS: 5 * 60 * 1000,            // 5 minutes
+  SESSIONS: 10 * 60 * 1000,       // 10 minutes (sessions change slowly)
+  SCAR_USAGE: 10 * 60 * 1000,     // 10 minutes
 } as const;
 
 // Max cache sizes
@@ -270,6 +272,62 @@ export class CacheService {
     // Cache the result (async, don't await)
     this.setResult(key, data, TTL.WINS).catch(() => {});
 
+    return { data, cache_hit: false };
+  }
+
+  /**
+   * Generate cache key for sessions (analytics)
+   */
+  sessionsKey(project: string, days: number, agent?: string): string {
+    return `sessions:${project}:${days}d${agent ? `:${agent}` : ""}`;
+  }
+
+  /**
+   * Generate cache key for scar usage (analytics)
+   */
+  scarUsageKey(project: string, days: number, agent?: string): string {
+    return `scar_usage:${project}:${days}d${agent ? `:${agent}` : ""}`;
+  }
+
+  /**
+   * Convenience method: get or fetch sessions
+   */
+  async getOrFetchSessions<T>(
+    project: string,
+    days: number,
+    agent: string | undefined,
+    fetcher: () => Promise<T>
+  ): Promise<{ data: T; cache_hit: boolean; cache_age_ms?: number }> {
+    const key = this.sessionsKey(project, days, agent);
+    const cached = await this.getResult<T>(key);
+
+    if (cached) {
+      return { data: cached.data, cache_hit: true, cache_age_ms: cached.age_ms };
+    }
+
+    const data = await fetcher();
+    this.setResult(key, data, TTL.SESSIONS).catch(() => {});
+    return { data, cache_hit: false };
+  }
+
+  /**
+   * Convenience method: get or fetch scar usage
+   */
+  async getOrFetchScarUsage<T>(
+    project: string,
+    days: number,
+    agent: string | undefined,
+    fetcher: () => Promise<T>
+  ): Promise<{ data: T; cache_hit: boolean; cache_age_ms?: number }> {
+    const key = this.scarUsageKey(project, days, agent);
+    const cached = await this.getResult<T>(key);
+
+    if (cached) {
+      return { data: cached.data, cache_hit: true, cache_age_ms: cached.age_ms };
+    }
+
+    const data = await fetcher();
+    this.setResult(key, data, TTL.SCAR_USAGE).catch(() => {});
     return { data, cache_hit: false };
   }
 

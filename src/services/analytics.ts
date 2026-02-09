@@ -8,6 +8,7 @@
  */
 
 import { directQuery } from "./supabase-client.js";
+import { getCache } from "./cache.js";
 import type { Project } from "../types/index.js";
 
 // --- Types ---
@@ -78,20 +79,28 @@ export async function querySessionsByDateRange(
   project: Project,
   agentFilter?: string
 ): Promise<SessionRecord[]> {
-  const filters: Record<string, string> = {
-    project: `eq.${project}`,
-    "created_at": `gte.${startDate}`,
-  };
+  // Compute days from date range for cache key
+  const days = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000));
+  const cache = getCache();
 
-  // Add end date filter — use a second filter key with PostgREST AND
-  // PostgREST doesn't support two filters on same column directly,
-  // so we use created_at with gte for start and lte appended via raw
-  const sessions = await directQuery<SessionRecord>("orchestra_sessions", {
-    select: "id,session_title,session_date,agent,linear_issue,decisions,open_threads,closing_reflection,close_compliance,created_at,project",
-    filters,
-    order: "created_at.desc",
-    limit: 500,
-  });
+  const { data: sessions } = await cache.getOrFetchSessions<SessionRecord[]>(
+    project,
+    days,
+    agentFilter,
+    async () => {
+      const filters: Record<string, string> = {
+        project: `eq.${project}`,
+        "created_at": `gte.${startDate}`,
+      };
+
+      return directQuery<SessionRecord>("orchestra_sessions", {
+        select: "id,session_title,session_date,agent,linear_issue,decisions,open_threads,closing_reflection,close_compliance,created_at,project",
+        filters,
+        order: "created_at.desc",
+        limit: 1000,
+      });
+    }
+  );
 
   // Client-side filter for end date and agent (PostgREST limitation with dual date filters)
   return sessions.filter(s => {
@@ -180,16 +189,26 @@ export async function queryScarUsageByDateRange(
   _project: Project,
   agentFilter?: string
 ): Promise<ScarUsageRecord[]> {
-  const filters: Record<string, string> = {
-    surfaced_at: `gte.${startDate}`,
-  };
+  const days = Math.ceil((new Date(_endDate).getTime() - new Date(startDate).getTime()) / (24 * 60 * 60 * 1000));
+  const cache = getCache();
 
-  const usages = await directQuery<ScarUsageRecord>("scar_usage", {
-    select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
-    filters,
-    order: "surfaced_at.desc",
-    limit: 500,
-  });
+  const { data: usages } = await cache.getOrFetchScarUsage<ScarUsageRecord[]>(
+    _project,
+    days,
+    agentFilter,
+    async () => {
+      const filters: Record<string, string> = {
+        surfaced_at: `gte.${startDate}`,
+      };
+
+      return directQuery<ScarUsageRecord>("scar_usage", {
+        select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
+        filters,
+        order: "surfaced_at.desc",
+        limit: 1000,
+      });
+    }
+  );
 
   // Client-side filter for end date and agent
   return usages.filter(u => {
@@ -492,17 +511,24 @@ export function computeSummary(sessions: SessionRecord[], days: number): Summary
  * Extract and aggregate closing reflections from sessions.
  * Returns arrays of each reflection field for further analysis.
  */
-export function aggregateClosingReflections(sessions: SessionRecord[]): {
-  what_broke: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  what_worked: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  wrong_assumptions: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  do_differently: Array<{ text: string; session_id: string; agent: string; date: string }>;
+type ReflectionEntry = { text: string; session_id: string; agent: string; date: string };
+type ReflectionCategory = { entries: ReflectionEntry[]; total_count: number };
+
+export function aggregateClosingReflections(
+  sessions: SessionRecord[],
+  maxPerCategory: number = 30,
+  maxTextLength: number = 200
+): {
+  what_broke: ReflectionCategory;
+  what_worked: ReflectionCategory;
+  wrong_assumptions: ReflectionCategory;
+  do_differently: ReflectionCategory;
 } {
-  const result = {
-    what_broke: [] as Array<{ text: string; session_id: string; agent: string; date: string }>,
-    what_worked: [] as Array<{ text: string; session_id: string; agent: string; date: string }>,
-    wrong_assumptions: [] as Array<{ text: string; session_id: string; agent: string; date: string }>,
-    do_differently: [] as Array<{ text: string; session_id: string; agent: string; date: string }>,
+  const all = {
+    what_broke: [] as ReflectionEntry[],
+    what_worked: [] as ReflectionEntry[],
+    wrong_assumptions: [] as ReflectionEntry[],
+    do_differently: [] as ReflectionEntry[],
   };
 
   for (const session of sessions) {
@@ -516,18 +542,33 @@ export function aggregateClosingReflections(sessions: SessionRecord[]): {
     };
 
     if (ref.what_broke && ref.what_broke.trim()) {
-      result.what_broke.push({ text: ref.what_broke, ...meta });
+      all.what_broke.push({ text: ref.what_broke, ...meta });
     }
     if (ref.what_worked && ref.what_worked.trim()) {
-      result.what_worked.push({ text: ref.what_worked, ...meta });
+      all.what_worked.push({ text: ref.what_worked, ...meta });
     }
     if (ref.wrong_assumption && ref.wrong_assumption.trim()) {
-      result.wrong_assumptions.push({ text: ref.wrong_assumption, ...meta });
+      all.wrong_assumptions.push({ text: ref.wrong_assumption, ...meta });
     }
     if (ref.do_differently && ref.do_differently.trim()) {
-      result.do_differently.push({ text: ref.do_differently, ...meta });
+      all.do_differently.push({ text: ref.do_differently, ...meta });
     }
   }
 
-  return result;
+  const truncate = (entries: ReflectionEntry[]): ReflectionCategory => ({
+    total_count: entries.length,
+    entries: entries.slice(0, maxPerCategory).map(e => ({
+      ...e,
+      text: e.text.length > maxTextLength
+        ? e.text.slice(0, maxTextLength) + "..."
+        : e.text,
+    })),
+  });
+
+  return {
+    what_broke: truncate(all.what_broke),
+    what_worked: truncate(all.what_worked),
+    wrong_assumptions: truncate(all.wrong_assumptions),
+    do_differently: truncate(all.do_differently),
+  };
 }

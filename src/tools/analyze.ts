@@ -48,14 +48,17 @@ export interface AnalyzeResult {
   performance: PerformanceData;
 }
 
+type ReflectionEntry = { text: string; session_id: string; agent: string; date: string };
+type ReflectionCategory = { entries: ReflectionEntry[]; total_count: number };
+
 interface ReflectionsData {
   period: { start: string; end: string; days: number };
   total_sessions_scanned: number;
   sessions_with_reflections: number;
-  what_broke: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  what_worked: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  wrong_assumptions: Array<{ text: string; session_id: string; agent: string; date: string }>;
-  do_differently: Array<{ text: string; session_id: string; agent: string; date: string }>;
+  what_broke: ReflectionCategory;
+  what_worked: ReflectionCategory;
+  wrong_assumptions: ReflectionCategory;
+  do_differently: ReflectionCategory;
 }
 
 // --- Implementation ---

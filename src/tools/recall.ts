@@ -8,9 +8,13 @@
  *
  * OD-489: Uses local vector search when available for speed,
  * falls back to Supabase scar_search when local cache isn't ready.
+ *
+ * OD-466: After scar search, fetches related knowledge triples and
+ * includes them in the formatted response for relationship context.
  */
 
 import * as supabase from "../services/supabase-client.js";
+import type { KnowledgeTriple } from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
 import { hasSupabase, hasVariants, hasMetrics } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
@@ -98,6 +102,8 @@ interface FormattedScar {
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
+  // OD-466: Knowledge triples for relationship context
+  related_triples?: KnowledgeTriple[];
 }
 
 /**
@@ -214,6 +220,15 @@ Proceed with caution - this may be new territory without documented lessons.`;
       lines.push("**Self-Check:**");
       for (const criterion of scar.self_check_criteria) {
         lines.push(`  - [ ] ${criterion}`);
+      }
+    }
+
+    // OD-466: Render related knowledge triples
+    if (scar.related_triples && scar.related_triples.length > 0) {
+      lines.push("");
+      lines.push("*Related knowledge:*");
+      for (const triple of scar.related_triples) {
+        lines.push(`  - ${triple.subject} **${triple.predicate}** ${triple.object}`);
       }
     }
 
@@ -420,6 +435,16 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
 
     const variantLatencyMs = variantTimer.stop();
 
+    // OD-466: Fetch related knowledge triples for surfaced scars
+    const tripleTimer = new Timer();
+    const scarIds = rawScars.map((s) => s.id);
+    const triplesMap = await supabase.fetchRelatedTriples(scarIds);
+    const tripleLatencyMs = tripleTimer.stop();
+
+    if (triplesMap.size > 0) {
+      console.error(`[recall] Found triples for ${triplesMap.size} scars (${tripleLatencyMs}ms)`);
+    }
+
     // Format scars for response
     const scars: FormattedScar[] = rawScars.map((scar) => ({
       id: scar.id,
@@ -437,6 +462,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       why_this_matters: (scar as ScarRecord).why_this_matters,
       action_protocol: (scar as ScarRecord).action_protocol,
       self_check_criteria: (scar as ScarRecord).self_check_criteria,
+      // OD-466: Knowledge triples
+      related_triples: triplesMap.get(scar.id),
     }));
 
     // OD-552: Track surfaced scars for auto-bridge at session close

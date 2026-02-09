@@ -227,6 +227,94 @@ function cmdConfigure() {
   }
 }
 
+/**
+ * Run session-start directly (for hook scripts that need context without MCP)
+ *
+ * Outputs formatted session context to stdout.
+ * Used by gitmem-hooks SessionStart hook to provide immediate context
+ * without requiring ToolSearch → session_start two-step dance.
+ *
+ * Args: --project <project> --agent <agent>
+ */
+async function cmdSessionStart() {
+  const args = process.argv.slice(3);
+  let project = "orchestra_dev";
+  let agentIdentity = undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--project" && args[i + 1]) project = args[i + 1];
+    if (args[i] === "--agent" && args[i + 1]) agentIdentity = args[i + 1];
+  }
+
+  try {
+    const { sessionStart } = await import("../dist/tools/session-start.js");
+    const result = await sessionStart({ project, agent_identity: agentIdentity });
+
+    // Format as readable text for hook output
+    const lines = [];
+    lines.push(`GITMEM SESSION ACTIVE — Context loaded`);
+    lines.push(``);
+    lines.push(`Session: ${result.session_id} | Agent: ${result.agent}${result.resumed ? " | Resumed" : ""}`);
+
+    if (result.last_session) {
+      lines.push(``);
+      lines.push(`Last session: "${result.last_session.title}" (${result.last_session.date})`);
+      if (result.last_session.key_decisions?.length) {
+        lines.push(`  Decisions: ${result.last_session.key_decisions.slice(0, 3).join("; ")}`);
+      }
+    }
+
+    if (result.open_threads?.length) {
+      lines.push(``);
+      lines.push(`Open threads (${result.open_threads.length}):`);
+      for (const thread of result.open_threads.slice(0, 5)) {
+        lines.push(`  - ${thread}`);
+      }
+    }
+
+    if (result.relevant_scars?.length) {
+      lines.push(``);
+      lines.push(`Relevant scars (${result.relevant_scars.length}):`);
+      for (const scar of result.relevant_scars) {
+        const sev = (scar.severity || "medium").toUpperCase();
+        lines.push(`  [${sev}] ${scar.title}`);
+        if (scar.description) {
+          lines.push(`    ${scar.description.slice(0, 150)}`);
+        }
+      }
+    }
+
+    if (result.recent_decisions?.length) {
+      lines.push(``);
+      lines.push(`Recent decisions (${result.recent_decisions.length}):`);
+      for (const d of result.recent_decisions) {
+        lines.push(`  - ${d.title} (${d.date})`);
+      }
+    }
+
+    if (result.recent_wins?.length) {
+      lines.push(``);
+      lines.push(`Recent wins (${result.recent_wins.length}):`);
+      for (const w of result.recent_wins) {
+        lines.push(`  - ${w.title} (${w.date})`);
+      }
+    }
+
+    if (result.project_state) {
+      lines.push(``);
+      lines.push(`Project state: ${result.project_state}`);
+    }
+
+    lines.push(``);
+    lines.push(`Other gitmem tools (recall, create_learning, etc.) are available via ToolSearch.`);
+
+    console.log(lines.join("\n"));
+  } catch (error) {
+    console.error("[gitmem session-start]", error.message || error);
+    process.exit(1);
+  }
+}
+
 switch (command) {
   case "setup":
     cmdSetup();
@@ -236,6 +324,9 @@ switch (command) {
     break;
   case "configure":
     cmdConfigure();
+    break;
+  case "session-start":
+    cmdSessionStart();
     break;
   case "server":
   case "--stdio":

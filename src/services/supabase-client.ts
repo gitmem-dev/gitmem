@@ -236,6 +236,55 @@ export async function directQuery<T = unknown>(
 }
 
 /**
+ * Knowledge triple from knowledge_triples table (OD-466)
+ */
+export interface KnowledgeTriple {
+  subject: string;
+  predicate: string;
+  object: string;
+  event_time: string;
+  decay_weight: number;
+  half_life_days: number;
+  decay_floor: number;
+  source_id: string;
+}
+
+/**
+ * Fetch related knowledge triples for a set of scar IDs (OD-466)
+ *
+ * Queries knowledge_triples table where source_id matches any of the provided scar IDs.
+ * Returns triples grouped by source_id for easy attachment to scars.
+ */
+export async function fetchRelatedTriples(
+  scarIds: string[]
+): Promise<Map<string, KnowledgeTriple[]>> {
+  const result = new Map<string, KnowledgeTriple[]>();
+
+  if (scarIds.length === 0 || !isConfigured()) {
+    return result;
+  }
+
+  try {
+    const triples = await directQuery<KnowledgeTriple>("knowledge_triples", {
+      select: "subject,predicate,object,event_time,decay_weight,half_life_days,decay_floor,source_id",
+      filters: {
+        source_id: `in.(${scarIds.join(",")})`,
+      },
+    });
+
+    for (const triple of triples) {
+      const existing = result.get(triple.source_id) || [];
+      existing.push(triple);
+      result.set(triple.source_id, existing);
+    }
+  } catch (error) {
+    console.error("[fetchRelatedTriples] Failed:", error instanceof Error ? error.message : error);
+  }
+
+  return result;
+}
+
+/**
  * Upsert a record directly to Supabase REST API (bypasses ww-mcp)
  *
  * Used for tests where ww-mcp authentication is problematic.

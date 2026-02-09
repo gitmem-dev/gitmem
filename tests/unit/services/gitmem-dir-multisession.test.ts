@@ -106,7 +106,7 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
     expect(result).toBe(gitmemDir);
   });
 
-  it("finds .gitmem with legacy active-session.json sentinel", () => {
+  it("does NOT use legacy active-session.json as sentinel (removed in multi-session)", () => {
     const projectDir = path.join(tmpDir, "project");
     const subDir = path.join(projectDir, "sub");
     const gitmemDir = path.join(projectDir, ".gitmem");
@@ -118,7 +118,8 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
     vi.spyOn(process, "cwd").mockReturnValue(subDir);
 
     const result = getGitmemDir();
-    expect(result).toBe(gitmemDir);
+    // Falls back to CWD since active-session.json is no longer a sentinel
+    expect(result).toBe(path.join(subDir, ".gitmem"));
   });
 
   it("prefers active-sessions.json over config.json at same level", () => {

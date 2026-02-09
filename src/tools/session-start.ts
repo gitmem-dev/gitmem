@@ -652,33 +652,25 @@ async function sessionStartFree(
   };
   freeResult.display = formatStartDisplay(freeResult);
 
-  // Write display back to active-session.json so /start skill can echo it verbatim
+  // Write display to per-session dir
   try {
-    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
-    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-    activeSession.display = freeResult.display;
-    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+    const sessionFilePath = getSessionPath(sessionId, "session.json");
+    const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    sessionData.display = freeResult.display;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
   } catch { /* non-critical */ }
 
   return freeResult;
 }
 
 /**
- * Read session state from per-session directory or legacy file.
- * Tries per-session dir first, falls back to legacy active-session.json.
+ * Read session state from per-session directory.
  */
 function readSessionFile(sessionId: string): Record<string, unknown> | null {
   try {
     const sessionFilePath = getSessionPath(sessionId, "session.json");
     if (fs.existsSync(sessionFilePath)) {
       return JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-    }
-  } catch { /* fall through */ }
-
-  try {
-    const legacyPath = path.join(getGitmemDir(), "active-session.json");
-    if (fs.existsSync(legacyPath)) {
-      return JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
     }
   } catch { /* fall through */ }
 
@@ -748,23 +740,8 @@ function checkExistingSession(
       console.warn(`[session_start] Registry entry found but session file missing for ${mySession.session_id}`);
     }
 
-    // Legacy fallback: check active-session.json
-    const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
-    if (fs.existsSync(activeSessionPath)) {
-      const raw = fs.readFileSync(activeSessionPath, "utf8");
-      const existing = JSON.parse(raw);
-      if (existing.session_id) {
-        // GIT-20: Only resume legacy file if it belongs to this process
-        // (hostname+pid match) or if it's a pre-migration file (no hostname/pid fields)
-        const sameHost = !existing.hostname || existing.hostname === os.hostname();
-        const samePid = !existing.pid || existing.pid === process.pid;
-        if (sameHost && samePid) {
-          console.error(`[session_start] Resuming session from legacy file: ${existing.session_id}`);
-          return restoreSessionState(existing, agent);
-        }
-        console.error(`[session_start] Legacy file belongs to another process (host: ${existing.hostname}, pid: ${existing.pid}), skipping`);
-      }
-    }
+    // Legacy active-session.json fallback removed — per-session dirs + registry
+    // are the source of truth (Phase 1 multi-session isolation)
   } catch (error) {
     console.error("[session_start] Error checking existing sessions:", error);
   }
@@ -813,15 +790,7 @@ function writeSessionFiles(
     console.warn("[session_start] Failed to write per-session file:", error);
   }
 
-  // 2. Legacy active-session.json (backward compat for recall/session_close)
-  try {
-    fs.writeFileSync(
-      path.join(gitmemDir, "active-session.json"),
-      JSON.stringify(data, null, 2)
-    );
-  } catch (error) {
-    console.warn("[session_start] Failed to write legacy active-session.json:", error);
-  }
+  // Legacy active-session.json write removed — per-session dir is the source of truth
 
   // 3. Register in active-sessions registry (skip on refresh — already registered)
   if (!isRefresh) {
@@ -1137,13 +1106,13 @@ export async function sessionStart(
 
   result.display = formatStartDisplay(result);
 
-  // Write display back to active-session.json so /start skill can echo it verbatim
+  // Write display to per-session dir
   try {
-    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
-    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-    activeSession.display = result.display;
-    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
-  } catch { /* non-critical — /start skill will still work from raw fields */ }
+    const sessionFilePath = getSessionPath(sessionId, "session.json");
+    const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    sessionData.display = result.display;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
+  } catch { /* non-critical */ }
 
   return result;
 }
@@ -1185,15 +1154,6 @@ export async function sessionRefresh(
 
     if (mySession) {
       raw = readSessionFile(mySession.session_id);
-    }
-    if (!raw) {
-      // Try legacy active-session.json
-      try {
-        const legacyPath = path.join(process.cwd(), ".gitmem", "active-session.json");
-        if (fs.existsSync(legacyPath)) {
-          raw = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
-        }
-      } catch { /* fall through */ }
     }
     if (!raw || !raw.session_id) {
       return {
@@ -1370,12 +1330,12 @@ export async function sessionRefresh(
 
   result.display = formatStartDisplay(result);
 
-  // Write display back to active-session.json so /start skill can echo it verbatim
+  // Write display to per-session dir
   try {
-    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
-    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-    activeSession.display = result.display;
-    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+    const sessionFilePath = getSessionPath(sessionId, "session.json");
+    const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    sessionData.display = result.display;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
   } catch { /* non-critical */ }
 
   return result;

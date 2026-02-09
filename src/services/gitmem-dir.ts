@@ -7,7 +7,7 @@
  *
  * Resolution order:
  * 1. Cached path from session_start (most reliable — session_start created the directory)
- * 2. Walk up from process.cwd() looking for existing .gitmem/active-session.json
+ * 2. Walk up from process.cwd() looking for existing .gitmem/ sentinels
  * 3. Fall back to process.cwd()/.gitmem (original behavior)
  */
 
@@ -35,10 +35,9 @@ export function getGitmemDir(): string {
 
   // 2. Walk up from CWD looking for existing .gitmem directory
   //    Sentinel files checked in priority order:
-  //    - active-sessions.json  (new multi-session registry, GIT-19)
+  //    - active-sessions.json  (multi-session registry, GIT-19)
   //    - config.json           (project-level gitmem config)
-  //    - active-session.json   (legacy single-session file, backward compat)
-  const sentinels = ["active-sessions.json", "config.json", "active-session.json"];
+  const sentinels = ["active-sessions.json", "config.json"];
   let dir = process.cwd();
   const root = path.parse(dir).root;
   while (dir !== root) {

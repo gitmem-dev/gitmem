@@ -22,7 +22,7 @@ import {
   addConfirmations,
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
-import { getGitmemDir } from "../services/gitmem-dir.js";
+import { getSessionPath } from "../services/gitmem-dir.js";
 import type {
   ConfirmScarsParams,
   ConfirmScarsResult,
@@ -131,15 +131,14 @@ function formatResponse(
 }
 
 /**
- * Update active-session.json with confirmation data.
- * Reads the existing file, adds confirmations field, writes back.
+ * Update per-session dir with confirmation data.
  */
 function persistConfirmationsToFile(confirmations: ScarConfirmation[]): void {
   try {
-    const gitmemDir = getGitmemDir();
-    if (!gitmemDir) return;
+    const session = getCurrentSession();
+    if (!session) return;
 
-    const sessionFilePath = path.join(gitmemDir, "active-session.json");
+    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
     if (!fs.existsSync(sessionFilePath)) return;
 
     const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf8"));

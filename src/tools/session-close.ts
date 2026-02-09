@@ -344,16 +344,7 @@ function cleanupSessionFiles(sessionId: string): void {
     console.warn("[session_close] Failed to clean up session directory:", error);
   }
 
-  // 3. Delete legacy active-session.json
-  try {
-    const activeSessionPath = getGitmemPath("active-session.json");
-    if (fs.existsSync(activeSessionPath)) {
-      fs.unlinkSync(activeSessionPath);
-      console.error("[session_close] Cleaned up legacy active-session.json");
-    }
-  } catch (error) {
-    console.warn("[session_close] Failed to clean up legacy file:", error);
-  }
+  // Legacy active-session.json cleanup removed — file is no longer written
 }
 
 /**
@@ -378,21 +369,7 @@ export async function sessionClose(
       console.warn("[session_close] Failed to check session registry:", error);
     }
 
-    // Legacy fallback: active-session.json (OD-549)
-    if (!params.session_id) {
-      try {
-        const activeSessionPath = getGitmemPath("active-session.json");
-        if (fs.existsSync(activeSessionPath)) {
-          const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-          if (activeSession.session_id) {
-            console.error(`[session_close] Recovered session_id from legacy file: ${activeSession.session_id}`);
-            params = { ...params, session_id: activeSession.session_id };
-          }
-        }
-      } catch (error) {
-        console.warn("[session_close] Failed to read legacy active-session.json:", error);
-      }
-    }
+    // Legacy active-session.json fallback removed — registry is the source of truth
   }
 
   // 0a. File-based payload handoff: if .gitmem/closing-payload.json exists,
@@ -818,23 +795,7 @@ export async function sessionClose(
               console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from per-session file`);
             }
           }
-        } catch { /* fall through to legacy */ }
-      }
-
-      if (surfacedScars.length === 0) {
-        // Legacy fallback: active-session.json
-        try {
-          const activeSessionPath = getGitmemPath("active-session.json");
-          if (fs.existsSync(activeSessionPath)) {
-            const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-            if (activeSession.surfaced_scars && Array.isArray(activeSession.surfaced_scars)) {
-              surfacedScars = activeSession.surfaced_scars;
-              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from legacy file`);
-            }
-          }
-        } catch (fileError) {
-          console.warn("[session_close] Failed to load surfaced scars from file:", fileError);
-        }
+        } catch { /* per-session file read failed */ }
       }
 
       if (surfacedScars.length > 0) {

@@ -36,7 +36,7 @@ import { getAgentIdentity } from "../services/agent-detection.js"; // OD-547
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
-import { getGitmemPath } from "../services/gitmem-dir.js";
+import { getSessionPath } from "../services/gitmem-dir.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
 /**
@@ -477,20 +477,20 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     }));
     addSurfacedScars(recallSurfacedScars);
 
-    // OD-552: Update active-session.json with accumulated surfaced scars
+    // OD-552: Update per-session dir with accumulated surfaced scars
     try {
-      const activeSessionPath = getGitmemPath("active-session.json");
-      if (fs.existsSync(activeSessionPath)) {
-        const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-        const session = getCurrentSession();
-        if (session) {
-          activeSession.surfaced_scars = session.surfacedScars;
-          fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+      const session = getCurrentSession();
+      if (session) {
+        const sessionFilePath = getSessionPath(session.sessionId, "session.json");
+        if (fs.existsSync(sessionFilePath)) {
+          const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+          sessionData.surfaced_scars = session.surfacedScars;
+          fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
         }
       }
     } catch (error) {
       // Non-fatal: surfaced scars still tracked in memory
-      console.warn("[recall] Failed to update active-session.json with surfaced scars:", error);
+      console.warn("[recall] Failed to update per-session file with surfaced scars:", error);
     }
 
     const latencyMs = timer.stop();

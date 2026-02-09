@@ -267,6 +267,23 @@ export async function sessionClose(
     }
   }
 
+  // 0a. File-based payload handoff: if .gitmem/closing-payload.json exists,
+  // merge it with inline params (inline params take precedence).
+  // This keeps the visible MCP tool call small: just session_id + close_type.
+  const payloadPath = path.join(process.cwd(), ".gitmem", "closing-payload.json");
+  try {
+    if (fs.existsSync(payloadPath)) {
+      const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
+      // File provides defaults; inline params override
+      params = { ...filePayload, ...params };
+      console.error(`[session_close] Loaded closing payload from ${payloadPath}`);
+      // Clean up payload file
+      try { fs.unlinkSync(payloadPath); } catch { /* ignore */ }
+    }
+  } catch (error) {
+    console.warn("[session_close] Failed to read closing-payload.json:", error);
+  }
+
   // Free tier: simple local persistence, skip Supabase recovery and compliance
   if (!hasSupabase()) {
     return sessionCloseFree(params, timer);

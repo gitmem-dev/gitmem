@@ -104,10 +104,12 @@ async function fetchAll(table, select, filters = "") {
 async function main() {
   console.log(DRY_RUN ? "=== DRY RUN ===" : "=== BACKFILL ===");
 
-  // 1. Fetch existing triple source_ids to skip
+  // 1. Fetch existing triples to determine what to skip
   console.log("Fetching existing triples...");
-  const existingTriples = await fetchAll("knowledge_triples", "source_id");
+  const existingTriples = await fetchAll("knowledge_triples", "source_id,predicate,object");
   const existingSourceIds = new Set(existingTriples.map((t) => t.source_id));
+  // Build set of "source_id|predicate|object" for dedup of specific triples
+  const existingTripleKeys = new Set(existingTriples.map((t) => `${t.source_id}|${t.predicate}|${t.object}`));
   console.log(`  ${existingTriples.length} existing triples, ${existingSourceIds.size} unique source_ids`);
 
   // 2. Fetch all learnings
@@ -126,6 +128,12 @@ async function main() {
     "id,title,decision,rationale,personas_involved,linear_issue,session_id,project"
   );
   console.log(`  ${decisions.length} decisions`);
+
+  // 3b. Fetch sessions to resolve agent for decisions (decisions table has no agent column)
+  console.log("Fetching sessions for agent resolution...");
+  const sessions = await fetchAll("orchestra_sessions", "id,agent", "&agent=not.is.null");
+  const sessionAgentMap = new Map(sessions.map((s) => [s.id, s.agent]));
+  console.log(`  ${sessions.length} sessions loaded for agent lookup`);
 
   // 4. Extract triples
   let candidates = [];
@@ -152,10 +160,7 @@ async function main() {
   }
 
   for (const d of decisions) {
-    if (existingSourceIds.has(d.id)) {
-      skippedDecisions++;
-      continue;
-    }
+    const agent = (d.session_id && sessionAgentMap.get(d.session_id)) || "Unknown";
     const triples = extractDecisionTriples({
       id: d.id,
       title: d.title || "",
@@ -165,9 +170,20 @@ async function main() {
       linear_issue: d.linear_issue,
       session_id: d.session_id,
       project: d.project || "orchestra_dev",
-      agent: d.agent || "Unknown",
+      agent,
     });
-    candidates.push(...triples);
+    // Fine-grained dedup: skip individual triples that already exist, not the whole decision
+    let added = 0;
+    for (const t of triples) {
+      const key = `${t.source_id}|${t.predicate}|${t.object}`;
+      if (!existingTripleKeys.has(key)) {
+        candidates.push(t);
+        added++;
+      }
+    }
+    if (added === 0 && existingSourceIds.has(d.id)) {
+      skippedDecisions++;
+    }
   }
 
   console.log(`\nExtraction results:`);

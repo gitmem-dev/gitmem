@@ -186,6 +186,32 @@ export function getChildren(): SessionChild[] {
 }
 
 /**
+ * Compute session activity signals for close type validation.
+ * Returns null if no active session (e.g., recovered from registry).
+ */
+export interface SessionActivity {
+  duration_min: number;
+  recall_count: number;       // Scars from "recall" (excludes session_start auto-scars)
+  observation_count: number;
+  children_count: number;
+  thread_count: number;       // Open threads in current session
+}
+
+export function getSessionActivity(): SessionActivity | null {
+  if (!currentSession) return null;
+
+  const durationMs = Date.now() - currentSession.startedAt.getTime();
+
+  return {
+    duration_min: durationMs / (1000 * 60),
+    recall_count: currentSession.surfacedScars.filter(s => s.source === "recall").length,
+    observation_count: currentSession.observations.length,
+    children_count: currentSession.children.length,
+    thread_count: currentSession.threads.filter(t => t.status === "open").length,
+  };
+}
+
+/**
  * OD-thread-lifecycle: Set threads for the current session
  */
 export function setThreads(threads: ThreadObject[]): void {

@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
+import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import {
   validateSessionClose,
@@ -410,6 +410,50 @@ export async function sessionClose(
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
+  }
+
+  // Close type auto-detection: reject mismatched close types based on session activity.
+  // Standard close on a short/trivial session is wasteful; quick close on a long session loses data.
+  const activity = getSessionActivity();
+  if (activity && params.close_type) {
+    const isMinimal = activity.recall_count === 0 &&
+                      activity.observation_count === 0 &&
+                      activity.children_count === 0;
+
+    if (params.close_type === "standard" && activity.duration_min < 30 && isMinimal) {
+      const latencyMs = timer.stop();
+      const perfData = buildPerformanceData("session_close", latencyMs, 0);
+      return {
+        success: false,
+        session_id: params.session_id || "",
+        close_compliance: {
+          close_type: params.close_type,
+          agent: detectAgent().agent,
+          checklist_displayed: false,
+          questions_answered_by_agent: false,
+          human_asked_for_corrections: false,
+          learnings_stored: 0,
+          scars_applied: 0,
+        },
+        validation_errors: [
+          `Close type mismatch: "standard" requested but session qualifies for "quick".`,
+          `Session duration: ${Math.round(activity.duration_min)} min (< 30 min threshold).`,
+          `Activity: ${activity.recall_count} recalls, ${activity.observation_count} observations, ${activity.children_count} children.`,
+          `Re-call with close_type: "quick" for short exploratory sessions.`,
+        ],
+        performance: perfData,
+        display: `CLOSE TYPE MISMATCH\n\nSession is ${Math.round(activity.duration_min)} min with no substantive activity.\nUse close_type: "quick" instead of "standard".`,
+      };
+    }
+
+    if (params.close_type === "quick" && (activity.duration_min >= 30 || !isMinimal)) {
+      // Warn but don't reject — agent chose quick on a substantive session
+      console.error(
+        `[session_close] Warning: "quick" close on substantive session ` +
+        `(${Math.round(activity.duration_min)} min, ${activity.recall_count} recalls, ` +
+        `${activity.observation_count} observations). Consider "standard" close.`
+      );
+    }
   }
 
   // Free tier: simple local persistence, skip Supabase recovery and compliance

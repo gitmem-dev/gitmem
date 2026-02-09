@@ -28,7 +28,9 @@ import type { AnalyzeParams } from "./tools/analyze.js";
 import { prepareContext } from "./tools/prepare-context.js";
 import type { PrepareContextParams } from "./tools/prepare-context.js";
 import { absorbObservations } from "./tools/absorb-observations.js";
-import type { AbsorbObservationsParams } from "./types/index.js";
+import { listThreads } from "./tools/list-threads.js";
+import { resolveThread } from "./tools/resolve-thread.js";
+import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
   checkCacheHealth,
@@ -169,6 +171,16 @@ export function createServer(): Server {
         case "gm-absorb":
           result = await absorbObservations(toolArgs as unknown as AbsorbObservationsParams);
           break;
+        case "list_threads":
+        case "gitmem-lt":
+        case "gm-threads":
+          result = await listThreads(toolArgs as unknown as ListThreadsParams);
+          break;
+        case "resolve_thread":
+        case "gitmem-rt":
+        case "gm-resolve":
+          result = await resolveThread(toolArgs as unknown as ResolveThreadParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -183,6 +195,8 @@ export function createServer(): Server {
             { alias: "gitmem-analyze", full: "analyze", description: "Session analytics and insights" },
             { alias: "gitmem-pc", full: "prepare_context", description: "Generate memory payload for sub-agents" },
             { alias: "gitmem-ao", full: "absorb_observations", description: "Capture sub-agent/teammate observations" },
+            { alias: "gitmem-lt", full: "list_threads", description: "List open threads across sessions" },
+            { alias: "gitmem-rt", full: "resolve_thread", description: "Mark a thread as resolved" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });

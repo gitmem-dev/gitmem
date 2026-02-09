@@ -523,6 +523,56 @@ export const TOOLS = [
     },
   },
 
+  // --- Thread Lifecycle Tools (OD-thread-lifecycle) ---
+
+  {
+    name: "list_threads",
+    description:
+      "List open threads across recent sessions. Shows unresolved work items that carry over between sessions, with IDs for resolution. Use resolve_thread to mark threads as done.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        status: {
+          type: "string",
+          enum: ["open", "resolved"],
+          description: "Filter by status (default: open)",
+        },
+        include_resolved: {
+          type: "boolean",
+          description: "Include recently resolved threads (default: false)",
+        },
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: orchestra_dev)",
+        },
+      },
+    },
+  },
+  {
+    name: "resolve_thread",
+    description:
+      "Mark an open thread as resolved. Use thread_id for exact match or text_match for fuzzy matching. Updates session state and .gitmem/threads.json.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thread_id: {
+          type: "string",
+          description: 'Thread ID (e.g., "t-a1b2c3d4") for exact resolution',
+        },
+        text_match: {
+          type: "string",
+          description:
+            "Fuzzy text match against thread descriptions (fallback if no thread_id)",
+        },
+        resolution_note: {
+          type: "string",
+          description: "Brief note explaining how/why thread was resolved",
+        },
+      },
+    },
+  },
+
   // ============================================================================
   // SHORT ALIASES (gitmem-*)
   // Self-documenting: each description includes both alias and full name
@@ -1017,6 +1067,32 @@ export const TOOLS = [
       required: ["observations"],
     },
   },
+  // gitmem-lt (list_threads) — OD-thread-lifecycle
+  {
+    name: "gitmem-lt",
+    description: "gitmem-lt (list_threads) - List open threads across sessions",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["open", "resolved"], description: "Filter by status (default: open)" },
+        include_resolved: { type: "boolean", description: "Include recently resolved threads (default: false)" },
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+      },
+    },
+  },
+  // gitmem-rt (resolve_thread) — OD-thread-lifecycle
+  {
+    name: "gitmem-rt",
+    description: "gitmem-rt (resolve_thread) - Mark a thread as resolved",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thread_id: { type: "string", description: 'Thread ID (e.g., "t-a1b2c3d4")' },
+        text_match: { type: "string", description: "Fuzzy text match against thread descriptions" },
+        resolution_note: { type: "string", description: "Brief note explaining resolution" },
+      },
+    },
+  },
   // ============================================================================
   // GM-* SHORT, MEMORABLE ALIASES (user-facing ergonomics)
   // ============================================================================
@@ -1281,6 +1357,32 @@ export const TOOLS = [
         },
       },
       required: ["observations"],
+    },
+  },
+  // gm-threads (list_threads) — OD-thread-lifecycle
+  {
+    name: "gm-threads",
+    description: "gm-threads (list_threads) - List open threads",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["open", "resolved"], description: "Filter by status (default: open)" },
+        include_resolved: { type: "boolean", description: "Include resolved threads" },
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+      },
+    },
+  },
+  // gm-resolve (resolve_thread) — OD-thread-lifecycle
+  {
+    name: "gm-resolve",
+    description: "gm-resolve (resolve_thread) - Resolve a thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        thread_id: { type: "string", description: 'Thread ID (e.g., "t-a1b2c3d4")' },
+        text_match: { type: "string", description: "Fuzzy text match" },
+        resolution_note: { type: "string", description: "Brief resolution note" },
+      },
     },
   },
   // ============================================================================

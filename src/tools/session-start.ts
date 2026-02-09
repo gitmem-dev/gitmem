@@ -27,7 +27,8 @@ import {
   buildPerformanceData,
   buildComponentPerformance,
 } from "../services/metrics.js";
-import { setCurrentSession, addSurfacedScars } from "../services/session-state.js"; // OD-547, OD-552
+import { setCurrentSession, addSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
+import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir } from "../services/gitmem-dir.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
@@ -39,6 +40,7 @@ import type {
   RecentWin,
   AgentIdentity,
   Project,
+  ThreadObject,
 } from "../types/index.js";
 
 // Supabase record types
@@ -47,7 +49,7 @@ interface SessionRecord {
   session_title: string;
   session_date: string;
   decisions?: string[];
-  open_threads?: string[];
+  open_threads?: (string | ThreadObject)[];
   close_compliance?: Record<string, unknown> | null;
   // From lite view (counts only)
   decision_count?: number;
@@ -84,46 +86,7 @@ interface WinRecord {
  * Deduplicates by exact lowercase match. Excludes PROJECT STATE: threads
  * (handled separately). Only includes sessions from the last maxAgeDays.
  */
-function aggregateOpenThreads(
-  sessions: SessionRecord[],
-  maxSessions = 5,
-  maxAgeDays = 14
-): string[] {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
-  const cutoffStr = cutoffDate.toISOString().split("T")[0];
-
-  const closedSessions = sessions
-    .filter((s) => s.close_compliance != null && s.session_date >= cutoffStr)
-    .slice(0, maxSessions);
-
-  const seen = new Set<string>();
-  const threads: string[] = [];
-
-  for (const session of closedSessions) {
-    for (const thread of session.open_threads || []) {
-      // Skip PROJECT STATE threads (handled separately via OD-534)
-      if (typeof thread === "string" && thread.startsWith("PROJECT STATE:")) continue;
-      // Parse JSON thread objects if present (some sessions store {item, context})
-      let threadText = thread;
-      if (typeof thread === "string" && thread.startsWith("{")) {
-        try {
-          const parsed = JSON.parse(thread);
-          threadText = parsed.item || thread;
-        } catch {
-          // Not JSON, use as-is
-        }
-      }
-      const key = String(threadText).toLowerCase().trim();
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        threads.push(String(threadText));
-      }
-    }
-  }
-
-  return threads;
-}
+// aggregateOpenThreads replaced by aggregateThreads from thread-manager.ts (OD-thread-lifecycle)
 
 /**
  * Load the last CLOSED session for this agent.
@@ -137,7 +100,8 @@ async function loadLastSession(
   project: Project
 ): Promise<{
   session: LastSession | null;
-  aggregated_open_threads: string[];
+  aggregated_open_threads: ThreadObject[];
+  recently_resolved_threads: ThreadObject[];
   latency_ms: number;
   network_call: boolean;
 }> {
@@ -155,12 +119,14 @@ async function loadLastSession(
 
     const latency_ms = timer.stop();
 
-    // Aggregate open threads across last 5 closed sessions (free — data already fetched)
-    const aggregated_open_threads = aggregateOpenThreads(sessions);
-    console.error(`[session_start] Aggregated ${aggregated_open_threads.length} open threads from recent sessions`);
+    // Aggregate open threads across last 5 closed sessions (OD-thread-lifecycle: returns ThreadObject[])
+    const threadResult = aggregateThreads(sessions);
+    const aggregated_open_threads = threadResult.open;
+    const recently_resolved_threads = threadResult.recently_resolved;
+    console.error(`[session_start] Aggregated ${aggregated_open_threads.length} open threads, ${recently_resolved_threads.length} recently resolved`);
 
     if (sessions.length === 0) {
-      return { session: null, aggregated_open_threads, latency_ms, network_call: true };
+      return { session: null, aggregated_open_threads, recently_resolved_threads, latency_ms, network_call: true };
     }
 
     // Find the most recent session that was properly closed
@@ -179,6 +145,7 @@ async function loadLastSession(
           open_threads: session.open_threads || [],
         },
         aggregated_open_threads,
+        recently_resolved_threads,
         latency_ms,
         network_call: true,
       };
@@ -193,12 +160,13 @@ async function loadLastSession(
         open_threads: closedSession.open_threads || [],
       },
       aggregated_open_threads,
+      recently_resolved_threads,
       latency_ms,
       network_call: true, // Always hits Supabase (no caching for sessions yet)
     };
   } catch (error) {
     console.error("[session_start] Failed to load last session:", error);
-    return { session: null, aggregated_open_threads: [], latency_ms: timer.stop(), network_call: true };
+    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], latency_ms: timer.stop(), network_call: true };
   }
 }
 
@@ -502,14 +470,17 @@ async function sessionStartFree(
 
   // Load last session from local storage
   let lastSession: LastSession | null = null;
-  let freeAggregatedThreads: string[] = [];
+  let freeAggregatedThreads: ThreadObject[] = [];
+  let freeRecentlyResolved: ThreadObject[] = [];
   try {
     const sessions = await storage.query<SessionRecord & Record<string, unknown>>("sessions", {
       order: "session_date.desc",
       limit: 10,
     });
-    // Aggregate threads across recent sessions
-    freeAggregatedThreads = aggregateOpenThreads(sessions as SessionRecord[]);
+    // Aggregate threads across recent sessions (OD-thread-lifecycle)
+    const freeThreadResult = aggregateThreads(sessions as SessionRecord[]);
+    freeAggregatedThreads = freeThreadResult.open;
+    freeRecentlyResolved = freeThreadResult.recently_resolved;
 
     const closedSession = sessions.find((s) => s.close_compliance != null) || sessions[0];
     if (closedSession) {
@@ -613,7 +584,9 @@ async function sessionStartFree(
   }
 
   const latencyMs = timer.stop();
-  const projectState = lastSession?.open_threads?.find((t) => t.startsWith("PROJECT STATE:"))
+  const projectState = lastSession?.open_threads
+    ?.map((t) => typeof t === "string" ? t : t.text)
+    .find((t) => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
   const performance = buildPerformanceData("session_start", latencyMs, scars.length + decisions.length + (lastSession ? 1 : 0), {
@@ -646,12 +619,18 @@ async function sessionStartFree(
     console.warn("[session_start] Failed to persist active session file:", error);
   }
 
+  // OD-thread-lifecycle: Persist threads to file and session state
+  if (freeAggregatedThreads.length > 0) {
+    saveThreadsFile(freeAggregatedThreads);
+  }
+
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
     startedAt: new Date(),
     surfacedScars,
+    threads: freeAggregatedThreads,
   });
 
   return {
@@ -662,6 +641,7 @@ async function sessionStartFree(
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
     ...(freeAggregatedThreads.length > 0 && { open_threads: freeAggregatedThreads }),
+    ...(freeRecentlyResolved.length > 0 && { recently_resolved: freeRecentlyResolved }),
     relevant_scars: scars,
     recent_decisions: decisions,
     ...(freeWins.length > 0 && { recent_wins: freeWins }),
@@ -803,7 +783,9 @@ export async function sessionStart(
   const similarityScores = scars.map((s) => s.similarity);
 
   // OD-534: Extract PROJECT STATE from last session if present
-  const projectState = lastSession?.open_threads?.find(t => t.startsWith("PROJECT STATE:"))
+  const projectState = lastSession?.open_threads
+    ?.map((t) => typeof t === "string" ? t : t.text)
+    .find(t => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
   // OD-489: Build detailed performance breakdown for test harness
@@ -856,6 +838,9 @@ export async function sessionStart(
   // Capture recording path from Docker entrypoint env var
   const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
 
+  const aggregatedThreads = lastSessionResult.aggregated_open_threads;
+  const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
+
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -863,8 +848,11 @@ export async function sessionStart(
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }), // OD-534
-    ...(lastSessionResult.aggregated_open_threads.length > 0 && {
-      open_threads: lastSessionResult.aggregated_open_threads,
+    ...(aggregatedThreads.length > 0 && {
+      open_threads: aggregatedThreads,
+    }),
+    ...(recentlyResolvedThreads.length > 0 && {
+      recently_resolved: recentlyResolvedThreads,
     }),
     relevant_scars: scars,
     recent_decisions: decisions,
@@ -892,9 +880,14 @@ export async function sessionStart(
         started_at: new Date().toISOString(),
         project,
         surfaced_scars: surfacedScars, // OD-552: Persist for session close auto-bridge
+        threads: aggregatedThreads, // OD-thread-lifecycle: Persist for mid-session access
         ...(recordingPath && { recording_path: recordingPath }),
       }, null, 2)
     );
+    // OD-thread-lifecycle: Also persist threads to dedicated file
+    if (aggregatedThreads.length > 0) {
+      saveThreadsFile(aggregatedThreads);
+    }
     console.error(`[session_start] Active session persisted to ${activeSessionPath}`);
   } catch (error) {
     // Non-fatal: session works fine without file persistence
@@ -903,12 +896,14 @@ export async function sessionStart(
 
   // OD-547: Set active session for variant assignment in recall
   // OD-552: Initialize with surfaced scars for auto-bridge at close time
+  // OD-thread-lifecycle: Initialize with aggregated threads for mid-session resolution
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
     startedAt: new Date(),
     surfacedScars,
+    threads: aggregatedThreads,
   });
 
   // Record metrics

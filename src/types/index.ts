@@ -66,6 +66,28 @@ export type AgentIdentity =
 
 export type Project = "orchestra_dev" | "weekend_warrior";
 
+// Thread lifecycle types (OD-thread-lifecycle)
+export type ThreadStatus = "open" | "resolved";
+
+export interface ThreadObject {
+  /** Unique identifier: "t-" + 8 hex chars (e.g., "t-a1b2c3d4") */
+  id: string;
+  /** Thread text description */
+  text: string;
+  /** Current status */
+  status: ThreadStatus;
+  /** ISO timestamp when thread was first created */
+  created_at: string;
+  /** ISO timestamp when thread was resolved */
+  resolved_at?: string;
+  /** Session ID that created this thread */
+  source_session?: string;
+  /** Session ID that resolved this thread */
+  resolved_by_session?: string;
+  /** Brief resolution note */
+  resolution_note?: string;
+}
+
 // Detected environment from agent detection
 export interface DetectedEnvironment {
   entrypoint: string | null;
@@ -91,7 +113,7 @@ export interface LastSession {
   title: string;
   date: string;
   key_decisions: string[];
-  open_threads: string[];
+  open_threads: (string | ThreadObject)[];
 }
 
 export interface RelevantScar {
@@ -130,8 +152,10 @@ export interface SessionStartResult {
   last_session?: LastSession | null;
   /** OD-534: PROJECT STATE thread extracted from last session (if present) */
   project_state?: string;
-  /** Aggregated open threads across last 5 sessions (deduplicated) */
-  open_threads?: string[];
+  /** Aggregated open threads across last 5 sessions (deduplicated, migrated to objects) */
+  open_threads?: ThreadObject[];
+  /** Threads resolved since last session (informational) */
+  recently_resolved?: ThreadObject[];
   relevant_scars?: RelevantScar[];
   recent_decisions?: RecentDecision[];
   recent_wins?: RecentWin[];
@@ -192,7 +216,7 @@ export interface SessionCloseParams {
   closing_reflection?: ClosingReflection;
   human_corrections?: string;
   decisions?: SessionDecision[];
-  open_threads?: string[];
+  open_threads?: (string | ThreadObject)[];
   /** Optional PROJECT STATE that auto-prepends to open_threads[0] (OD-534) */
   project_state?: string;
   learnings_created?: string[];
@@ -414,5 +438,38 @@ export interface AbsorbObservationsResult {
   absorbed: number;
   scar_candidates: number;
   suggestions: string[];
+  performance: PerformanceData;
+}
+
+// --- Thread Lifecycle Tool Types (OD-thread-lifecycle) ---
+
+export interface ListThreadsParams {
+  /** Filter by status (default: "open") */
+  status?: ThreadStatus;
+  /** Include recently resolved threads (default: false) */
+  include_resolved?: boolean;
+  project?: Project;
+}
+
+export interface ListThreadsResult {
+  threads: ThreadObject[];
+  total_open: number;
+  total_resolved: number;
+  performance: PerformanceData;
+}
+
+export interface ResolveThreadParams {
+  /** Thread ID for exact resolution (e.g., "t-a1b2c3d4") */
+  thread_id?: string;
+  /** Fuzzy text match against thread descriptions */
+  text_match?: string;
+  /** Brief note explaining resolution */
+  resolution_note?: string;
+}
+
+export interface ResolveThreadResult {
+  success: boolean;
+  resolved_thread?: ThreadObject;
+  error?: string;
   performance: PerformanceData;
 }

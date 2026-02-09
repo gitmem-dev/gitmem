@@ -13,7 +13,8 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getObservations, getChildren } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
+import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
+import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -37,6 +38,7 @@ import type {
   CloseCompliance,
   SurfacedScar,
   ScarUsageEntry,
+  ThreadObject,
 } from "../types/index.js";
 
 /**
@@ -174,15 +176,26 @@ async function sessionCloseFree(
       sessionData.decisions = params.decisions.map((d) => d.title);
     }
 
+    // OD-thread-lifecycle: Normalize threads for free tier too
+    const freeSessionThreads = getThreads();
     if (params.open_threads && params.open_threads.length > 0) {
-      sessionData.open_threads = params.open_threads;
+      const normalized = normalizeThreads(params.open_threads, params.session_id);
+      const merged = freeSessionThreads.length > 0
+        ? mergeThreadStates(normalized, freeSessionThreads)
+        : normalized;
+      sessionData.open_threads = merged;
+    } else if (freeSessionThreads.length > 0) {
+      sessionData.open_threads = freeSessionThreads;
     }
 
     if (params.project_state) {
-      const projectStateThread = `PROJECT STATE: ${params.project_state}`;
-      const existing = (sessionData.open_threads as string[]) || [];
-      const filtered = existing.filter((t) => !t.startsWith("PROJECT STATE:"));
-      sessionData.open_threads = [projectStateThread, ...filtered];
+      const projectStateText = `PROJECT STATE: ${params.project_state}`;
+      const existing = (sessionData.open_threads || []) as ThreadObject[];
+      const filtered = existing.filter((t) => {
+        const text = typeof t === "string" ? t : t.text;
+        return !text.startsWith("PROJECT STATE:");
+      });
+      sessionData.open_threads = [migrateStringThread(projectStateText, params.session_id), ...filtered];
     }
 
     // Persist session locally
@@ -482,18 +495,30 @@ export async function sessionClose(
     sessionData.decisions = params.decisions.map((d) => d.title);
   }
 
-  // Add open threads if provided (OD-534: project_state auto-prepends)
+  // OD-thread-lifecycle: Normalize and merge open threads
+  const sessionThreads = getThreads(); // Mid-session thread state (may have resolutions)
   if (params.open_threads && params.open_threads.length > 0) {
-    sessionData.open_threads = params.open_threads;
+    const normalized = normalizeThreads(params.open_threads, params.session_id);
+    // Merge incoming with mid-session state (preserves resolutions from resolve_thread calls)
+    const merged = sessionThreads.length > 0
+      ? mergeThreadStates(normalized, sessionThreads)
+      : normalized;
+    sessionData.open_threads = merged;
+  } else if (sessionThreads.length > 0) {
+    // No new threads from close payload, but we have mid-session state (e.g., resolutions)
+    sessionData.open_threads = sessionThreads;
   }
 
-  // OD-534: If project_state provided, prepend it to open_threads
+  // OD-534: If project_state provided, prepend it to open_threads as a ThreadObject
   if (params.project_state) {
-    const projectStateThread = `PROJECT STATE: ${params.project_state}`;
-    const existing = sessionData.open_threads as string[] || [];
+    const projectStateText = `PROJECT STATE: ${params.project_state}`;
+    const existing = (sessionData.open_threads || []) as ThreadObject[];
     // Replace existing PROJECT STATE if present, otherwise prepend
-    const filtered = existing.filter(t => !t.startsWith("PROJECT STATE:"));
-    sessionData.open_threads = [projectStateThread, ...filtered];
+    const filtered = existing.filter(t => {
+      const text = typeof t === "string" ? t : t.text;
+      return !text.startsWith("PROJECT STATE:");
+    });
+    sessionData.open_threads = [migrateStringThread(projectStateText, params.session_id), ...filtered];
   }
 
   // v2 Phase 2: Persist observations and children from multi-agent work

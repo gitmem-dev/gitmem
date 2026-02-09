@@ -12,7 +12,7 @@
  * This allows recall() to always assign variants even without explicit parameters.
  */
 
-import type { SurfacedScar, Observation, SessionChild } from "../types/index.js";
+import type { SurfacedScar, Observation, SessionChild, ThreadObject } from "../types/index.js";
 
 interface SessionContext {
   sessionId: string;
@@ -22,6 +22,7 @@ interface SessionContext {
   surfacedScars: SurfacedScar[]; // OD-552: Track all scars surfaced during session
   observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
   children: SessionChild[];      // v2 Phase 2: Child agent records
+  threads: ThreadObject[];       // OD-thread-lifecycle: Working thread state
 }
 
 // Global session state (single active session per MCP server instance)
@@ -31,12 +32,13 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'observations' | 'children'> & { surfacedScars?: SurfacedScar[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     surfacedScars: context.surfacedScars || [],
     observations: [],
     children: [],
+    threads: context.threads || [],
   };
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
 }
@@ -135,4 +137,41 @@ export function addChild(child: SessionChild): void {
  */
 export function getChildren(): SessionChild[] {
   return currentSession?.children || [];
+}
+
+/**
+ * OD-thread-lifecycle: Set threads for the current session
+ */
+export function setThreads(threads: ThreadObject[]): void {
+  if (!currentSession) {
+    console.warn("[session-state] Cannot set threads: no active session");
+    return;
+  }
+  currentSession.threads = threads;
+  console.error(`[session-state] Threads set: ${threads.length} total`);
+}
+
+/**
+ * OD-thread-lifecycle: Get threads for the current session
+ */
+export function getThreads(): ThreadObject[] {
+  return currentSession?.threads || [];
+}
+
+/**
+ * OD-thread-lifecycle: Resolve a thread in session state by ID.
+ * Returns the resolved thread or null if not found.
+ */
+export function resolveThreadInState(threadId: string, resolutionNote?: string): ThreadObject | null {
+  if (!currentSession) return null;
+  const thread = currentSession.threads.find((t) => t.id === threadId);
+  if (!thread || thread.status === "resolved") return thread || null;
+
+  thread.status = "resolved";
+  thread.resolved_at = new Date().toISOString();
+  thread.resolved_by_session = currentSession.sessionId;
+  if (resolutionNote) thread.resolution_note = resolutionNote;
+
+  console.error(`[session-state] Thread resolved: ${threadId}`);
+  return thread;
 }

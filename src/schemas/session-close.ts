@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import { CloseTypeSchema, ProjectSchema, ReferenceTypeSchema, ISOTimestampSchema } from "./common.js";
+import { ThreadObjectSchema } from "./thread.js";
 
 /**
  * Closing reflection schema
@@ -74,7 +75,7 @@ export const SessionCloseParamsSchema = z.object({
   closing_reflection: ClosingReflectionSchema.optional(),
   human_corrections: z.string().optional(),
   decisions: z.array(SessionDecisionSchema).optional(),
-  open_threads: z.array(z.string()).optional(),
+  open_threads: z.array(z.union([z.string(), ThreadObjectSchema])).optional(),
   project_state: z.string().optional(),
   learnings_created: z.array(z.string()).optional(),
   linear_issue: z.string().optional(),

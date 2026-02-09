@@ -25,7 +25,9 @@ export type ToolName =
   | "get_transcript"
   | "analyze"
   | "prepare_context"
-  | "absorb_observations";
+  | "absorb_observations"
+  | "list_threads"
+  | "resolve_thread";
 
 /**
  * Phase tags for context
@@ -87,6 +89,8 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   analyze: 3000,          // Session analytics queries
   prepare_context: 500,   // Same pipeline as search, different formatter
   absorb_observations: 500, // In-memory + optional upsert
+  list_threads: 100,        // In-memory read
+  resolve_thread: 100,      // In-memory mutation + file write
 };
 
 /**

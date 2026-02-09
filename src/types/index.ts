@@ -162,6 +162,8 @@ export interface SessionStartResult {
   performance?: PerformanceData;
   /** OD-558: Whether this session was resumed from an existing active session */
   resumed?: boolean;
+  /** Whether this result is from a mid-session refresh (no new session created) */
+  refreshed?: boolean;
   /** OD-558: Message explaining session state */
   message?: string;
   /** Asciinema recording path for session replay (from GITMEM_RECORDING_PATH env var) */

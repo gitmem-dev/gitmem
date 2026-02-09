@@ -315,6 +315,90 @@ async function cmdSessionStart() {
   }
 }
 
+/**
+ * Run session-refresh directly (re-surface context without new session)
+ *
+ * Args: --project <project>
+ */
+async function cmdSessionRefresh() {
+  const args = process.argv.slice(3);
+  let project = undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--project" && args[i + 1]) project = args[i + 1];
+  }
+
+  try {
+    const { sessionRefresh } = await import("../dist/tools/session-start.js");
+    const result = await sessionRefresh({ project });
+
+    if (!result.session_id) {
+      console.error(result.message || "No active session");
+      process.exit(1);
+    }
+
+    // Format as readable text (same structure as session-start output)
+    const lines = [];
+    lines.push(`GITMEM CONTEXT REFRESHED`);
+    lines.push(``);
+    lines.push(`Session: ${result.session_id} | Agent: ${result.agent} | Refreshed`);
+
+    if (result.last_session) {
+      lines.push(``);
+      lines.push(`Last session: "${result.last_session.title}" (${result.last_session.date})`);
+      if (result.last_session.key_decisions?.length) {
+        lines.push(`  Decisions: ${result.last_session.key_decisions.slice(0, 3).join("; ")}`);
+      }
+    }
+
+    if (result.open_threads?.length) {
+      lines.push(``);
+      lines.push(`Open threads (${result.open_threads.length}):`);
+      for (const thread of result.open_threads.slice(0, 5)) {
+        lines.push(`  - ${thread}`);
+      }
+    }
+
+    if (result.relevant_scars?.length) {
+      lines.push(``);
+      lines.push(`Relevant scars (${result.relevant_scars.length}):`);
+      for (const scar of result.relevant_scars) {
+        const sev = (scar.severity || "medium").toUpperCase();
+        lines.push(`  [${sev}] ${scar.title}`);
+        if (scar.description) {
+          lines.push(`    ${scar.description.slice(0, 150)}`);
+        }
+      }
+    }
+
+    if (result.recent_decisions?.length) {
+      lines.push(``);
+      lines.push(`Recent decisions (${result.recent_decisions.length}):`);
+      for (const d of result.recent_decisions) {
+        lines.push(`  - ${d.title} (${d.date})`);
+      }
+    }
+
+    if (result.recent_wins?.length) {
+      lines.push(``);
+      lines.push(`Recent wins (${result.recent_wins.length}):`);
+      for (const w of result.recent_wins) {
+        lines.push(`  - ${w.title} (${w.date})`);
+      }
+    }
+
+    if (result.project_state) {
+      lines.push(``);
+      lines.push(`Project state: ${result.project_state}`);
+    }
+
+    console.log(lines.join("\n"));
+  } catch (error) {
+    console.error("[gitmem session-refresh]", error.message || error);
+    process.exit(1);
+  }
+}
+
 switch (command) {
   case "setup":
     cmdSetup();
@@ -327,6 +411,9 @@ switch (command) {
     break;
   case "session-start":
     cmdSessionStart();
+    break;
+  case "session-refresh":
+    cmdSessionRefresh();
     break;
   case "server":
   case "--stdio":

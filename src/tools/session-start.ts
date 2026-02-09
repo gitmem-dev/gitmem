@@ -27,7 +27,7 @@ import {
   buildPerformanceData,
   buildComponentPerformance,
 } from "../services/metrics.js";
-import { setCurrentSession, addSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
+import { setCurrentSession, getCurrentSession, addSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir } from "../services/gitmem-dir.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
@@ -933,6 +933,234 @@ export async function sessionStart(
       used_local_search: usedLocalSearch, // OD-473: deterministic local search
       decisions_cache_hit: decisionsResult.cache_hit,
       // OD-489: Detailed instrumentation
+      network_calls_made: performance.network_calls_made,
+      fully_local: performance.fully_local,
+    },
+  }).catch(() => {});
+
+  return result;
+}
+
+/**
+ * session_refresh Tool
+ *
+ * Re-surfaces institutional context for the current active session
+ * without creating a new session ID. Same context pipeline as session_start
+ * (last session, scars, decisions, wins, threads) but skips session creation.
+ *
+ * Use when: mid-session context refresh after compaction, long gaps, or
+ * when you need to remember where you left off.
+ */
+export interface SessionRefreshParams {
+  project?: Project;
+}
+
+export async function sessionRefresh(
+  params: SessionRefreshParams
+): Promise<SessionStartResult> {
+  const timer = new Timer();
+  const metricsId = uuidv4();
+
+  // 1. Get active session — in-memory first, then file fallback
+  const currentSession = getCurrentSession();
+  let sessionId: string;
+  let agent: AgentIdentity;
+  let project: Project;
+
+  if (currentSession) {
+    sessionId = currentSession.sessionId;
+    agent = (currentSession.agent as AgentIdentity) || "CLI";
+    project = params.project || "orchestra_dev";
+  } else {
+    // Fallback: read from .gitmem/active-session.json
+    const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+    if (!fs.existsSync(activeSessionPath)) {
+      return {
+        session_id: "",
+        agent: "CLI",
+        refreshed: true,
+        message: "No active session — call session_start first",
+        performance: buildPerformanceData("session_refresh", timer.stop(), 0),
+      };
+    }
+    try {
+      const raw = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+      sessionId = raw.session_id;
+      agent = raw.agent || "CLI";
+      project = params.project || raw.project || "orchestra_dev";
+    } catch {
+      return {
+        session_id: "",
+        agent: "CLI",
+        refreshed: true,
+        message: "Failed to read active-session.json — call session_start first",
+        performance: buildPerformanceData("session_refresh", timer.stop(), 0),
+      };
+    }
+  }
+
+  // Free tier: all-local path (reuse session_start free path)
+  if (!hasSupabase()) {
+    return {
+      session_id: sessionId,
+      agent,
+      refreshed: true,
+      message: "Free tier — limited context available. Use recall for scar queries.",
+      performance: buildPerformanceData("session_refresh", timer.stop(), 0),
+    };
+  }
+
+  // 2. Run context pipeline in parallel (same as session_start lines 735-752)
+  const lastSessionResult = await loadLastSession(agent, project);
+  const lastSession = lastSessionResult.session;
+
+  const [scarsResult, decisionsResult, winsResult] = await Promise.all([
+    queryRelevantScars(undefined, undefined, undefined, project, lastSession),
+    loadRecentDecisions(project, 3),
+    loadRecentWins(project, 3, 7),
+  ]);
+
+  const scars = scarsResult.scars;
+  const decisions = decisionsResult.decisions;
+  const wins = winsResult.wins;
+  const usedLocalSearch = scarsResult.local_search;
+
+  // 3. Build surfaced scars and merge with existing
+  const surfacedAt = new Date().toISOString();
+  const newSurfacedScars: SurfacedScar[] = scars.map((scar) => ({
+    scar_id: scar.id,
+    scar_title: scar.title,
+    scar_severity: scar.severity || "medium",
+    surfaced_at: surfacedAt,
+    source: "session_start" as const, // Same source — this is a refresh of start context
+  }));
+
+  // Merge: add new scars to existing (addSurfacedScars deduplicates by scar_id)
+  addSurfacedScars(newSurfacedScars);
+
+  const aggregatedThreads = lastSessionResult.aggregated_open_threads;
+  const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
+
+  // 4. Extract PROJECT STATE (OD-534)
+  const projectState = lastSession?.open_threads
+    ?.map((t) => typeof t === "string" ? t : t.text)
+    .find(t => t.startsWith("PROJECT STATE:"))
+    ?.replace(/^PROJECT STATE:\s*/, "");
+
+  // 5. Build performance breakdown
+  const latencyMs = timer.stop();
+  const breakdown: PerformanceBreakdown = {
+    last_session: buildComponentPerformance(
+      lastSessionResult.latency_ms, "supabase",
+      lastSessionResult.network_call,
+      lastSessionResult.network_call ? "miss" : "hit"
+    ),
+    scar_search: buildComponentPerformance(
+      scarsResult.latency_ms,
+      usedLocalSearch ? "local_cache" : "supabase",
+      scarsResult.network_call,
+      usedLocalSearch ? "hit" : "miss"
+    ),
+    decisions: buildComponentPerformance(
+      decisionsResult.latency_ms,
+      decisionsResult.cache_hit ? "local_cache" : "supabase",
+      decisionsResult.network_call,
+      decisionsResult.cache_hit ? "hit" : "miss"
+    ),
+    wins: buildComponentPerformance(
+      winsResult.latency_ms,
+      winsResult.cache_hit ? "local_cache" : "supabase",
+      winsResult.network_call,
+      winsResult.cache_hit ? "hit" : "miss"
+    ),
+  };
+
+  const memoriesSurfaced = scars.map((s) => s.id);
+  const similarityScores = scars.map((s) => s.similarity);
+  const performance = buildPerformanceData(
+    "session_refresh", latencyMs,
+    scars.length + decisions.length + wins.length + (lastSession ? 1 : 0),
+    { memoriesSurfaced, similarityScores, search_mode: usedLocalSearch ? "local" : "remote", breakdown }
+  );
+
+  const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
+
+  const result: SessionStartResult = {
+    session_id: sessionId,
+    agent,
+    refreshed: true,
+    detected_environment: detectAgent(),
+    last_session: lastSession,
+    ...(projectState && { project_state: projectState }),
+    ...(aggregatedThreads.length > 0 && { open_threads: aggregatedThreads }),
+    ...(recentlyResolvedThreads.length > 0 && { recently_resolved: recentlyResolvedThreads }),
+    relevant_scars: scars,
+    recent_decisions: decisions,
+    ...(wins.length > 0 && { recent_wins: wins }),
+    ...(recordingPath && { recording_path: recordingPath }),
+    performance,
+  };
+
+  // 6. Update active-session.json with refreshed context
+  try {
+    const activeSessionDir = path.join(process.cwd(), ".gitmem");
+    const activeSessionPath = path.join(activeSessionDir, "active-session.json");
+    // Merge: preserve existing fields, update context
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(activeSessionPath)) {
+      existing = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+    }
+    fs.writeFileSync(
+      activeSessionPath,
+      JSON.stringify({
+        ...existing,
+        surfaced_scars: [...(Array.isArray(existing.surfaced_scars) ? existing.surfaced_scars : []), ...newSurfacedScars],
+        threads: aggregatedThreads,
+        last_refreshed: new Date().toISOString(),
+      }, null, 2)
+    );
+    if (aggregatedThreads.length > 0) {
+      saveThreadsFile(aggregatedThreads);
+    }
+    console.error(`[session_refresh] Context refreshed for session ${sessionId}`);
+  } catch (error) {
+    console.warn("[session_refresh] Failed to update active session file:", error);
+  }
+
+  // 7. Update in-memory session state
+  setCurrentSession({
+    sessionId,
+    agent,
+    startedAt: currentSession?.startedAt || new Date(),
+    surfacedScars: [...(currentSession?.surfacedScars || []), ...newSurfacedScars],
+    threads: aggregatedThreads,
+    linearIssue: currentSession?.linearIssue,
+  });
+
+  // Record metrics
+  recordMetrics({
+    id: metricsId,
+    session_id: sessionId,
+    agent: agent as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
+    tool_name: "session_refresh",
+    query_text: "mid-session context refresh",
+    tables_searched: usedLocalSearch
+      ? ["orchestra_sessions_lite", "orchestra_decisions_lite", "orchestra_learnings_lite"]
+      : ["orchestra_sessions_lite", "orchestra_learnings", "orchestra_decisions_lite", "orchestra_learnings_lite"],
+    latency_ms: latencyMs,
+    result_count: scars.length,
+    similarity_scores: similarityScores,
+    context_bytes: calculateContextBytes(result),
+    phase_tag: "session_refresh",
+    memories_surfaced: memoriesSurfaced,
+    metadata: {
+      project,
+      has_last_session: !!lastSession,
+      scars_count: scars.length,
+      decisions_count: decisions.length,
+      wins_count: wins.length,
+      open_threads_count: aggregatedThreads.length,
+      used_local_search: usedLocalSearch,
       network_calls_made: performance.network_calls_made,
       fully_local: performance.fully_local,
     },

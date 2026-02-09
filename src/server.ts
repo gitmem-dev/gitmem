@@ -12,7 +12,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { sessionStart } from "./tools/session-start.js";
+import { sessionStart, sessionRefresh } from "./tools/session-start.js";
+import type { SessionRefreshParams } from "./tools/session-start.js";
 import { sessionClose } from "./tools/session-close.js";
 import { createLearning } from "./tools/create-learning.js";
 import { createDecision } from "./tools/create-decision.js";
@@ -119,6 +120,11 @@ export function createServer(): Server {
         case "gitmem-ss":
         case "gm-open":
           result = await sessionStart(toolArgs as unknown as SessionStartParams);
+          break;
+        case "session_refresh":
+        case "gitmem-sr":
+        case "gm-refresh":
+          result = await sessionRefresh(toolArgs as unknown as SessionRefreshParams);
           break;
         case "session_close":
         case "gitmem-sc":

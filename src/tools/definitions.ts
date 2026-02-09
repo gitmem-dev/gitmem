@@ -85,6 +85,20 @@ export const TOOLS = [
     },
   },
   {
+    name: "session_refresh",
+    description: "Re-surface institutional context (scars, threads, decisions, wins) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: from active session)",
+        },
+      },
+    },
+  },
+  {
     name: "session_close",
     description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json using your file write tool. Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. This keeps the displayed tool call clean.",
     inputSchema: {
@@ -666,6 +680,20 @@ export const TOOLS = [
     },
   },
   {
+    name: "gitmem-sr",
+    description: "gitmem-sr (session_refresh) - Refresh institutional context for the active session without creating a new session",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: from active session)",
+        },
+      },
+    },
+  },
+  {
     name: "gitmem-sc",
     description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline.",
     inputSchema: {
@@ -1176,6 +1204,20 @@ export const TOOLS = [
         force: {
           type: "boolean",
           description: "Force create new session even if one already exists (OD-558)",
+        },
+      },
+    },
+  },
+  {
+    name: "gm-refresh",
+    description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: from active session)",
         },
       },
     },

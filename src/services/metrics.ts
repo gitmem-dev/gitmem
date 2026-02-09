@@ -16,6 +16,7 @@ export type ToolName =
   | "search"
   | "log"
   | "session_start"
+  | "session_refresh"
   | "session_close"
   | "create_learning"
   | "create_decision"
@@ -36,6 +37,7 @@ export type ToolName =
  */
 export type PhaseTag =
   | "session_start"
+  | "session_refresh"
   | "session_close"
   | "recall"
   | "learning_capture"
@@ -81,6 +83,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   search: 500,
   log: 500,
   session_start: 1500,
+  session_refresh: 1500,  // Same pipeline as session_start minus session creation
   session_close: 3000,
   create_learning: 3000,
   create_decision: 3000,

@@ -48,12 +48,23 @@ interface SessionRecord {
   id: string;
   session_title: string;
   session_date: string;
-  decisions?: string[];
+  decisions?: (string | { title: string; decision?: string })[];
   open_threads?: (string | ThreadObject)[];
   close_compliance?: Record<string, unknown> | null;
   // From lite view (counts only)
   decision_count?: number;
   open_thread_count?: number;
+}
+
+/**
+ * Normalize decisions from mixed formats (strings or objects) to string[].
+ * Historical sessions (pre-2026) stored {title, decision} objects.
+ * Current code stores title strings only.
+ */
+function normalizeDecisions(decisions: (string | { title: string; decision?: string })[]): string[] {
+  return decisions.map((d) =>
+    typeof d === "string" ? d : d.title
+  );
 }
 
 interface ScarRecord {
@@ -141,7 +152,7 @@ async function loadLastSession(
           id: session.id,
           title: session.session_title || "Untitled Session",
           date: session.session_date,
-          key_decisions: session.decisions || [],
+          key_decisions: normalizeDecisions(session.decisions || []),
           open_threads: session.open_threads || [],
         },
         aggregated_open_threads,
@@ -156,7 +167,7 @@ async function loadLastSession(
         id: closedSession.id,
         title: closedSession.session_title || "Untitled Session",
         date: closedSession.session_date,
-        key_decisions: closedSession.decisions || [],
+        key_decisions: normalizeDecisions(closedSession.decisions || []),
         open_threads: closedSession.open_threads || [],
       },
       aggregated_open_threads,
@@ -488,7 +499,7 @@ async function sessionStartFree(
         id: closedSession.id,
         title: closedSession.session_title || "Untitled Session",
         date: closedSession.session_date,
-        key_decisions: closedSession.decisions || [],
+        key_decisions: normalizeDecisions(closedSession.decisions || []),
         open_threads: closedSession.open_threads || [],
       };
     }

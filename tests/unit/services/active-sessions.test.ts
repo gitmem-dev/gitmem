@@ -33,6 +33,13 @@ function makeEntry(overrides: Partial<ActiveSessionEntry> = {}): ActiveSessionEn
   };
 }
 
+/** Create per-session directory with session.json so pruneStale orphan check doesn't remove it */
+function createSessionFile(sessionId: string): void {
+  const sessionDir = path.join(tmpDir, "sessions", sessionId);
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(path.join(sessionDir, "session.json"), JSON.stringify({ session_id: sessionId }));
+}
+
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gitmem-test-"));
   setGitmemDir(tmpDir);
@@ -206,6 +213,8 @@ describe("pruneStale", () => {
 
     registerSession(stale);
     registerSession(fresh);
+    createSessionFile(stale.session_id); // session file exists but entry is old
+    createSessionFile(fresh.session_id); // fresh session file
 
     const pruned = pruneStale();
     expect(pruned).toBe(1);
@@ -223,6 +232,7 @@ describe("pruneStale", () => {
     });
 
     registerSession(dead);
+    createSessionFile(dead.session_id); // file exists but PID is dead
 
     const pruned = pruneStale();
     expect(pruned).toBe(1);
@@ -236,6 +246,7 @@ describe("pruneStale", () => {
     });
 
     registerSession(live);
+    createSessionFile(live.session_id);
 
     const pruned = pruneStale();
     expect(pruned).toBe(0);
@@ -249,6 +260,7 @@ describe("pruneStale", () => {
     });
 
     registerSession(remote);
+    createSessionFile(remote.session_id);
 
     const pruned = pruneStale();
     expect(pruned).toBe(0);
@@ -256,8 +268,78 @@ describe("pruneStale", () => {
   });
 
   it("returns 0 when nothing to prune", () => {
-    registerSession(makeEntry());
+    const entry = makeEntry();
+    registerSession(entry);
+    createSessionFile(entry.session_id);
     expect(pruneStale()).toBe(0);
+  });
+
+  it("prunes orphaned registry entries (session file missing, older than 1min)", () => {
+    const orphaned = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      started_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago, past grace period
+      hostname: "other-host",
+      pid: 99999,
+    });
+
+    registerSession(orphaned);
+    // No createSessionFile() — this is the orphan scenario
+
+    const pruned = pruneStale();
+    expect(pruned).toBe(1);
+    expect(listActiveSessions()).toHaveLength(0);
+  });
+
+  it("does NOT prune brand-new entries without session file (grace period)", () => {
+    const brandNew = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      started_at: new Date().toISOString(), // just now
+      hostname: "other-host",
+      pid: 99999,
+    });
+
+    registerSession(brandNew);
+    // No session file, but entry is < 1 minute old
+
+    const pruned = pruneStale();
+    expect(pruned).toBe(0);
+    expect(listActiveSessions()).toHaveLength(1);
+  });
+
+  it("cleans up orphaned session directories with no registry entry", () => {
+    // Create a session dir that has no corresponding registry entry
+    const orphanedId = "orphan01-0000-0000-0000-000000000000";
+    const orphanDir = path.join(tmpDir, "sessions", orphanedId);
+    fs.mkdirSync(orphanDir, { recursive: true });
+    fs.writeFileSync(path.join(orphanDir, "session.json"), "{}");
+    // Backdate the directory mtime to >1 hour ago
+    const oldTime = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(orphanDir, oldTime, oldTime);
+
+    // Register a different session (so we have a non-empty registry)
+    const active = makeEntry({ session_id: "22222222-2222-2222-2222-222222222222" });
+    registerSession(active);
+    createSessionFile(active.session_id);
+
+    pruneStale();
+
+    // Orphan directory should be cleaned up
+    expect(fs.existsSync(orphanDir)).toBe(false);
+    // Active session should remain
+    expect(listActiveSessions()).toHaveLength(1);
+  });
+
+  it("does NOT remove recent orphaned directories (< 1 hour)", () => {
+    const orphanedId = "orphan01-0000-0000-0000-000000000000";
+    const orphanDir = path.join(tmpDir, "sessions", orphanedId);
+    fs.mkdirSync(orphanDir, { recursive: true });
+    fs.writeFileSync(path.join(orphanDir, "session.json"), "{}");
+    // Directory is brand new (default mtime = now)
+
+    pruneStale();
+
+    // Should not be removed — too recent
+    expect(fs.existsSync(orphanDir)).toBe(true);
   });
 
   it("cleans up session directories for pruned sessions", () => {

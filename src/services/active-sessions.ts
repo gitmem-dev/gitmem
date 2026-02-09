@@ -148,13 +148,15 @@ export function findSessionById(sessionId: string): ActiveSessionEntry | null {
 }
 
 /**
- * Prune stale sessions from the registry.
+ * Prune stale sessions from the registry (GIT-22 enhanced).
  *
  * A session is stale if:
  * 1. Its started_at is older than 24 hours, OR
- * 2. Its PID no longer exists on this hostname (process died without cleanup)
+ * 2. Its PID no longer exists on this hostname (process died without cleanup), OR
+ * 3. Its per-session directory/session.json is missing (orphaned registry entry)
  *
- * Also cleans up per-session directories for pruned sessions.
+ * Also cleans up per-session directories for pruned sessions,
+ * and removes orphaned session directories with no registry entry.
  * Returns the number of sessions pruned.
  */
 export function pruneStale(): number {
@@ -165,6 +167,21 @@ export function pruneStale(): number {
   const gitmemDir = getGitmemDir();
 
   registry.sessions = registry.sessions.filter((entry) => {
+    // GIT-22: Check for orphaned registry entry (session file missing)
+    const sessionFile = path.join(gitmemDir, "sessions", entry.session_id, "session.json");
+    if (!fs.existsSync(sessionFile)) {
+      // Only prune if session is old enough that session_start should have written the file.
+      // Brand-new sessions may not have the file yet (race window during session_start).
+      const age = now - new Date(entry.started_at).getTime();
+      if (age > 60_000) { // 1 minute grace period
+        console.error(
+          `[active-sessions] Pruning orphaned registry entry ${entry.session_id.slice(0, 8)} (session file missing)`
+        );
+        cleanupSessionDir(gitmemDir, entry.session_id);
+        return false;
+      }
+    }
+
     // Check age
     const age = now - new Date(entry.started_at).getTime();
     if (age > STALE_THRESHOLD_MS) {
@@ -197,7 +214,46 @@ export function pruneStale(): number {
     console.error(`[active-sessions] Pruned ${pruned} stale session(s)`);
   }
 
+  // GIT-22: Clean up orphaned session directories (dir exists but no registry entry)
+  pruneOrphanedDirs(gitmemDir, registry);
+
   return pruned;
+}
+
+/**
+ * GIT-22: Remove session directories that have no corresponding registry entry.
+ * These can occur when a process crashes after creating the directory but before
+ * registering, or when the registry is rebuilt after corruption.
+ */
+function pruneOrphanedDirs(gitmemDir: string, registry: ActiveSessionsRegistry): void {
+  try {
+    const sessionsDir = path.join(gitmemDir, "sessions");
+    if (!fs.existsSync(sessionsDir)) return;
+
+    const registeredIds = new Set(registry.sessions.map((s) => s.session_id));
+    const dirs = fs.readdirSync(sessionsDir);
+
+    for (const dirName of dirs) {
+      if (registeredIds.has(dirName)) continue;
+
+      const dirPath = path.join(sessionsDir, dirName);
+      try {
+        const stat = fs.statSync(dirPath);
+        if (!stat.isDirectory()) continue;
+
+        // Only prune directories older than 1 hour to avoid race conditions
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs > 60 * 60 * 1000) {
+          fs.rmSync(dirPath, { recursive: true, force: true });
+          console.error(`[active-sessions] Cleaned up orphaned session directory: ${dirName.slice(0, 8)}`);
+        }
+      } catch {
+        // Ignore errors on individual directories
+      }
+    }
+  } catch {
+    // sessionsDir doesn't exist or can't be read — nothing to prune
+  }
 }
 
 /**

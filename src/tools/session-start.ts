@@ -29,6 +29,7 @@ import {
 } from "../services/metrics.js";
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { loadActiveThreadsFromSupabase } from "../services/thread-supabase.js"; // OD-623
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
@@ -131,13 +132,25 @@ async function loadLastSession(
       orderBy: { column: "created_at", ascending: false },
     });
 
-    const latency_ms = timer.stop();
+    // OD-623: Try loading threads from Supabase (source of truth) first
+    let aggregated_open_threads: ThreadObject[];
+    let recently_resolved_threads: ThreadObject[];
+    const supabaseThreads = await loadActiveThreadsFromSupabase(project);
 
-    // Aggregate open threads across last 5 closed sessions (OD-thread-lifecycle: returns ThreadObject[])
-    const threadResult = aggregateThreads(sessions);
-    const aggregated_open_threads = threadResult.open;
-    const recently_resolved_threads = threadResult.recently_resolved;
-    console.error(`[session_start] Aggregated ${aggregated_open_threads.length} open threads, ${recently_resolved_threads.length} recently resolved`);
+    if (supabaseThreads !== null) {
+      // Supabase is source of truth for threads
+      aggregated_open_threads = supabaseThreads.open;
+      recently_resolved_threads = supabaseThreads.recentlyResolved;
+      console.error(`[session_start] Loaded threads from Supabase: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved`);
+    } else {
+      // Fallback: aggregate from session records (original behavior)
+      const threadResult = aggregateThreads(sessions);
+      aggregated_open_threads = threadResult.open;
+      recently_resolved_threads = threadResult.recently_resolved;
+      console.error(`[session_start] Aggregated threads from sessions: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved (Supabase thread query failed)`);
+    }
+
+    const latency_ms = timer.stop();
 
     if (sessions.length === 0) {
       return { session: null, aggregated_open_threads, recently_resolved_threads, latency_ms, network_call: true };

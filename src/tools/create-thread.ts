@@ -4,9 +4,10 @@
  * Create an open thread outside of session close. Threads track
  * unresolved work items that carry across sessions.
  *
- * Updates both in-memory session state and .gitmem/threads.json.
+ * OD-620: Writes to Supabase (source of truth) + local file (cache).
+ * Falls back to local-only if Supabase is unavailable.
  *
- * Performance target: <100ms (in-memory mutation + file write)
+ * Performance target: <500ms (Supabase write + file write)
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -16,13 +17,14 @@ import {
   loadThreadsFile,
   saveThreadsFile,
 } from "../services/thread-manager.js";
+import { createThreadInSupabase } from "../services/thread-supabase.js";
 import {
   Timer,
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
-import type { ThreadObject, PerformanceData } from "../types/index.js";
+import type { ThreadObject, PerformanceData, Project } from "../types/index.js";
 
 // --- Types ---
 
@@ -31,6 +33,8 @@ export interface CreateThreadParams {
   text: string;
   /** Associated Linear issue (optional) */
   linear_issue?: string;
+  /** Project namespace (default: orchestra_dev) */
+  project?: Project;
 }
 
 export interface CreateThreadResult {
@@ -38,6 +42,7 @@ export interface CreateThreadResult {
   thread?: ThreadObject;
   error?: string;
   total_open: number;
+  supabase_synced: boolean;
   performance: PerformanceData;
 }
 
@@ -55,12 +60,14 @@ export async function createThread(
       success: false,
       error: "Thread text is required",
       total_open: 0,
+      supabase_synced: false,
       performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
     };
   }
 
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
+  const project = params.project || "orchestra_dev";
 
   const thread: ThreadObject = {
     id: generateThreadId(),
@@ -70,6 +77,13 @@ export async function createThread(
     ...(sessionId && { source_session: sessionId }),
   };
 
+  // OD-620: Write to Supabase (source of truth) — non-blocking on failure
+  let supabaseSynced = false;
+  const supabaseResult = await createThreadInSupabase(thread, project);
+  if (supabaseResult) {
+    supabaseSynced = true;
+  }
+
   // Update in-memory session state if active
   let threads = getThreads();
   if (threads.length > 0) {
@@ -77,7 +91,7 @@ export async function createThread(
     setThreads(threads);
   }
 
-  // Always persist to file (works with or without active session)
+  // Always persist to local file (cache, works with or without active session)
   const fileThreads = loadThreadsFile();
   fileThreads.push(thread);
   saveThreadsFile(fileThreads);
@@ -91,13 +105,14 @@ export async function createThread(
     id: metricsId,
     tool_name: "create_thread" as any,
     query_text: `create:${thread.id}`,
-    tables_searched: [],
+    tables_searched: supabaseSynced ? ["orchestra_threads"] : [],
     latency_ms: latencyMs,
     result_count: 1,
     phase_tag: "ad_hoc",
     metadata: {
       thread_id: thread.id,
       has_session: !!sessionId,
+      supabase_synced: supabaseSynced,
     },
   }).catch(() => {});
 
@@ -105,6 +120,7 @@ export async function createThread(
     success: true,
     thread: formatThreadForDisplay(thread),
     total_open: totalOpen,
+    supabase_synced: supabaseSynced,
     performance: perfData,
   };
 }

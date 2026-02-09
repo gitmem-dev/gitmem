@@ -1,13 +1,15 @@
 /**
- * resolve_thread Tool (OD-thread-lifecycle)
+ * resolve_thread Tool (OD-thread-lifecycle, OD-621)
  *
  * Mark an open thread as resolved. Supports resolution by:
  * - thread_id: exact match (preferred)
  * - text_match: case-insensitive substring match (fallback)
  *
- * Updates both in-memory session state and .gitmem/threads.json.
+ * OD-621: Updates Supabase (source of truth) + local file (cache).
+ * Falls back to local-only if Supabase is unavailable or thread
+ * doesn't exist in Supabase.
  *
- * Performance target: <100ms (in-memory mutation + file write)
+ * Performance target: <500ms (Supabase update + file write)
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -17,6 +19,7 @@ import {
   loadThreadsFile,
   saveThreadsFile,
 } from "../services/thread-manager.js";
+import { resolveThreadInSupabase } from "../services/thread-supabase.js";
 import {
   Timer,
   recordMetrics,
@@ -52,7 +55,7 @@ export async function resolveThread(
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
 
-  // Resolve the thread
+  // Resolve the thread locally (in-memory / file)
   const resolved = resolveThreadInList(threads, {
     threadId: params.thread_id,
     textMatch: params.text_match,
@@ -70,12 +73,18 @@ export async function resolveThread(
     };
   }
 
-  // Persist to file
-  if (fromFile) {
-    saveThreadsFile(threads);
-  } else {
-    // Session state was mutated in-place; also persist to file
-    saveThreadsFile(threads);
+  // Persist to local file (cache)
+  saveThreadsFile(threads);
+
+  // OD-621: Update Supabase (source of truth) — graceful fallback on failure
+  let supabaseSynced = false;
+  const supabaseSuccess = await resolveThreadInSupabase(resolved.id, {
+    resolvedAt: resolved.resolved_at,
+    resolutionNote: resolved.resolution_note,
+    resolvedBySession: resolved.resolved_by_session || sessionId,
+  });
+  if (supabaseSuccess) {
+    supabaseSynced = true;
   }
 
   const latencyMs = timer.stop();
@@ -85,13 +94,14 @@ export async function resolveThread(
     id: metricsId,
     tool_name: "resolve_thread",
     query_text: `resolve:${params.thread_id || "text:" + params.text_match}`,
-    tables_searched: [],
+    tables_searched: supabaseSynced ? ["orchestra_threads"] : [],
     latency_ms: latencyMs,
     result_count: 1,
     phase_tag: "ad_hoc",
     metadata: {
       thread_id: resolved.id,
       resolution_note: params.resolution_note,
+      supabase_synced: supabaseSynced,
     },
   }).catch(() => {});
 

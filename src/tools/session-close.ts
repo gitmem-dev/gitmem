@@ -15,6 +15,7 @@ import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { syncThreadsToSupabase } from "../services/thread-supabase.js"; // OD-624
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -654,6 +655,17 @@ export async function sessionClose(
       return !text.startsWith("PROJECT STATE:");
     });
     sessionData.open_threads = [migrateStringThread(projectStateText, params.session_id), ...filtered];
+  }
+
+  // OD-624: Sync threads to Supabase (source of truth)
+  // New threads get created, resolved threads get updated, existing threads get touched.
+  // This runs async — does not block session close on failure.
+  const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
+  if (closeThreads.length > 0) {
+    const closeProject = isRetroactive ? "orchestra_dev" : (existingSession?.project as "orchestra_dev" | "weekend_warrior" | undefined) || "orchestra_dev";
+    syncThreadsToSupabase(closeThreads, closeProject, sessionId).catch((err) => {
+      console.error("[session_close] Thread Supabase sync failed (non-fatal):", err);
+    });
   }
 
   // v2 Phase 2: Persist observations and children from multi-agent work

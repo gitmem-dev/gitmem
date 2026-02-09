@@ -10,6 +10,8 @@ Institutional memory for AI coding agents. Never repeat the same mistake.
 - **Learning Capture**: Create scars, wins, patterns, and anti-patterns in institutional memory
 - **Decision Logging**: Log architectural and operational decisions
 - **Scar Usage Tracking**: Track scar application for effectiveness measurement
+- **[Threads](docs/threads.md)**: Persistent work items that carry across sessions — create, list, resolve
+- **[Doc-Debt Tracking](docs/doc-debt-tracking.md)**: Detect when decisions outpace documentation updates
 
 ### Learning Types
 
@@ -153,6 +155,8 @@ Log decision to institutional memory.
 **Parameters:**
 - `title`, `decision`, `rationale` (required)
 - `alternatives_considered?` - Rejected options
+- `docs_affected?` - Docs/files affected by this decision (relative paths from repo root). Used for [doc-debt tracking](docs/doc-debt-tracking.md).
+- `personas_involved?` - Team personas involved
 - `linear_issue?` - Associated issue
 
 ### `record_scar_usage`
@@ -163,6 +167,30 @@ Track scar application.
 - `scar_id` (required) - Learning UUID
 - `reference_type` (required) - "explicit" | "implicit" | "acknowledged" | "refuted" | "none"
 - `reference_context` (required) - How scar was applied
+
+### `list_threads`
+
+List open threads (persistent work items across sessions). See [threads docs](docs/threads.md).
+
+**Parameters:**
+- `status?` - Filter: "open" (default) or "resolved"
+- `include_resolved?` - Include recently resolved threads
+
+### `create_thread`
+
+Create a new open thread.
+
+**Parameters:**
+- `text` (required) - Thread description
+
+### `resolve_thread`
+
+Mark a thread as resolved.
+
+**Parameters:**
+- `thread_id?` - Exact thread ID (e.g., "t-a1b2c3d4")
+- `text_match?` - Case-insensitive substring match
+- `resolution_note?` - Brief resolution explanation
 
 ## Agent Detection
 

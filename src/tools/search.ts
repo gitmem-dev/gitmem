@@ -26,7 +26,7 @@ import type { Project, PerformanceBreakdown, PerformanceData } from "../types/in
 
 // --- Types ---
 
-export type LearningType = "scar" | "win" | "pattern";
+export type LearningType = "scar" | "win" | "pattern" | "anti_pattern";
 export type ScarSeverity = "critical" | "high" | "medium" | "low";
 
 export interface SearchParams {

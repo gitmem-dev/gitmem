@@ -26,7 +26,7 @@ export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 /**
  * Learning type enum (scar, win, pattern)
  */
-export const LearningTypeSchema = z.enum(["scar", "win", "pattern"]);
+export const LearningTypeSchema = z.enum(["scar", "win", "pattern", "anti_pattern"]);
 export type LearningType = z.infer<typeof LearningTypeSchema>;
 
 /**

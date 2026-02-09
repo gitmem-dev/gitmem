@@ -226,7 +226,7 @@ export interface SessionCloseResult {
 }
 
 // Learning types
-export type LearningType = "scar" | "win" | "pattern";
+export type LearningType = "scar" | "win" | "pattern" | "anti_pattern";
 export type ScarSeverity = "critical" | "high" | "medium" | "low";
 
 export interface CreateLearningParams {

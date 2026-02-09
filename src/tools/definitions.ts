@@ -228,7 +228,7 @@ export const TOOLS = [
       properties: {
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Type of learning",
         },
         title: {
@@ -524,7 +524,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by learning type",
         },
       },
@@ -548,7 +548,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by learning type",
         },
         severity: {
@@ -806,7 +806,7 @@ export const TOOLS = [
       properties: {
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Type of learning",
         },
         title: {
@@ -1099,7 +1099,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by type",
         },
       },
@@ -1124,7 +1124,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by type",
         },
         severity: {
@@ -1385,7 +1385,7 @@ export const TOOLS = [
       properties: {
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Type of learning",
         },
         title: {
@@ -1474,7 +1474,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by type",
         },
       },
@@ -1499,7 +1499,7 @@ export const TOOLS = [
         },
         learning_type: {
           type: "string",
-          enum: ["scar", "win", "pattern"],
+          enum: ["scar", "win", "pattern", "anti_pattern"],
           description: "Filter by type",
         },
         severity: {

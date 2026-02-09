@@ -11,6 +11,8 @@
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
+import { getAgentIdentity } from "../services/agent-detection.js";
+import { writeTriplesForDecision } from "../services/triple-writer.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -84,6 +86,21 @@ export async function createDecision(
         cache_status: "not_applicable",
         network_call: true,
       };
+
+      // OD-466: Auto-create knowledge triples (fire-and-forget)
+      writeTriplesForDecision({
+        id: decisionId,
+        title: params.title,
+        decision: params.decision,
+        rationale: params.rationale,
+        personas_involved: params.personas_involved,
+        linear_issue: params.linear_issue,
+        session_id: params.session_id,
+        project: (params.project || "orchestra_dev"),
+        agent: getAgentIdentity(),
+      }).catch((err) => {
+        console.warn("[create_decision] Triple generation failed (non-fatal):", err);
+      });
     } else {
       // Free tier: Store locally without embedding
       const upsertStart = Date.now();

@@ -651,6 +651,15 @@ async function sessionStartFree(
     performance,
   };
   freeResult.display = formatStartDisplay(freeResult);
+
+  // Write display back to active-session.json so /start skill can echo it verbatim
+  try {
+    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
+    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+    activeSession.display = freeResult.display;
+    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+  } catch { /* non-critical */ }
+
   return freeResult;
 }
 
@@ -1127,6 +1136,15 @@ export async function sessionStart(
   }).catch(() => {});
 
   result.display = formatStartDisplay(result);
+
+  // Write display back to active-session.json so /start skill can echo it verbatim
+  try {
+    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
+    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+    activeSession.display = result.display;
+    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+  } catch { /* non-critical — /start skill will still work from raw fields */ }
+
   return result;
 }
 
@@ -1351,5 +1369,14 @@ export async function sessionRefresh(
   }).catch(() => {});
 
   result.display = formatStartDisplay(result);
+
+  // Write display back to active-session.json so /start skill can echo it verbatim
+  try {
+    const activeSessionPath = path.join(getGitmemDir(), "active-session.json");
+    const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+    activeSession.display = result.display;
+    fs.writeFileSync(activeSessionPath, JSON.stringify(activeSession, null, 2));
+  } catch { /* non-critical */ }
+
   return result;
 }

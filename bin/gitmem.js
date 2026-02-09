@@ -250,70 +250,8 @@ async function cmdSessionStart() {
     const { sessionStart } = await import("../dist/tools/session-start.js");
     const result = await sessionStart({ project, agent_identity: agentIdentity });
 
-    // Format as readable text for hook output
-    const lines = [];
-    lines.push(`GITMEM SESSION ACTIVE — Context loaded`);
-    lines.push(``);
-    lines.push(`Session: ${result.session_id} | Agent: ${result.agent}${result.resumed ? " | Resumed" : ""}`);
-
-    if (result.last_session) {
-      lines.push(``);
-      lines.push(`Last session: "${result.last_session.title}" (${result.last_session.date})`);
-      if (result.last_session.key_decisions?.length) {
-        lines.push(`  Decisions: ${result.last_session.key_decisions.slice(0, 3).join("; ")}`);
-      }
-    }
-
-    if (result.open_threads?.length) {
-      lines.push(``);
-      lines.push(`Open threads (${result.open_threads.length}):`);
-      for (const thread of result.open_threads.slice(0, 5)) {
-        const text = typeof thread === "string" ? thread : thread.text;
-        const truncated = text && text.length > 80 ? text.slice(0, 77) + "..." : text;
-        lines.push(`  - ${truncated || "[unnamed thread]"}`);
-      }
-      if (result.open_threads.length > 5) {
-        lines.push(`  ... and ${result.open_threads.length - 5} more`);
-      }
-    }
-
-    if (result.relevant_scars?.length) {
-      lines.push(``);
-      lines.push(`Relevant scars (${result.relevant_scars.length}):`);
-      for (const scar of result.relevant_scars) {
-        const sev = (scar.severity || "medium").toUpperCase();
-        lines.push(`  [${sev}] ${scar.title}`);
-        if (scar.description) {
-          lines.push(`    ${scar.description.slice(0, 150)}`);
-        }
-      }
-    }
-
-    if (result.recent_decisions?.length) {
-      lines.push(``);
-      lines.push(`Recent decisions (${result.recent_decisions.length}):`);
-      for (const d of result.recent_decisions) {
-        lines.push(`  - ${d.title} (${d.date})`);
-      }
-    }
-
-    if (result.recent_wins?.length) {
-      lines.push(``);
-      lines.push(`Recent wins (${result.recent_wins.length}):`);
-      for (const w of result.recent_wins) {
-        lines.push(`  - ${w.title} (${w.date})`);
-      }
-    }
-
-    if (result.project_state) {
-      lines.push(``);
-      lines.push(`Project state: ${result.project_state}`);
-    }
-
-    lines.push(``);
-    lines.push(`Other gitmem tools (recall, create_learning, etc.) are available via ToolSearch.`);
-
-    console.log(lines.join("\n"));
+    // Use pre-formatted display from formatStartDisplay() — single source of truth
+    console.log(result.display || "GITMEM SESSION ACTIVE");
   } catch (error) {
     console.error("[gitmem session-start]", error.message || error);
     process.exit(1);

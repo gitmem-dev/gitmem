@@ -30,7 +30,8 @@ export type ToolName =
   | "absorb_observations"
   | "list_threads"
   | "resolve_thread"
-  | "create_thread";
+  | "create_thread"
+  | "confirm_scars";
 
 /**
  * Phase tags for context
@@ -98,6 +99,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   list_threads: 100,        // In-memory read
   resolve_thread: 100,      // In-memory mutation + file write
   create_thread: 100,       // In-memory mutation + file write
+  confirm_scars: 500,       // In-memory validation + file write
 };
 
 /**

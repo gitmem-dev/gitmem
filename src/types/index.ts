@@ -314,6 +314,34 @@ export interface SurfacedScar {
   source: "session_start" | "recall";
 }
 
+// Scar confirmation decisions (refute-or-obey protocol for CLI)
+export type ConfirmationDecision = "APPLYING" | "N_A" | "REFUTED";
+
+export interface ScarConfirmation {
+  scar_id: string;
+  scar_title: string;
+  decision: ConfirmationDecision;
+  evidence: string;
+  confirmed_at: string; // ISO timestamp
+}
+
+export interface ConfirmScarsParams {
+  confirmations: Array<{
+    scar_id: string;
+    decision: ConfirmationDecision;
+    evidence: string;
+  }>;
+}
+
+export interface ConfirmScarsResult {
+  valid: boolean;
+  errors: string[];
+  confirmations: ScarConfirmation[];
+  missing_scars: string[]; // scar titles not confirmed
+  formatted_response: string;
+  performance: PerformanceData;
+}
+
 // Scar usage tracking
 export type ReferenceType = "explicit" | "implicit" | "acknowledged" | "refuted" | "none";
 

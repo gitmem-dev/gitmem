@@ -12,7 +12,7 @@
  * This allows recall() to always assign variants even without explicit parameters.
  */
 
-import type { SurfacedScar, Observation, SessionChild, ThreadObject } from "../types/index.js";
+import type { SurfacedScar, ScarConfirmation, Observation, SessionChild, ThreadObject } from "../types/index.js";
 
 interface SessionContext {
   sessionId: string;
@@ -20,6 +20,7 @@ interface SessionContext {
   agent?: string;
   startedAt: Date;
   surfacedScars: SurfacedScar[]; // OD-552: Track all scars surfaced during session
+  confirmations: ScarConfirmation[]; // Refute-or-obey confirmations for recall-surfaced scars
   observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
   children: SessionChild[];      // v2 Phase 2: Child agent records
   threads: ThreadObject[];       // OD-thread-lifecycle: Working thread state
@@ -32,10 +33,11 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     surfacedScars: context.surfacedScars || [],
+    confirmations: [],
     observations: [],
     children: [],
     threads: context.threads || [],
@@ -94,6 +96,50 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
  */
 export function getSurfacedScars(): SurfacedScar[] {
   return currentSession?.surfacedScars || [];
+}
+
+/**
+ * Add scar confirmations (refute-or-obey) to the current session.
+ * Called by confirm_scars tool after validation.
+ */
+export function addConfirmations(confirmations: ScarConfirmation[]): void {
+  if (!currentSession) {
+    console.warn("[session-state] Cannot add confirmations: no active session");
+    return;
+  }
+
+  for (const conf of confirmations) {
+    // Replace existing confirmation for same scar_id (allow re-confirmation)
+    const idx = currentSession.confirmations.findIndex(c => c.scar_id === conf.scar_id);
+    if (idx >= 0) {
+      currentSession.confirmations[idx] = conf;
+    } else {
+      currentSession.confirmations.push(conf);
+    }
+  }
+
+  console.error(`[session-state] Confirmations tracked: ${currentSession.confirmations.length} total`);
+}
+
+/**
+ * Get all scar confirmations for the current session.
+ */
+export function getConfirmations(): ScarConfirmation[] {
+  return currentSession?.confirmations || [];
+}
+
+/**
+ * Check if there are recall-surfaced scars that haven't been confirmed.
+ * Only checks scars with source "recall" — session_start scars don't require confirmation.
+ */
+export function hasUnconfirmedScars(): boolean {
+  if (!currentSession) return false;
+
+  const recallScars = currentSession.surfacedScars.filter(s => s.source === "recall");
+  if (recallScars.length === 0) return false;
+
+  const confirmedIds = new Set(currentSession.confirmations.map(c => c.scar_id));
+  return recallScars.some(s => !confirmedIds.has(s.scar_id));
 }
 
 /**

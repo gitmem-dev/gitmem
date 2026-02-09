@@ -45,6 +45,39 @@ export const TOOLS = [
     },
   },
   {
+    name: "confirm_scars",
+    description: "Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence. REQUIRED after recall() before consequential actions. Each recalled scar must be addressed. APPLYING: past-tense evidence of compliance. N_A: explain why scar doesn't apply. REFUTED: acknowledge risk of overriding.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        confirmations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: {
+                type: "string",
+                description: "UUID of the surfaced scar (from recall result)",
+              },
+              decision: {
+                type: "string",
+                enum: ["APPLYING", "N_A", "REFUTED"],
+                description: "APPLYING: scar is relevant, evidence of compliance. N_A: scar doesn't apply, explain why. REFUTED: overriding scar, acknowledge risk.",
+              },
+              evidence: {
+                type: "string",
+                description: "Past-tense evidence (APPLYING), scenario comparison (N_A), or risk acknowledgment (REFUTED). Minimum 50 characters.",
+              },
+            },
+            required: ["scar_id", "decision", "evidence"],
+          },
+          description: "One confirmation per recalled scar. All recalled scars must be addressed.",
+        },
+      },
+      required: ["confirmations"],
+    },
+  },
+  {
     name: "session_start",
     description: "Initialize session, detect agent, load institutional context (last session, relevant scars, recent decisions). DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
     inputSchema: {
@@ -640,6 +673,29 @@ export const TOOLS = [
     },
   },
   {
+    name: "gitmem-cs",
+    description: "gitmem-cs (confirm_scars) - Confirm recalled scars with APPLYING/N_A/REFUTED decisions",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        confirmations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: { type: "string", description: "UUID of the surfaced scar" },
+              decision: { type: "string", enum: ["APPLYING", "N_A", "REFUTED"], description: "Confirmation decision" },
+              evidence: { type: "string", description: "Evidence (min 50 chars)" },
+            },
+            required: ["scar_id", "decision", "evidence"],
+          },
+          description: "One confirmation per recalled scar",
+        },
+      },
+      required: ["confirmations"],
+    },
+  },
+  {
     name: "gitmem-ss",
     description: "gitmem-ss (session_start) - Initialize session with institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
     inputSchema: {
@@ -1206,6 +1262,29 @@ export const TOOLS = [
           description: "Force create new session even if one already exists (OD-558)",
         },
       },
+    },
+  },
+  {
+    name: "gm-confirm",
+    description: "gm-confirm (confirm_scars) - Confirm recalled scars with APPLYING/N_A/REFUTED",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        confirmations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: { type: "string", description: "UUID of the surfaced scar" },
+              decision: { type: "string", enum: ["APPLYING", "N_A", "REFUTED"] },
+              evidence: { type: "string", description: "Evidence (min 50 chars)" },
+            },
+            required: ["scar_id", "decision", "evidence"],
+          },
+          description: "One confirmation per recalled scar",
+        },
+      },
+      required: ["confirmations"],
     },
   },
   {

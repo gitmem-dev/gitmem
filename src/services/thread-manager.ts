@@ -115,7 +115,8 @@ export function aggregateThreads(
     .filter((s) => s.close_compliance != null && s.session_date >= cutoffStr)
     .slice(0, maxSessions);
 
-  const seen = new Set<string>();
+  const seenText = new Set<string>();
+  const seenIds = new Set<string>();
   const open: ThreadObject[] = [];
   const recentlyResolved: ThreadObject[] = [];
 
@@ -130,9 +131,11 @@ export function aggregateThreads(
       // Skip PROJECT STATE threads (handled separately via OD-534)
       if (thread.text.startsWith("PROJECT STATE:")) continue;
 
+      // Deduplicate by both thread ID and text content
       const key = thread.text.toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
+      if (!key || seenText.has(key) || seenIds.has(thread.id)) continue;
+      seenText.add(key);
+      seenIds.add(thread.id);
 
       if (thread.status === "resolved") {
         recentlyResolved.push(thread);

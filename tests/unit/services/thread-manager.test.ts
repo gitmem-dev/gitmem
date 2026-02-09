@@ -265,6 +265,31 @@ describe("aggregateThreads", () => {
     expect(result.open).toHaveLength(0);
   });
 
+  it("deduplicates threads across sessions by ID (same ID, different text)", () => {
+    const sessions = [
+      {
+        id: "s1",
+        session_date: "2026-02-09",
+        close_compliance: { close_type: "standard" },
+        open_threads: [
+          { id: "t-aaa", text: "Phase 2 GitMem public npm release still pending", status: "open" as const, created_at: "2026-02-08T00:00:00Z" },
+        ],
+      },
+      {
+        id: "s2",
+        session_date: "2026-02-08",
+        close_compliance: { close_type: "standard" },
+        open_threads: [
+          { id: "t-aaa", text: "Phase 2 issues OD-604 through OD-609 (GitMem public npm release) still ready to execute", status: "open" as const, created_at: "2026-02-07T00:00:00Z" },
+        ],
+      },
+    ];
+
+    const result = aggregateThreads(sessions);
+    expect(result.open).toHaveLength(1);
+    expect(result.open[0].id).toBe("t-aaa"); // First seen wins
+  });
+
   it("separates resolved from open threads", () => {
     const sessions = [
       {

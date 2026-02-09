@@ -17,6 +17,8 @@ import {
   findSessionByHostPid,
   findSessionById,
   pruneStale,
+  migrateFromLegacy,
+  resetMigrationFlag,
 } from "../../../src/services/active-sessions.js";
 import type { ActiveSessionEntry } from "../../../src/types/index.js";
 
@@ -47,6 +49,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearGitmemDirCache();
+  resetMigrationFlag();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -403,5 +406,94 @@ describe("atomic write behavior", () => {
     const raw = fs.readFileSync(path.join(tmpDir, "active-sessions.json"), "utf-8");
     const parsed = JSON.parse(raw);
     expect(parsed.sessions).toEqual([]);
+  });
+});
+
+describe("migrateFromLegacy (GIT-23)", () => {
+  it("migrates old active-session.json to new format", () => {
+    const oldData = {
+      session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      agent: "CLI",
+      started_at: "2026-02-09T10:00:00.000Z",
+      project: "orchestra_dev",
+      surfaced_scars: [{ scar_id: "test", scar_title: "Test scar" }],
+    };
+    fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify(oldData, null, 2));
+
+    const result = migrateFromLegacy();
+    expect(result).toBe(true);
+
+    // Registry should exist with one entry
+    const sessions = listActiveSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe(oldData.session_id);
+    expect(sessions[0].agent).toBe("CLI");
+
+    // Per-session directory should exist
+    const sessionFile = path.join(tmpDir, "sessions", oldData.session_id, "session.json");
+    expect(fs.existsSync(sessionFile)).toBe(true);
+    const sessionData = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+    expect(sessionData.surfaced_scars).toHaveLength(1);
+
+    // Old file renamed to .migrated
+    expect(fs.existsSync(path.join(tmpDir, "active-session.json"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "active-session.json.migrated"))).toBe(true);
+  });
+
+  it("skips migration when new registry already exists", () => {
+    // Create both old and new files
+    fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify({ session_id: "old-id" }));
+    fs.writeFileSync(path.join(tmpDir, "active-sessions.json"), JSON.stringify({ sessions: [] }));
+
+    const result = migrateFromLegacy();
+    expect(result).toBe(false);
+
+    // Old file should NOT be renamed
+    expect(fs.existsSync(path.join(tmpDir, "active-session.json"))).toBe(true);
+  });
+
+  it("skips migration when old file does not exist", () => {
+    const result = migrateFromLegacy();
+    expect(result).toBe(false);
+  });
+
+  it("skips migration when old file has no session_id", () => {
+    fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify({ agent: "CLI" }));
+
+    const result = migrateFromLegacy();
+    expect(result).toBe(false);
+
+    // Old file should remain (no rename)
+    expect(fs.existsSync(path.join(tmpDir, "active-session.json"))).toBe(true);
+  });
+
+  it("is idempotent — second call returns false", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "active-session.json"),
+      JSON.stringify({ session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", agent: "CLI" })
+    );
+
+    expect(migrateFromLegacy()).toBe(true);
+    // Reset would normally not happen in production — flag prevents re-run
+    // But even without reset, calling again returns false because registry now exists
+    resetMigrationFlag();
+    expect(migrateFromLegacy()).toBe(false); // registry exists, old file renamed
+  });
+
+  it("fills in missing hostname and pid from current process", () => {
+    const oldData = {
+      session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      agent: "DAC",
+      started_at: "2026-02-09T10:00:00.000Z",
+      project: "orchestra_dev",
+      // No hostname or pid — pre-GIT-20 format
+    };
+    fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify(oldData));
+
+    migrateFromLegacy();
+
+    const sessions = listActiveSessions();
+    expect(sessions[0].hostname).toBe(os.hostname());
+    expect(sessions[0].pid).toBe(process.pid);
   });
 });

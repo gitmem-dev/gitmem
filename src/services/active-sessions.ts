@@ -14,7 +14,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getGitmemDir } from "./gitmem-dir.js";
+import { getGitmemDir, getSessionPath } from "./gitmem-dir.js";
 import { ActiveSessionsRegistrySchema } from "../schemas/active-sessions.js";
 import type { ActiveSessionEntry, ActiveSessionsRegistry } from "../types/index.js";
 
@@ -269,4 +269,82 @@ function cleanupSessionDir(gitmemDir: string, sessionId: string): void {
   } catch (error) {
     console.warn(`[active-sessions] Failed to clean up session directory for ${sessionId.slice(0, 8)}:`, error);
   }
+}
+
+// --- GIT-23: Migration from old format ---
+
+let migrationRan = false;
+
+/**
+ * GIT-23: Migrate from old active-session.json (singular) to new multi-session format.
+ *
+ * Runs once per process. If old file exists and new registry does not:
+ * 1. Read old file
+ * 2. Create per-session directory with session.json
+ * 3. Create active-sessions.json registry with single entry
+ * 4. Rename old file to active-session.json.migrated (backup)
+ *
+ * Idempotent: skips if new registry already exists or old file is absent.
+ */
+export function migrateFromLegacy(): boolean {
+  if (migrationRan) return false;
+  migrationRan = true;
+
+  try {
+    const gitmemDir = getGitmemDir();
+    const oldPath = path.join(gitmemDir, "active-session.json");
+    const newPath = path.join(gitmemDir, REGISTRY_FILENAME);
+
+    // Skip if new registry already exists or old file is absent
+    if (fs.existsSync(newPath) || !fs.existsSync(oldPath)) {
+      return false;
+    }
+
+    const raw = fs.readFileSync(oldPath, "utf-8");
+    const old = JSON.parse(raw);
+
+    if (!old.session_id) {
+      console.warn("[active-sessions] Legacy file has no session_id, skipping migration");
+      return false;
+    }
+
+    // 1. Create per-session directory with session.json
+    const sessionFilePath = getSessionPath(old.session_id, "session.json");
+    fs.writeFileSync(sessionFilePath, JSON.stringify({
+      ...old,
+      hostname: old.hostname || os.hostname(),
+      pid: old.pid || process.pid,
+    }, null, 2));
+
+    // 2. Create registry with single entry
+    const entry: ActiveSessionEntry = {
+      session_id: old.session_id,
+      agent: old.agent || "CLI",
+      started_at: old.started_at || new Date().toISOString(),
+      hostname: old.hostname || os.hostname(),
+      pid: old.pid || process.pid,
+      project: old.project || "orchestra_dev",
+    };
+    writeRegistry({ sessions: [entry] });
+
+    // 3. Rename old file to backup
+    const backupPath = path.join(gitmemDir, "active-session.json.migrated");
+    fs.renameSync(oldPath, backupPath);
+
+    console.error(
+      `[active-sessions] Migrated legacy active-session.json → ` +
+      `sessions/${old.session_id.slice(0, 8)}/ + active-sessions.json (backup: active-session.json.migrated)`
+    );
+    return true;
+  } catch (error) {
+    console.warn("[active-sessions] Legacy migration failed (non-fatal):", error);
+    return false;
+  }
+}
+
+/**
+ * Reset migration flag (for testing only).
+ */
+export function resetMigrationFlag(): void {
+  migrationRan = false;
 }

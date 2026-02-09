@@ -30,7 +30,7 @@ import {
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
-import { registerSession, findSessionByHostPid, pruneStale } from "../services/active-sessions.js";
+import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
@@ -718,6 +718,9 @@ function checkExistingSession(
   }
 
   try {
+    // GIT-23: Migrate from old active-session.json format if needed
+    migrateFromLegacy();
+
     // GIT-20: Prune stale sessions from crashed/dead containers
     pruneStale();
 

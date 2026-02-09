@@ -644,7 +644,7 @@ async function sessionStartFree(
     threads: freeAggregatedThreads,
   });
 
-  return {
+  const freeResult: SessionStartResult = {
     session_id: sessionId,
     agent,
     ...(isResuming && { resumed: true }),
@@ -658,6 +658,8 @@ async function sessionStartFree(
     ...(freeWins.length > 0 && { recent_wins: freeWins }),
     performance,
   };
+  freeResult.display = formatStartDisplay(freeResult);
+  return freeResult;
 }
 
 /**
@@ -709,6 +711,77 @@ function checkExistingSession(
   }
 
   return null;
+}
+
+/**
+ * Format pre-formatted display string for session_start/session_refresh results.
+ * Agents echo this verbatim for consistent CLI output.
+ */
+function formatStartDisplay(result: SessionStartResult): string {
+  const lines: string[] = [];
+
+  // Header
+  const label = result.refreshed ? "SESSION REFRESH" : (result.resumed ? "SESSION RESUMED" : "SESSION START");
+  lines.push(`${label} — ACTIVE`);
+  lines.push(`Session: ${result.session_id.slice(0, 8)} | Agent: ${result.agent}`);
+
+  // Last session
+  if (result.last_session) {
+    const title = result.last_session.title.length > 70
+      ? result.last_session.title.slice(0, 67) + "..."
+      : result.last_session.title;
+    lines.push("");
+    lines.push(`Last session: "${title}" (${result.last_session.date})`);
+    if (result.last_session.key_decisions?.length) {
+      for (const d of result.last_session.key_decisions.slice(0, 3)) {
+        lines.push(`  Decision: ${d}`);
+      }
+    }
+  }
+
+  // Open threads
+  if (result.open_threads?.length) {
+    lines.push("");
+    lines.push(`Open threads (${result.open_threads.length}):`);
+    for (const t of result.open_threads.slice(0, 8)) {
+      const text = t.text.length > 70 ? t.text.slice(0, 67) + "..." : t.text;
+      lines.push(`  ${t.id}: ${text}`);
+    }
+    if (result.open_threads.length > 8) {
+      lines.push(`  ... and ${result.open_threads.length - 8} more`);
+    }
+  }
+
+  // Relevant scars
+  if (result.relevant_scars?.length) {
+    lines.push("");
+    lines.push(`Relevant scars (${result.relevant_scars.length}):`);
+    for (const s of result.relevant_scars.slice(0, 5)) {
+      const severity = (s.severity || "medium").toUpperCase();
+      const title = s.title.length > 60 ? s.title.slice(0, 57) + "..." : s.title;
+      lines.push(`  [${severity}] ${title}`);
+    }
+  }
+
+  // Recent decisions
+  if (result.recent_decisions?.length) {
+    lines.push("");
+    lines.push(`Recent decisions (${result.recent_decisions.length}):`);
+    for (const d of result.recent_decisions.slice(0, 3)) {
+      lines.push(`  - ${d.title} (${d.date})`);
+    }
+  }
+
+  // Recent wins
+  if (result.recent_wins?.length) {
+    lines.push("");
+    lines.push(`Recent wins (${result.recent_wins.length}):`);
+    for (const w of result.recent_wins.slice(0, 3)) {
+      lines.push(`  - ${w.title} (${w.date})`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -949,6 +1022,7 @@ export async function sessionStart(
     },
   }).catch(() => {});
 
+  result.display = formatStartDisplay(result);
   return result;
 }
 
@@ -1177,5 +1251,6 @@ export async function sessionRefresh(
     },
   }).catch(() => {});
 
+  result.display = formatStartDisplay(result);
   return result;
 }

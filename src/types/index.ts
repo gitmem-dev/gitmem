@@ -168,6 +168,8 @@ export interface SessionStartResult {
   message?: string;
   /** Asciinema recording path for session replay (from GITMEM_RECORDING_PATH env var) */
   recording_path?: string;
+  /** Pre-formatted display string for consistent CLI output */
+  display?: string;
 }
 
 // Session close parameters and result

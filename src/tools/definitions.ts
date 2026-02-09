@@ -46,7 +46,7 @@ export const TOOLS = [
   },
   {
     name: "session_start",
-    description: "Initialize session, detect agent, load institutional context (last session, relevant scars, recent decisions)",
+    description: "Initialize session, detect agent, load institutional context (last session, relevant scars, recent decisions). DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -86,7 +86,7 @@ export const TOOLS = [
   },
   {
     name: "session_refresh",
-    description: "Re-surface institutional context (scars, threads, decisions, wins) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap.",
+    description: "Re-surface institutional context (scars, threads, decisions, wins) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -641,7 +641,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-ss",
-    description: "gitmem-ss (session_start) - Initialize session with institutional context",
+    description: "gitmem-ss (session_start) - Initialize session with institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -681,7 +681,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sr",
-    description: "gitmem-sr (session_refresh) - Refresh institutional context for the active session without creating a new session",
+    description: "gitmem-sr (session_refresh) - Refresh institutional context for the active session without creating a new session. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1170,7 +1170,7 @@ export const TOOLS = [
   // ============================================================================
   {
     name: "gm-open",
-    description: "gm-open (session_start) - Open a GitMem session and load institutional context",
+    description: "gm-open (session_start) - Open a GitMem session and load institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1210,7 +1210,7 @@ export const TOOLS = [
   },
   {
     name: "gm-refresh",
-    description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one",
+    description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
     inputSchema: {
       type: "object" as const,
       properties: {

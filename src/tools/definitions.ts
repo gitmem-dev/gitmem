@@ -100,7 +100,7 @@ export const TOOLS = [
   },
   {
     name: "session_close",
-    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json using your file write tool. Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. This keeps the displayed tool call clean.",
+    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json using your file write tool. Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -695,7 +695,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sc",
-    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline.",
+    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1224,7 +1224,7 @@ export const TOOLS = [
   },
   {
     name: "gm-close",
-    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline.",
+    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
     inputSchema: {
       type: "object" as const,
       properties: {

@@ -31,7 +31,8 @@ import { processTranscript } from "../services/transcript-chunker.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getGitmemPath } from "../services/gitmem-dir.js";
+import { getGitmemPath, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
+import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
 import type {
   SessionCloseParams,
   SessionCloseResult,
@@ -220,15 +221,8 @@ async function sessionCloseFree(
     // Clear session state
     clearCurrentSession();
 
-    // Clean up active session file
-    try {
-      const activeSessionPath = getGitmemPath("active-session.json");
-      if (fs.existsSync(activeSessionPath)) {
-        fs.unlinkSync(activeSessionPath);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+    // GIT-21: Clean up session files (registry, per-session dir, legacy file)
+    cleanupSessionFiles(sessionId);
 
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 1);
@@ -328,6 +322,41 @@ function formatCloseDisplay(
 }
 
 /**
+ * GIT-21: Clean up all session files for a closed session.
+ * Unregisters from registry, deletes per-session directory, and removes legacy file.
+ */
+function cleanupSessionFiles(sessionId: string): void {
+  // 1. Unregister from active-sessions registry
+  try {
+    unregisterSession(sessionId);
+  } catch (error) {
+    console.warn("[session_close] Failed to unregister session:", error);
+  }
+
+  // 2. Delete per-session directory
+  try {
+    const sessionDir = path.join(getGitmemDir(), "sessions", sessionId);
+    if (fs.existsSync(sessionDir)) {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+      console.error(`[session_close] Cleaned up session directory: ${sessionDir}`);
+    }
+  } catch (error) {
+    console.warn("[session_close] Failed to clean up session directory:", error);
+  }
+
+  // 3. Delete legacy active-session.json
+  try {
+    const activeSessionPath = getGitmemPath("active-session.json");
+    if (fs.existsSync(activeSessionPath)) {
+      fs.unlinkSync(activeSessionPath);
+      console.error("[session_close] Cleaned up legacy active-session.json");
+    }
+  } catch (error) {
+    console.warn("[session_close] Failed to clean up legacy file:", error);
+  }
+}
+
+/**
  * Execute session_close tool
  */
 export async function sessionClose(
@@ -336,20 +365,33 @@ export async function sessionClose(
   const timer = new Timer();
   const metricsId = uuidv4();
 
-  // 0. If session_id is missing, try to recover from .gitmem/active-session.json first (OD-549)
-  // This file survives context compaction — written by session_start, read here.
+  // GIT-21: Recover session_id from active-sessions registry (hostname+PID) or legacy file
   if (!params.session_id && params.close_type !== "retroactive") {
+    // Try registry first (GIT-20 writes here)
     try {
-      const activeSessionPath = getGitmemPath("active-session.json");
-      if (fs.existsSync(activeSessionPath)) {
-        const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-        if (activeSession.session_id) {
-          console.error(`[session_close] Recovered session_id from active-session.json: ${activeSession.session_id}`);
-          params = { ...params, session_id: activeSession.session_id };
-        }
+      const mySession = findSessionByHostPid(os.hostname(), process.pid);
+      if (mySession) {
+        console.error(`[session_close] Recovered session_id from registry: ${mySession.session_id}`);
+        params = { ...params, session_id: mySession.session_id };
       }
     } catch (error) {
-      console.warn("[session_close] Failed to read active-session.json:", error);
+      console.warn("[session_close] Failed to check session registry:", error);
+    }
+
+    // Legacy fallback: active-session.json (OD-549)
+    if (!params.session_id) {
+      try {
+        const activeSessionPath = getGitmemPath("active-session.json");
+        if (fs.existsSync(activeSessionPath)) {
+          const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
+          if (activeSession.session_id) {
+            console.error(`[session_close] Recovered session_id from legacy file: ${activeSession.session_id}`);
+            params = { ...params, session_id: activeSession.session_id };
+          }
+        }
+      } catch (error) {
+        console.warn("[session_close] Failed to read legacy active-session.json:", error);
+      }
     }
   }
 
@@ -718,18 +760,32 @@ export async function sessionClose(
     params.closing_reflection?.scars_applied?.length
   ) {
     try {
-      // Load surfaced scars: prefer in-memory, fall back to active-session.json
+      // Load surfaced scars: prefer in-memory, fall back to per-session dir, then legacy file
       let surfacedScars: SurfacedScar[] = getSurfacedScars();
 
+      if (surfacedScars.length === 0 && params.session_id) {
+        // GIT-21: Try per-session directory first
+        try {
+          const sessionFilePath = getSessionPath(params.session_id, "session.json");
+          if (fs.existsSync(sessionFilePath)) {
+            const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+            if (sessionData.surfaced_scars && Array.isArray(sessionData.surfaced_scars)) {
+              surfacedScars = sessionData.surfaced_scars;
+              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from per-session file`);
+            }
+          }
+        } catch { /* fall through to legacy */ }
+      }
+
       if (surfacedScars.length === 0) {
-        // Fall back to file-based surfaced scars
+        // Legacy fallback: active-session.json
         try {
           const activeSessionPath = getGitmemPath("active-session.json");
           if (fs.existsSync(activeSessionPath)) {
             const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
             if (activeSession.surfaced_scars && Array.isArray(activeSession.surfaced_scars)) {
               surfacedScars = activeSession.surfaced_scars;
-              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from active-session.json`);
+              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from legacy file`);
             }
           }
         } catch (fileError) {
@@ -867,16 +923,8 @@ export async function sessionClose(
     // OD-547: Clear session state after successful close
     clearCurrentSession();
 
-    // OD-549: Clean up active session file
-    try {
-      const activeSessionPath = getGitmemPath("active-session.json");
-      if (fs.existsSync(activeSessionPath)) {
-        fs.unlinkSync(activeSessionPath);
-        console.error("[session_close] Cleaned up active-session.json");
-      }
-    } catch (error) {
-      console.warn("[session_close] Failed to clean up active-session.json:", error);
-    }
+    // GIT-21: Clean up session files (registry, per-session dir, legacy file)
+    cleanupSessionFiles(sessionId);
 
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined);
 

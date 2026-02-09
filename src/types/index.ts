@@ -97,6 +97,7 @@ export interface LastSession {
 export interface RelevantScar {
   id: string;
   title: string;
+  learning_type?: string;
   severity: string;
   description: string;
   counter_arguments: string[];

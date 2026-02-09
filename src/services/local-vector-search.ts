@@ -24,6 +24,7 @@ const getExpectedDim = () => getEmbeddingDim() || 1536;
 interface ScarRecord {
   id: string;
   title: string;
+  learning_type?: string;
   description: string;
   severity: string;
   counter_arguments?: string[];
@@ -239,6 +240,7 @@ export class LocalVectorSearch {
     const results: RelevantScar[] = topK.map(({ scar, similarity }) => ({
       id: scar.id,
       title: scar.title,
+      learning_type: scar.learning_type || "scar",
       description: scar.description,
       severity: scar.severity || "medium",
       counter_arguments: scar.counter_arguments || [],

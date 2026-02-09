@@ -96,7 +96,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       let filtered: SearchResultEntry[] = rawResults.map(r => ({
         id: r.id,
         title: r.title,
-        learning_type: "scar",
+        learning_type: r.learning_type || "scar",
         severity: r.severity || "medium",
         description: r.description || "",
         counter_arguments: r.counter_arguments || [],
@@ -167,6 +167,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       rawResults = localResults.map(r => ({
         id: r.id,
         title: r.title,
+        learning_type: r.learning_type,
         description: r.description,
         severity: r.severity,
         counter_arguments: r.counter_arguments,

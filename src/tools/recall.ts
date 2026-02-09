@@ -84,6 +84,7 @@ interface ScarRecord {
 interface FormattedScar {
   id: string;
   title: string;
+  learning_type?: string;
   severity: string;
   description: string;
   counter_arguments: string[];
@@ -269,6 +270,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       const scars: FormattedScar[] = rawScars.map((scar) => ({
         id: scar.id,
         title: scar.title,
+        learning_type: scar.learning_type || "scar",
         severity: scar.severity || "medium",
         description: scar.description || "",
         counter_arguments: scar.counter_arguments || [],
@@ -421,6 +423,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     const scars: FormattedScar[] = rawScars.map((scar) => ({
       id: scar.id,
       title: scar.title,
+      learning_type: (scar as ScarRecord).learning_type || "scar",
       severity: scar.severity || "medium",
       description: scar.description || "",
       counter_arguments: scar.counter_arguments || [],

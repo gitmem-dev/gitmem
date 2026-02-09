@@ -55,8 +55,20 @@ export function normalizeThreads(
           if (parsed.id && parsed.text && parsed.status) {
             return parsed as ThreadObject;
           }
+          // Handle {id, status, note} format — "note" is an alias for "text"
+          // This format appears when threads carry forward between sessions
+          if (parsed.id && parsed.note && parsed.status) {
+            return {
+              id: parsed.id,
+              text: parsed.note,
+              status: parsed.status,
+              created_at: parsed.created_at || new Date().toISOString(),
+              ...(sourceSession && { source_session: sourceSession }),
+              ...(parsed.resolved_at && { resolved_at: parsed.resolved_at }),
+            } as ThreadObject;
+          }
           // Legacy format: {item, context} or {text, status} without id
-          return migrateStringThread(parsed.item || parsed.text || item, sourceSession);
+          return migrateStringThread(parsed.item || parsed.text || parsed.note || item, sourceSession);
         } catch {
           // Not valid JSON, treat as plain text
         }

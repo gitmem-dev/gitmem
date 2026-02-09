@@ -209,6 +209,12 @@ export const TOOLS = [
           items: { type: "string" },
           description: "Personas involved in decision",
         },
+        docs_affected: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Docs/files affected by this decision (relative paths from repo root)",
+        },
         linear_issue: {
           type: "string",
           description: "Associated Linear issue",
@@ -783,6 +789,12 @@ export const TOOLS = [
           type: "array",
           items: { type: "string" },
           description: "Personas involved in decision",
+        },
+        docs_affected: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Docs/files affected by this decision (relative paths from repo root)",
         },
         linear_issue: {
           type: "string",

@@ -21,7 +21,8 @@ type Predicate =
   | "created_in"
   | "influenced_by"
   | "supersedes"
-  | "demonstrates";
+  | "demonstrates"
+  | "affects_doc";
 
 interface TripleCandidate {
   subject: string;
@@ -197,6 +198,7 @@ export interface DecisionTripleParams {
   decision: string;
   rationale: string;
   personas_involved?: string[];
+  docs_affected?: string[];
   linear_issue?: string;
   session_id?: string;
   project: string;
@@ -256,6 +258,18 @@ export function extractDecisionTriples(params: DecisionTripleParams): TripleCand
         subject: subjectLabel,
         predicate: "influenced_by",
         object: `Agent: ${params.agent}`,
+      });
+    }
+  }
+
+  // RULE 4: Each doc in docs_affected -> "affects_doc"
+  if (params.docs_affected?.length) {
+    for (const doc of params.docs_affected) {
+      triples.push({
+        ...base,
+        subject: subjectLabel,
+        predicate: "affects_doc",
+        object: `Doc: ${doc}`,
       });
     }
   }

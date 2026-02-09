@@ -287,6 +287,7 @@ export interface CreateDecisionParams {
   rationale: string;
   alternatives_considered?: string[];
   personas_involved?: string[];
+  docs_affected?: string[];
   linear_issue?: string;
   session_id?: string;
   project?: Project;

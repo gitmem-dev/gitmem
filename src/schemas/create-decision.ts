@@ -14,6 +14,7 @@ export const CreateDecisionParamsSchema = z.object({
   rationale: z.string().min(1, "rationale is required"),
   alternatives_considered: z.array(z.string()).optional(),
   personas_involved: z.array(z.string()).optional(),
+  docs_affected: z.array(z.string()).optional(),
   linear_issue: z.string().optional(),
   session_id: z.string().optional(),
   project: ProjectSchema.optional(),

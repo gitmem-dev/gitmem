@@ -11,7 +11,7 @@ import {
   hasCacheManagement,
   hasSupabase,
 } from "../services/tier.js";
-import { closingReflectionSchema } from "../constants/closing-questions.js";
+
 
 /**
  * Tool definitions for MCP
@@ -86,7 +86,7 @@ export const TOOLS = [
   },
   {
     name: "session_close",
-    description: "Persist session with compliance validation. Standard close requires task_completion proof and 6 closing questions answered (OD-491).",
+    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json using your file write tool. Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. This keeps the displayed tool call clean.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -99,64 +99,6 @@ export const TOOLS = [
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
         },
-        task_completion: {
-          type: "object",
-          properties: {
-            questions_displayed_at: {
-              type: "string",
-              description: "ISO timestamp when 7 reflection questions were displayed to human (Task 1)",
-            },
-            reflection_completed_at: {
-              type: "string",
-              description: "ISO timestamp when agent finished answering all questions (Task 2)",
-            },
-            human_asked_at: {
-              type: "string",
-              description: "ISO timestamp when agent asked human for corrections (Task 3)",
-            },
-            human_response: {
-              type: "string",
-              description: "Human's response - 'none', 'no corrections', or actual corrections (Task 4)",
-            },
-            human_response_at: {
-              type: "string",
-              description: "ISO timestamp when human responded (Task 4) - must be >= 3 seconds after human_asked_at",
-            },
-          },
-          required: ["questions_displayed_at", "reflection_completed_at", "human_asked_at", "human_response", "human_response_at"],
-          description: "Task completion proof - REQUIRED for standard close (OD-491). Timestamps must be in order with 3s minimum gap for human response.",
-        },
-        closing_reflection: closingReflectionSchema(),
-        human_corrections: {
-          type: "string",
-          description: "Human corrections/additions (required for standard close, even if empty)",
-        },
-        decisions: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              decision: { type: "string" },
-              rationale: { type: "string" },
-              alternatives_considered: {
-                type: "array",
-                items: { type: "string" },
-              },
-            },
-          },
-          description: "Decisions made during session",
-        },
-        open_threads: {
-          type: "array",
-          items: { type: "string" },
-          description: "Open threads to carry forward",
-        },
-        learnings_created: {
-          type: "array",
-          items: { type: "string" },
-          description: "IDs of learnings created before close",
-        },
         linear_issue: {
           type: "string",
           description: "Associated Linear issue",
@@ -164,57 +106,6 @@ export const TOOLS = [
         ceremony_duration_ms: {
           type: "number",
           description: "End-to-end ceremony duration from agent perspective (in milliseconds)",
-        },
-        scars_to_record: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              scar_identifier: {
-                type: "string",
-                description: "UUID or title/description of scar",
-              },
-              issue_id: {
-                type: "string",
-                description: "Linear issue UUID",
-              },
-              issue_identifier: {
-                type: "string",
-                description: "Linear issue identifier (e.g., OD-XXX)",
-              },
-              surfaced_at: {
-                type: "string",
-                description: "ISO timestamp when scar was retrieved",
-              },
-              acknowledged_at: {
-                type: "string",
-                description: "ISO timestamp when scar was acknowledged",
-              },
-              reference_type: {
-                type: "string",
-                enum: ["explicit", "implicit", "acknowledged", "refuted", "none"],
-                description: "How the scar was referenced",
-              },
-              reference_context: {
-                type: "string",
-                description: "How the scar was applied (1-2 sentences)",
-              },
-              execution_successful: {
-                type: "boolean",
-                description: "Whether the task succeeded after applying scar",
-              },
-              session_id: {
-                type: "string",
-                description: "GitMem session UUID (for non-issue session tracking)",
-              },
-              agent: {
-                type: "string",
-                description: "Agent identity (CLI, DAC, CODA-1, etc.)",
-              },
-            },
-            required: ["scar_identifier", "surfaced_at", "reference_type", "reference_context"],
-          },
-          description: "Scars to record as part of close (batch operation)",
         },
       },
       required: ["session_id", "close_type"],
@@ -701,7 +592,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sc",
-    description: "gitmem-sc (session_close) - Close session with compliance validation. Standard close requires task_completion proof (OD-491).",
+    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -714,64 +605,6 @@ export const TOOLS = [
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
         },
-        task_completion: {
-          type: "object",
-          properties: {
-            questions_displayed_at: {
-              type: "string",
-              description: "ISO timestamp when 7 reflection questions were displayed to human (Task 1)",
-            },
-            reflection_completed_at: {
-              type: "string",
-              description: "ISO timestamp when agent finished answering all questions (Task 2)",
-            },
-            human_asked_at: {
-              type: "string",
-              description: "ISO timestamp when agent asked human for corrections (Task 3)",
-            },
-            human_response: {
-              type: "string",
-              description: "Human's response - 'none', 'no corrections', or actual corrections (Task 4)",
-            },
-            human_response_at: {
-              type: "string",
-              description: "ISO timestamp when human responded (Task 4) - must be >= 3 seconds after human_asked_at",
-            },
-          },
-          required: ["questions_displayed_at", "reflection_completed_at", "human_asked_at", "human_response", "human_response_at"],
-          description: "Task completion proof - REQUIRED for standard close (OD-491)",
-        },
-        closing_reflection: closingReflectionSchema(),
-        human_corrections: {
-          type: "string",
-          description: "Human corrections/additions (required for standard close, even if empty)",
-        },
-        decisions: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              decision: { type: "string" },
-              rationale: { type: "string" },
-              alternatives_considered: {
-                type: "array",
-                items: { type: "string" },
-              },
-            },
-          },
-          description: "Decisions made during session",
-        },
-        open_threads: {
-          type: "array",
-          items: { type: "string" },
-          description: "Open threads to carry forward",
-        },
-        learnings_created: {
-          type: "array",
-          items: { type: "string" },
-          description: "IDs of learnings created before close",
-        },
         linear_issue: {
           type: "string",
           description: "Associated Linear issue",
@@ -779,20 +612,6 @@ export const TOOLS = [
         ceremony_duration_ms: {
           type: "number",
           description: "End-to-end ceremony duration from agent perspective (in milliseconds)",
-        },
-        scars_to_record: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              scar_id: { type: "string" },
-              reference_type: { type: "string" },
-              reference_context: { type: "string" },
-              session_id: { type: "string" },
-              agent: { type: "string" },
-            },
-          },
-          description: "Scars to record (batch recorded in parallel)",
         },
       },
       required: ["session_id", "close_type"],
@@ -1243,7 +1062,7 @@ export const TOOLS = [
   },
   {
     name: "gm-close",
-    description: "gm-close (session_close) - Close a GitMem session with compliance validation",
+    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to .gitmem/closing-payload.json BEFORE calling this tool. Only pass session_id and close_type inline.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1256,64 +1075,6 @@ export const TOOLS = [
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
         },
-        task_completion: {
-          type: "object",
-          properties: {
-            questions_displayed_at: {
-              type: "string",
-              description: "ISO timestamp when 7 reflection questions were displayed to human (Task 1)",
-            },
-            reflection_completed_at: {
-              type: "string",
-              description: "ISO timestamp when agent finished answering all questions (Task 2)",
-            },
-            human_asked_at: {
-              type: "string",
-              description: "ISO timestamp when agent asked human for corrections (Task 3)",
-            },
-            human_response: {
-              type: "string",
-              description: "Human's response - 'none', 'no corrections', or actual corrections (Task 4)",
-            },
-            human_response_at: {
-              type: "string",
-              description: "ISO timestamp when human responded (Task 4) - must be >= 3 seconds after human_asked_at",
-            },
-          },
-          required: ["questions_displayed_at", "reflection_completed_at", "human_asked_at", "human_response", "human_response_at"],
-          description: "Task completion proof - REQUIRED for standard close (OD-491). Timestamps must be in order with 3s minimum gap for human response.",
-        },
-        closing_reflection: closingReflectionSchema(),
-        human_corrections: {
-          type: "string",
-          description: "Human corrections/additions (required for standard close, even if empty)",
-        },
-        decisions: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              decision: { type: "string" },
-              rationale: { type: "string" },
-              alternatives_considered: {
-                type: "array",
-                items: { type: "string" },
-              },
-            },
-          },
-          description: "Decisions made during session",
-        },
-        open_threads: {
-          type: "array",
-          items: { type: "string" },
-          description: "Open threads to carry forward",
-        },
-        learnings_created: {
-          type: "array",
-          items: { type: "string" },
-          description: "IDs of learnings created before close",
-        },
         linear_issue: {
           type: "string",
           description: "Associated Linear issue",
@@ -1321,57 +1082,6 @@ export const TOOLS = [
         ceremony_duration_ms: {
           type: "number",
           description: "End-to-end ceremony duration from agent perspective (in milliseconds)",
-        },
-        scars_to_record: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              scar_identifier: {
-                type: "string",
-                description: "UUID or title/description of scar",
-              },
-              issue_id: {
-                type: "string",
-                description: "Linear issue UUID",
-              },
-              issue_identifier: {
-                type: "string",
-                description: "Linear issue identifier (e.g., OD-XXX)",
-              },
-              surfaced_at: {
-                type: "string",
-                description: "ISO timestamp when scar was retrieved",
-              },
-              acknowledged_at: {
-                type: "string",
-                description: "ISO timestamp when scar was acknowledged",
-              },
-              reference_type: {
-                type: "string",
-                enum: ["explicit", "implicit", "acknowledged", "refuted", "none"],
-                description: "How the scar was referenced",
-              },
-              reference_context: {
-                type: "string",
-                description: "How the scar was applied (1-2 sentences)",
-              },
-              execution_successful: {
-                type: "boolean",
-                description: "Whether the task succeeded after applying scar",
-              },
-              session_id: {
-                type: "string",
-                description: "GitMem session UUID (for non-issue session tracking)",
-              },
-              agent: {
-                type: "string",
-                description: "Agent identity (CLI, DAC, CODA-1, etc.)",
-              },
-            },
-            required: ["scar_identifier", "surfaced_at", "reference_type", "reference_context"],
-          },
-          description: "Scars to record as part of close (batch operation)",
         },
       },
       required: ["session_id", "close_type"],

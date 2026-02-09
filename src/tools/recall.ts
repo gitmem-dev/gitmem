@@ -32,6 +32,7 @@ import { getAgentIdentity } from "../services/agent-detection.js"; // OD-547
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
+import { getGitmemPath } from "../services/gitmem-dir.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
 /**
@@ -451,7 +452,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
 
     // OD-552: Update active-session.json with accumulated surfaced scars
     try {
-      const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+      const activeSessionPath = getGitmemPath("active-session.json");
       if (fs.existsSync(activeSessionPath)) {
         const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
         const session = getCurrentSession();

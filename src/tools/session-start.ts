@@ -28,6 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { setCurrentSession, addSurfacedScars } from "../services/session-state.js"; // OD-547, OD-552
+import { setGitmemDir } from "../services/gitmem-dir.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
   SessionStartParams,
@@ -491,10 +492,12 @@ async function sessionStartFree(
   agent: AgentIdentity,
   project: Project,
   timer: Timer,
-  metricsId: string
+  metricsId: string,
+  existingSessionId?: string
 ): Promise<SessionStartResult> {
   const storage = getStorage();
-  const sessionId = uuidv4();
+  const isResuming = !!existingSessionId;
+  const sessionId = existingSessionId || uuidv4();
   const today = new Date().toISOString().split("T")[0];
 
   // Load last session from local storage
@@ -587,22 +590,26 @@ async function sessionStartFree(
     console.error("[session_start] Failed to load wins:", error);
   }
 
-  // Create session record locally
-  try {
-    await storage.upsert("sessions", {
-      id: sessionId,
-      session_date: today,
-      session_title: params.linear_issue ? `Session for ${params.linear_issue}` : "Interactive Session",
-      project,
-      agent,
-      linear_issue: params.linear_issue || null,
-      decisions: [],
-      open_threads: [],
-      closing_reflection: null,
-      close_compliance: null,
-    });
-  } catch (error) {
-    console.error("[session_start] Failed to create session record:", error);
+  // Create session record locally (skip if resuming existing session)
+  if (!isResuming) {
+    try {
+      await storage.upsert("sessions", {
+        id: sessionId,
+        session_date: today,
+        session_title: params.linear_issue ? `Session for ${params.linear_issue}` : "Interactive Session",
+        project,
+        agent,
+        linear_issue: params.linear_issue || null,
+        decisions: [],
+        open_threads: [],
+        closing_reflection: null,
+        close_compliance: null,
+      });
+    } catch (error) {
+      console.error("[session_start] Failed to create session record:", error);
+    }
+  } else {
+    console.error(`[session_start] Resuming session ${sessionId} — skipping record creation`);
   }
 
   const latencyMs = timer.stop();
@@ -650,6 +657,7 @@ async function sessionStartFree(
   return {
     session_id: sessionId,
     agent,
+    ...(isResuming && { resumed: true }),
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
@@ -669,7 +677,7 @@ async function sessionStartFree(
 function checkExistingSession(
   agent: AgentIdentity,
   force?: boolean
-): SessionStartResult | null {
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string } | null {
   if (force) {
     console.error("[session_start] force=true, skipping active session guard");
     return null;
@@ -681,7 +689,7 @@ function checkExistingSession(
       const raw = fs.readFileSync(activeSessionPath, "utf8");
       const existing = JSON.parse(raw);
       if (existing.session_id) {
-        console.error(`[session_start] Existing active session found: ${existing.session_id}`);
+        console.error(`[session_start] Resuming active session: ${existing.session_id} (loading full context)`);
 
         // Restore in-memory session state so subsequent tools work correctly
         setCurrentSession({
@@ -698,10 +706,9 @@ function checkExistingSession(
         }
 
         return {
-          session_id: existing.session_id,
+          sessionId: existing.session_id,
           agent: existing.agent || agent,
-          resumed: true,
-          message: `Existing active session found (${existing.session_id}). Use force=true to override.`,
+          linearIssue: existing.linear_issue,
         };
       }
     }
@@ -734,15 +741,13 @@ export async function sessionStart(
   const agent = params.agent_identity || env.agent;
   const project: Project = params.project || "orchestra_dev";
 
-  // OD-558: Check for existing active session before creating a new one
+  // OD-558: Check for existing active session — reuse session_id but still load full context
   const existingSession = checkExistingSession(agent, params.force);
-  if (existingSession) {
-    return existingSession;
-  }
+  const isResuming = existingSession !== null;
 
   // Free tier: all-local path
   if (!hasSupabase()) {
-    return sessionStartFree(params, env, agent, project, timer, metricsId);
+    return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId);
   }
 
   // 2. Load last session first (needed for scar context)
@@ -781,10 +786,17 @@ export async function sessionStart(
     source: "session_start" as const,
   }));
 
-  // 4. Create session record
-  // OD-489: Track timing and network calls
-  const sessionCreateResult = await createSessionRecord(agent, project, params.linear_issue);
-  const sessionId = sessionCreateResult.session_id;
+  // 4. Create session record (skip if resuming existing session — OD-558)
+  let sessionId: string;
+  let sessionCreateResult: { session_id: string; latency_ms: number; network_call: boolean };
+  if (isResuming) {
+    sessionId = existingSession!.sessionId;
+    sessionCreateResult = { session_id: sessionId, latency_ms: 0, network_call: false };
+    console.error(`[session_start] Resuming session ${sessionId} — skipping record creation`);
+  } else {
+    sessionCreateResult = await createSessionRecord(agent, project, params.linear_issue);
+    sessionId = sessionCreateResult.session_id;
+  }
 
   const latencyMs = timer.stop();
   const memoriesSurfaced = scars.map((s) => s.id);
@@ -847,6 +859,7 @@ export async function sessionStart(
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
+    ...(isResuming && { resumed: true }),
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }), // OD-534
@@ -864,11 +877,13 @@ export async function sessionStart(
   // Uses .gitmem/ (not .claude/) so this works in any IDE — Cursor, Windsurf, etc.
   // Container lifecycle ensures cleanup — file dies with the container.
   try {
-    const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
-    const activeSessionDir = path.dirname(activeSessionPath);
+    const activeSessionDir = path.join(process.cwd(), ".gitmem");
     if (!fs.existsSync(activeSessionDir)) {
       fs.mkdirSync(activeSessionDir, { recursive: true });
     }
+    // Cache the resolved .gitmem path so session_close can find it even if CWD changes
+    setGitmemDir(activeSessionDir);
+    const activeSessionPath = path.join(activeSessionDir, "active-session.json");
     fs.writeFileSync(
       activeSessionPath,
       JSON.stringify({

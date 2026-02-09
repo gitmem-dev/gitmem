@@ -30,6 +30,7 @@ import { processTranscript } from "../services/transcript-chunker.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { getGitmemPath } from "../services/gitmem-dir.js";
 import type {
   SessionCloseParams,
   SessionCloseResult,
@@ -208,7 +209,7 @@ async function sessionCloseFree(
 
     // Clean up active session file
     try {
-      const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+      const activeSessionPath = getGitmemPath("active-session.json");
       if (fs.existsSync(activeSessionPath)) {
         fs.unlinkSync(activeSessionPath);
       }
@@ -254,7 +255,7 @@ export async function sessionClose(
   // This file survives context compaction — written by session_start, read here.
   if (!params.session_id && params.close_type !== "retroactive") {
     try {
-      const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+      const activeSessionPath = getGitmemPath("active-session.json");
       if (fs.existsSync(activeSessionPath)) {
         const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
         if (activeSession.session_id) {
@@ -270,7 +271,7 @@ export async function sessionClose(
   // 0a. File-based payload handoff: if .gitmem/closing-payload.json exists,
   // merge it with inline params (inline params take precedence).
   // This keeps the visible MCP tool call small: just session_id + close_type.
-  const payloadPath = path.join(process.cwd(), ".gitmem", "closing-payload.json");
+  const payloadPath = getGitmemPath("closing-payload.json");
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
@@ -626,7 +627,7 @@ export async function sessionClose(
       if (surfacedScars.length === 0) {
         // Fall back to file-based surfaced scars
         try {
-          const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+          const activeSessionPath = getGitmemPath("active-session.json");
           if (fs.existsSync(activeSessionPath)) {
             const activeSession = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
             if (activeSession.surfaced_scars && Array.isArray(activeSession.surfaced_scars)) {
@@ -771,7 +772,7 @@ export async function sessionClose(
 
     // OD-549: Clean up active session file
     try {
-      const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+      const activeSessionPath = getGitmemPath("active-session.json");
       if (fs.existsSync(activeSessionPath)) {
         fs.unlinkSync(activeSessionPath);
         console.error("[session_close] Cleaned up active-session.json");

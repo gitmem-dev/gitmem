@@ -232,18 +232,21 @@ async function sessionCloseFree(
 
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 1);
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true);
 
     return {
       success: true,
       session_id: sessionId,
       close_compliance: closeCompliance,
       performance: perfData,
+      display,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     clearCurrentSession();
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
 
     return {
       success: false,
@@ -251,8 +254,77 @@ async function sessionCloseFree(
       close_compliance: closeCompliance,
       validation_errors: [`Failed to persist session: ${errorMessage}`],
       performance: perfData,
+      display: errorDisplay,
     };
   }
+}
+
+/**
+ * Build a pre-formatted display string for consistent CLI output.
+ * Agents echo this string directly instead of formatting ad-hoc.
+ */
+function formatCloseDisplay(
+  sessionId: string,
+  compliance: CloseCompliance,
+  params: SessionCloseParams,
+  learningsCount: number,
+  success: boolean,
+  errors?: string[]
+): string {
+  const lines: string[] = [];
+
+  if (!success) {
+    lines.push("Session close FAILED.");
+    if (errors?.length) {
+      for (const e of errors) lines.push(`  Error: ${e}`);
+    }
+    lines.push("");
+  }
+
+  // Header
+  const closeLabel = compliance.close_type.toUpperCase();
+  lines.push(`${closeLabel} CLOSE — ${success ? "COMPLETE" : "FAILED"}`);
+  lines.push(`Session: ${sessionId.slice(0, 8)} | Agent: ${compliance.agent}`);
+  lines.push("");
+
+  // Checklist
+  const check = (ok: boolean) => ok ? "done" : "missing";
+
+  if (compliance.close_type === "standard") {
+    lines.push(`  [${check(compliance.checklist_displayed)}] Read active-session.json`);
+    lines.push(`  [${check(compliance.questions_answered_by_agent)}] Agent answered 7 questions`);
+    lines.push(`  [${check(compliance.human_asked_for_corrections)}] Human asked for corrections`);
+    lines.push(`  [${check(learningsCount > 0)}] Created learning entries (${learningsCount})`);
+    lines.push(`  [${check(compliance.scars_applied > 0)}] Recorded scar usage (${compliance.scars_applied})`);
+    lines.push(`  [${check(success)}] Session persisted`);
+  } else {
+    lines.push(`  [${check(success)}] Session persisted`);
+    lines.push(`  Agent: ${compliance.agent} | Close type: ${compliance.close_type}`);
+  }
+
+  // Threads summary
+  const threads = params.open_threads || [];
+  if (threads.length > 0) {
+    const openCount = threads.filter(t => {
+      if (typeof t === "string") return true;
+      return t.status === "open";
+    }).length;
+    const resolvedCount = threads.length - openCount;
+    lines.push("");
+    lines.push(`  Threads: ${openCount} open, ${resolvedCount} resolved, ${threads.length} total`);
+  }
+
+  // Decisions
+  if (params.decisions?.length) {
+    lines.push(`  Decisions: ${params.decisions.length} captured`);
+  }
+
+  // Learnings
+  if (learningsCount > 0) {
+    lines.push(`  Learnings: ${learningsCount} created`);
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -806,12 +878,15 @@ export async function sessionClose(
       console.warn("[session_close] Failed to clean up active-session.json:", error);
     }
 
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined);
+
     return {
       success: true,
       session_id: sessionId,
       close_compliance: closeCompliance,
       validation_errors: validation.warnings.length > 0 ? validation.warnings : undefined,
       performance: perfData,
+      display,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -821,12 +896,15 @@ export async function sessionClose(
     // OD-547: Clear session state even on error (session is done either way)
     clearCurrentSession();
 
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
+
     return {
       success: false,
       session_id: sessionId,
       close_compliance: closeCompliance,
       validation_errors: [`Failed to persist session: ${errorMessage}`],
       performance: perfData,
+      display: errorDisplay,
     };
   }
 }

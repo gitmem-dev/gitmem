@@ -249,6 +249,8 @@ export interface SessionCloseResult {
   close_compliance: CloseCompliance;
   validation_errors?: string[];
   performance: PerformanceData;
+  /** Pre-formatted display string for consistent CLI output */
+  display?: string;
 }
 
 // Learning types

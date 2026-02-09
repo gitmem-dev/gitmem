@@ -28,7 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
-import { aggregateThreads, saveThreadsFile, loadThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
@@ -826,17 +826,14 @@ function writeSessionFiles(
     });
   }
 
-  // 4. Threads file — merge with existing to preserve mid-session creations (e.g. create_thread)
-  // Without this merge, session_start overwrites threads.json with Supabase-aggregated
-  // threads only, destroying any threads created mid-session via create_thread that
-  // haven't been persisted to a closed Supabase session record yet.
+  // 4. Threads file — merge with existing to preserve mid-session creations AND resolutions.
+  // mergeThreadStates prefers resolved over open (so local resolve_thread calls survive
+  // even if Supabase still has the thread as "open" from an older/unclosed session).
+  // It also preserves local-only threads (created mid-session via create_thread).
   const existingFileThreads = loadThreadsFile();
-  const incomingIds = new Set(threads.map(t => t.id));
-  const incomingTexts = new Set(threads.map(t => t.text.toLowerCase().trim()));
-  const preserved = existingFileThreads.filter(t =>
-    !incomingIds.has(t.id) && !incomingTexts.has(t.text.toLowerCase().trim())
-  );
-  const merged = [...threads, ...preserved];
+  const merged = existingFileThreads.length > 0
+    ? mergeThreadStates(threads, existingFileThreads)
+    : threads;
   if (merged.length > 0) {
     saveThreadsFile(merged);
   }

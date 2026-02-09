@@ -28,7 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
-import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { aggregateThreads, saveThreadsFile, loadThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
@@ -619,8 +619,10 @@ async function sessionStartFree(
   }));
 
   // GIT-20: Persist to per-session dir, legacy file, and registry
+  // writeSessionFiles merges with existing file threads to preserve mid-session creations
+  let freeMergedThreads = freeAggregatedThreads;
   try {
-    writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads);
+    freeMergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads);
   } catch (error) {
     console.warn("[session_start] Failed to persist session files:", error);
   }
@@ -631,7 +633,7 @@ async function sessionStartFree(
     agent,
     startedAt: new Date(),
     surfacedScars,
-    threads: freeAggregatedThreads,
+    threads: freeMergedThreads,
   });
 
   const freeResult: SessionStartResult = {
@@ -641,7 +643,7 @@ async function sessionStartFree(
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
-    ...(freeAggregatedThreads.length > 0 && { open_threads: freeAggregatedThreads }),
+    ...(freeMergedThreads.length > 0 && { open_threads: freeMergedThreads }),
     ...(freeRecentlyResolved.length > 0 && { recently_resolved: freeRecentlyResolved }),
     relevant_scars: scars,
     recent_decisions: decisions,
@@ -773,7 +775,7 @@ function writeSessionFiles(
   threads: ThreadObject[],
   recordingPath?: string | null,
   isRefresh?: boolean,
-): void {
+): ThreadObject[] {
   const gitmemDir = path.join(process.cwd(), ".gitmem");
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
@@ -824,10 +826,21 @@ function writeSessionFiles(
     });
   }
 
-  // 4. Threads file
-  if (threads.length > 0) {
-    saveThreadsFile(threads);
+  // 4. Threads file — merge with existing to preserve mid-session creations (e.g. create_thread)
+  // Without this merge, session_start overwrites threads.json with Supabase-aggregated
+  // threads only, destroying any threads created mid-session via create_thread that
+  // haven't been persisted to a closed Supabase session record yet.
+  const existingFileThreads = loadThreadsFile();
+  const incomingIds = new Set(threads.map(t => t.id));
+  const incomingTexts = new Set(threads.map(t => t.text.toLowerCase().trim()));
+  const preserved = existingFileThreads.filter(t =>
+    !incomingIds.has(t.id) && !incomingTexts.has(t.text.toLowerCase().trim())
+  );
+  const merged = [...threads, ...preserved];
+  if (merged.length > 0) {
+    saveThreadsFile(merged);
   }
+  return merged;
 }
 
 /**
@@ -1042,6 +1055,28 @@ export async function sessionStart(
   const aggregatedThreads = lastSessionResult.aggregated_open_threads;
   const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
 
+  // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
+  // writeSessionFiles merges aggregated threads with existing file threads to preserve
+  // mid-session creations (e.g. create_thread calls that haven't been session_closed yet)
+  let mergedThreads = aggregatedThreads;
+  try {
+    mergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath);
+  } catch (error) {
+    console.warn("[session_start] Failed to persist session files:", error);
+  }
+
+  // OD-547: Set active session for variant assignment in recall
+  // OD-552: Initialize with surfaced scars for auto-bridge at close time
+  // OD-thread-lifecycle: Initialize with merged threads (aggregated + mid-session preserved)
+  setCurrentSession({
+    sessionId,
+    linearIssue: params.linear_issue,
+    agent,
+    startedAt: new Date(),
+    surfacedScars,
+    threads: mergedThreads,
+  });
+
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -1049,8 +1084,8 @@ export async function sessionStart(
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }), // OD-534
-    ...(aggregatedThreads.length > 0 && {
-      open_threads: aggregatedThreads,
+    ...(mergedThreads.length > 0 && {
+      open_threads: mergedThreads,
     }),
     ...(recentlyResolvedThreads.length > 0 && {
       recently_resolved: recentlyResolvedThreads,
@@ -1061,25 +1096,6 @@ export async function sessionStart(
     ...(recordingPath && { recording_path: recordingPath }),
     performance,
   };
-
-  // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
-  try {
-    writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath);
-  } catch (error) {
-    console.warn("[session_start] Failed to persist session files:", error);
-  }
-
-  // OD-547: Set active session for variant assignment in recall
-  // OD-552: Initialize with surfaced scars for auto-bridge at close time
-  // OD-thread-lifecycle: Initialize with aggregated threads for mid-session resolution
-  setCurrentSession({
-    sessionId,
-    linearIssue: params.linear_issue,
-    agent,
-    startedAt: new Date(),
-    surfacedScars,
-    threads: aggregatedThreads,
-  });
 
   // Record metrics
   recordMetrics({
@@ -1217,7 +1233,7 @@ export async function sessionRefresh(
   // Merge: add new scars to existing (addSurfacedScars deduplicates by scar_id)
   addSurfacedScars(newSurfacedScars);
 
-  const aggregatedThreads = lastSessionResult.aggregated_open_threads;
+  const refreshAggregatedThreads = lastSessionResult.aggregated_open_threads;
   const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
 
   // 4. Extract PROJECT STATE (OD-534)
@@ -1271,8 +1287,7 @@ export async function sessionRefresh(
     detected_environment: detectAgent(),
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
-    ...(aggregatedThreads.length > 0 && { open_threads: aggregatedThreads }),
-    ...(recentlyResolvedThreads.length > 0 && { recently_resolved: recentlyResolvedThreads }),
+    // open_threads and setCurrentSession filled after merge below
     relevant_scars: scars,
     recent_decisions: decisions,
     ...(wins.length > 0 && { recent_wins: wins }),
@@ -1281,22 +1296,31 @@ export async function sessionRefresh(
   };
 
   // GIT-20: Update per-session dir and legacy file with refreshed context
+  // writeSessionFiles merges with existing file threads to preserve mid-session creations
+  let refreshMergedThreads = refreshAggregatedThreads;
   try {
-    // Merge surfaced scars: existing + new from this refresh
     const allSurfacedScars = [...(Array.isArray(getSurfacedScars()) ? getSurfacedScars() : []), ...newSurfacedScars];
-    writeSessionFiles(sessionId, agent, project, allSurfacedScars, aggregatedThreads, recordingPath, true);
+    refreshMergedThreads = writeSessionFiles(sessionId, agent, project, allSurfacedScars, refreshAggregatedThreads, recordingPath, true);
     console.error(`[session_refresh] Context refreshed for session ${sessionId}`);
   } catch (error) {
     console.warn("[session_refresh] Failed to update session files:", error);
   }
 
-  // 7. Update in-memory session state
+  // Add merged threads to result
+  if (refreshMergedThreads.length > 0) {
+    result.open_threads = refreshMergedThreads;
+  }
+  if (recentlyResolvedThreads.length > 0) {
+    result.recently_resolved = recentlyResolvedThreads;
+  }
+
+  // 7. Update in-memory session state with merged threads
   setCurrentSession({
     sessionId,
     agent,
     startedAt: currentSession?.startedAt || new Date(),
     surfacedScars: [...(currentSession?.surfacedScars || []), ...newSurfacedScars],
-    threads: aggregatedThreads,
+    threads: refreshMergedThreads,
     linearIssue: currentSession?.linearIssue,
   });
 
@@ -1322,7 +1346,7 @@ export async function sessionRefresh(
       scars_count: scars.length,
       decisions_count: decisions.length,
       wins_count: wins.length,
-      open_threads_count: aggregatedThreads.length,
+      open_threads_count: refreshMergedThreads.length,
       used_local_search: usedLocalSearch,
       network_calls_made: performance.network_calls_made,
       fully_local: performance.fully_local,

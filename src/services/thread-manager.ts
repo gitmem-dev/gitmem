@@ -55,8 +55,8 @@ export function normalizeThreads(
           if (parsed.id && parsed.text && parsed.status) {
             return parsed as ThreadObject;
           }
-          // Legacy format: {item, context}
-          return migrateStringThread(parsed.item || item, sourceSession);
+          // Legacy format: {item, context} or {text, status} without id
+          return migrateStringThread(parsed.item || parsed.text || item, sourceSession);
         } catch {
           // Not valid JSON, treat as plain text
         }

@@ -27,9 +27,11 @@ import {
   buildPerformanceData,
   buildComponentPerformance,
 } from "../services/metrics.js";
-import { setCurrentSession, getCurrentSession, addSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
+import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
-import { setGitmemDir } from "../services/gitmem-dir.js";
+import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
+import { registerSession, findSessionByHostPid, pruneStale } from "../services/active-sessions.js";
+import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
@@ -616,24 +618,11 @@ async function sessionStartFree(
     source: "session_start" as const,
   }));
 
-  // Persist active session file
+  // GIT-20: Persist to per-session dir, legacy file, and registry
   try {
-    const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
-    const activeSessionDir = path.dirname(activeSessionPath);
-    if (!fs.existsSync(activeSessionDir)) {
-      fs.mkdirSync(activeSessionDir, { recursive: true });
-    }
-    fs.writeFileSync(
-      activeSessionPath,
-      JSON.stringify({ session_id: sessionId, agent, started_at: new Date().toISOString(), project, surfaced_scars: surfacedScars }, null, 2)
-    );
+    writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads);
   } catch (error) {
-    console.warn("[session_start] Failed to persist active session file:", error);
-  }
-
-  // OD-thread-lifecycle: Persist threads to file and session state
-  if (freeAggregatedThreads.length > 0) {
-    saveThreadsFile(freeAggregatedThreads);
+    console.warn("[session_start] Failed to persist session files:", error);
   }
 
   setCurrentSession({
@@ -664,9 +653,60 @@ async function sessionStartFree(
 }
 
 /**
- * OD-558: Check for existing active session and return it if found.
- * Prevents accidental overwrites from duplicate session_start calls,
- * compaction recovery, or parallel processes.
+ * Read session state from per-session directory or legacy file.
+ * Tries per-session dir first, falls back to legacy active-session.json.
+ */
+function readSessionFile(sessionId: string): Record<string, unknown> | null {
+  try {
+    const sessionFilePath = getSessionPath(sessionId, "session.json");
+    if (fs.existsSync(sessionFilePath)) {
+      return JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    }
+  } catch { /* fall through */ }
+
+  try {
+    const legacyPath = path.join(getGitmemDir(), "active-session.json");
+    if (fs.existsSync(legacyPath)) {
+      return JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
+    }
+  } catch { /* fall through */ }
+
+  return null;
+}
+
+/**
+ * Restore in-memory session state from a session data object.
+ * Shared by checkExistingSession() for both registry and legacy paths.
+ */
+function restoreSessionState(
+  existing: Record<string, unknown>,
+  fallbackAgent: AgentIdentity,
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string } {
+  setCurrentSession({
+    sessionId: existing.session_id as string,
+    linearIssue: existing.linear_issue as string | undefined,
+    agent: (existing.agent as AgentIdentity) || fallbackAgent,
+    startedAt: existing.started_at ? new Date(existing.started_at as string) : new Date(),
+    surfacedScars: (existing.surfaced_scars as SurfacedScar[]) || [],
+  });
+
+  if (Array.isArray(existing.surfaced_scars) && existing.surfaced_scars.length) {
+    addSurfacedScars(existing.surfaced_scars as SurfacedScar[]);
+  }
+
+  return {
+    sessionId: existing.session_id as string,
+    agent: (existing.agent as AgentIdentity) || fallbackAgent,
+    linearIssue: existing.linear_issue as string | undefined,
+  };
+}
+
+/**
+ * GIT-20 / OD-558: Check for existing active session and return it if found.
+ *
+ * Uses the active-sessions registry (hostname+PID) to identify THIS process's
+ * session, preventing cross-process session theft on shared filesystems.
+ * Falls back to legacy active-session.json for backward compatibility.
  */
 function checkExistingSession(
   agent: AgentIdentity,
@@ -678,40 +718,113 @@ function checkExistingSession(
   }
 
   try {
+    // GIT-20: Prune stale sessions from crashed/dead containers
+    pruneStale();
+
+    // GIT-20: Check registry for THIS process's session (hostname + PID match)
+    const mySession = findSessionByHostPid(os.hostname(), process.pid);
+    if (mySession) {
+      console.error(`[session_start] Found own session in registry: ${mySession.session_id} (host: ${mySession.hostname}, pid: ${mySession.pid})`);
+      const data = readSessionFile(mySession.session_id);
+      if (data && data.session_id) {
+        console.error(`[session_start] Resuming own session: ${mySession.session_id}`);
+        return restoreSessionState(data, agent);
+      }
+      // Registry entry exists but session file is missing — fall through to create new
+      console.warn(`[session_start] Registry entry found but session file missing for ${mySession.session_id}`);
+    }
+
+    // Legacy fallback: check active-session.json
     const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
     if (fs.existsSync(activeSessionPath)) {
       const raw = fs.readFileSync(activeSessionPath, "utf8");
       const existing = JSON.parse(raw);
       if (existing.session_id) {
-        console.error(`[session_start] Resuming active session: ${existing.session_id} (loading full context)`);
-
-        // Restore in-memory session state so subsequent tools work correctly
-        setCurrentSession({
-          sessionId: existing.session_id,
-          linearIssue: existing.linear_issue,
-          agent: existing.agent || agent,
-          startedAt: existing.started_at ? new Date(existing.started_at) : new Date(),
-          surfacedScars: existing.surfaced_scars || [],
-        });
-
-        // Restore surfaced scars for auto-bridge
-        if (existing.surfaced_scars?.length) {
-          addSurfacedScars(existing.surfaced_scars);
+        // GIT-20: Only resume legacy file if it belongs to this process
+        // (hostname+pid match) or if it's a pre-migration file (no hostname/pid fields)
+        const sameHost = !existing.hostname || existing.hostname === os.hostname();
+        const samePid = !existing.pid || existing.pid === process.pid;
+        if (sameHost && samePid) {
+          console.error(`[session_start] Resuming session from legacy file: ${existing.session_id}`);
+          return restoreSessionState(existing, agent);
         }
-
-        return {
-          sessionId: existing.session_id,
-          agent: existing.agent || agent,
-          linearIssue: existing.linear_issue,
-        };
+        console.error(`[session_start] Legacy file belongs to another process (host: ${existing.hostname}, pid: ${existing.pid}), skipping`);
       }
     }
   } catch (error) {
-    // File doesn't exist, is corrupted, or can't be read — proceed normally
-    console.error("[session_start] No valid active session file found, creating new session");
+    console.error("[session_start] Error checking existing sessions:", error);
   }
 
   return null;
+}
+
+/**
+ * GIT-20: Write session state to per-session directory, legacy file, and registry.
+ * Consolidates write logic used by session_start (main + free) and session_refresh.
+ */
+function writeSessionFiles(
+  sessionId: string,
+  agent: AgentIdentity,
+  project: Project,
+  surfacedScars: SurfacedScar[],
+  threads: ThreadObject[],
+  recordingPath?: string | null,
+  isRefresh?: boolean,
+): void {
+  const gitmemDir = path.join(process.cwd(), ".gitmem");
+  if (!fs.existsSync(gitmemDir)) {
+    fs.mkdirSync(gitmemDir, { recursive: true });
+  }
+  setGitmemDir(gitmemDir);
+
+  const data = {
+    session_id: sessionId,
+    agent,
+    started_at: new Date().toISOString(),
+    project,
+    hostname: os.hostname(),
+    pid: process.pid,
+    surfaced_scars: surfacedScars,
+    threads,
+    ...(recordingPath && { recording_path: recordingPath }),
+    ...(isRefresh && { last_refreshed: new Date().toISOString() }),
+  };
+
+  // 1. Per-session directory (GIT-20)
+  try {
+    const sessionFilePath = getSessionPath(sessionId, "session.json");
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
+    console.error(`[session_start] Session state written to ${sessionFilePath}`);
+  } catch (error) {
+    console.warn("[session_start] Failed to write per-session file:", error);
+  }
+
+  // 2. Legacy active-session.json (backward compat for recall/session_close)
+  try {
+    fs.writeFileSync(
+      path.join(gitmemDir, "active-session.json"),
+      JSON.stringify(data, null, 2)
+    );
+  } catch (error) {
+    console.warn("[session_start] Failed to write legacy active-session.json:", error);
+  }
+
+  // 3. Register in active-sessions registry (skip on refresh — already registered)
+  if (!isRefresh) {
+    registerSession({
+      session_id: sessionId,
+      agent,
+      started_at: data.started_at,
+      hostname: os.hostname(),
+      pid: process.pid,
+      project,
+    });
+  }
+
+  // 4. Threads file
+  if (threads.length > 0) {
+    saveThreadsFile(threads);
+  }
 }
 
 /**
@@ -946,37 +1059,11 @@ export async function sessionStart(
     performance,
   };
 
-  // OD-549: Persist session_id to .gitmem/active-session.json for compaction survival
-  // Uses .gitmem/ (not .claude/) so this works in any IDE — Cursor, Windsurf, etc.
-  // Container lifecycle ensures cleanup — file dies with the container.
+  // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
   try {
-    const activeSessionDir = path.join(process.cwd(), ".gitmem");
-    if (!fs.existsSync(activeSessionDir)) {
-      fs.mkdirSync(activeSessionDir, { recursive: true });
-    }
-    // Cache the resolved .gitmem path so session_close can find it even if CWD changes
-    setGitmemDir(activeSessionDir);
-    const activeSessionPath = path.join(activeSessionDir, "active-session.json");
-    fs.writeFileSync(
-      activeSessionPath,
-      JSON.stringify({
-        session_id: sessionId,
-        agent,
-        started_at: new Date().toISOString(),
-        project,
-        surfaced_scars: surfacedScars, // OD-552: Persist for session close auto-bridge
-        threads: aggregatedThreads, // OD-thread-lifecycle: Persist for mid-session access
-        ...(recordingPath && { recording_path: recordingPath }),
-      }, null, 2)
-    );
-    // OD-thread-lifecycle: Also persist threads to dedicated file
-    if (aggregatedThreads.length > 0) {
-      saveThreadsFile(aggregatedThreads);
-    }
-    console.error(`[session_start] Active session persisted to ${activeSessionPath}`);
+    writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath);
   } catch (error) {
-    // Non-fatal: session works fine without file persistence
-    console.warn("[session_start] Failed to persist active session file:", error);
+    console.warn("[session_start] Failed to persist session files:", error);
   }
 
   // OD-547: Set active session for variant assignment in recall
@@ -1058,9 +1145,23 @@ export async function sessionRefresh(
     agent = (currentSession.agent as AgentIdentity) || "CLI";
     project = params.project || "orchestra_dev";
   } else {
-    // Fallback: read from .gitmem/active-session.json
-    const activeSessionPath = path.join(process.cwd(), ".gitmem", "active-session.json");
-    if (!fs.existsSync(activeSessionPath)) {
+    // GIT-20: Fallback — check registry for this process, then legacy file
+    const mySession = findSessionByHostPid(os.hostname(), process.pid);
+    let raw: Record<string, unknown> | null = null;
+
+    if (mySession) {
+      raw = readSessionFile(mySession.session_id);
+    }
+    if (!raw) {
+      // Try legacy active-session.json
+      try {
+        const legacyPath = path.join(process.cwd(), ".gitmem", "active-session.json");
+        if (fs.existsSync(legacyPath)) {
+          raw = JSON.parse(fs.readFileSync(legacyPath, "utf-8"));
+        }
+      } catch { /* fall through */ }
+    }
+    if (!raw || !raw.session_id) {
       return {
         session_id: "",
         agent: "CLI",
@@ -1069,20 +1170,9 @@ export async function sessionRefresh(
         performance: buildPerformanceData("session_refresh", timer.stop(), 0),
       };
     }
-    try {
-      const raw = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-      sessionId = raw.session_id;
-      agent = raw.agent || "CLI";
-      project = params.project || raw.project || "orchestra_dev";
-    } catch {
-      return {
-        session_id: "",
-        agent: "CLI",
-        refreshed: true,
-        message: "Failed to read active-session.json — call session_start first",
-        performance: buildPerformanceData("session_refresh", timer.stop(), 0),
-      };
-    }
+    sessionId = raw.session_id as string;
+    agent = (raw.agent as AgentIdentity) || "CLI";
+    project = params.project || (raw.project as Project) || "orchestra_dev";
   }
 
   // Free tier: all-local path (reuse session_start free path)
@@ -1187,30 +1277,14 @@ export async function sessionRefresh(
     performance,
   };
 
-  // 6. Update active-session.json with refreshed context
+  // GIT-20: Update per-session dir and legacy file with refreshed context
   try {
-    const activeSessionDir = path.join(process.cwd(), ".gitmem");
-    const activeSessionPath = path.join(activeSessionDir, "active-session.json");
-    // Merge: preserve existing fields, update context
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(activeSessionPath)) {
-      existing = JSON.parse(fs.readFileSync(activeSessionPath, "utf-8"));
-    }
-    fs.writeFileSync(
-      activeSessionPath,
-      JSON.stringify({
-        ...existing,
-        surfaced_scars: [...(Array.isArray(existing.surfaced_scars) ? existing.surfaced_scars : []), ...newSurfacedScars],
-        threads: aggregatedThreads,
-        last_refreshed: new Date().toISOString(),
-      }, null, 2)
-    );
-    if (aggregatedThreads.length > 0) {
-      saveThreadsFile(aggregatedThreads);
-    }
+    // Merge surfaced scars: existing + new from this refresh
+    const allSurfacedScars = [...(Array.isArray(getSurfacedScars()) ? getSurfacedScars() : []), ...newSurfacedScars];
+    writeSessionFiles(sessionId, agent, project, allSurfacedScars, aggregatedThreads, recordingPath, true);
     console.error(`[session_refresh] Context refreshed for session ${sessionId}`);
   } catch (error) {
-    console.warn("[session_refresh] Failed to update active session file:", error);
+    console.warn("[session_refresh] Failed to update session files:", error);
   }
 
   // 7. Update in-memory session state

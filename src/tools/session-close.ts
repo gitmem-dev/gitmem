@@ -859,7 +859,7 @@ export async function sessionClose(
           sessionData.session_title as string || "",
           params.closing_reflection?.what_worked || "",
           params.closing_reflection?.what_broke || "",
-          ...(params.open_threads || []),
+          ...(params.open_threads || []).map(t => typeof t === "string" ? t : t.text),
         ].filter(Boolean);
         const embeddingText = embeddingParts.join(" | ");
         if (embeddingText.length > 10) {

@@ -75,7 +75,36 @@ export function normalizeThreads(
       }
       return migrateStringThread(item, sourceSession);
     }
-    // Already a ThreadObject
+    // Already a ThreadObject — but validate and repair common field issues
+    const obj = item as unknown as Record<string, unknown>;
+
+    // Fix objects with "note" instead of "text" (agent writes {id, status, note})
+    if (!obj.text && obj.note && typeof obj.note === "string") {
+      return {
+        ...item,
+        text: obj.note as string,
+      } as ThreadObject;
+    }
+
+    // Fix objects where "text" is a JSON string containing a thread
+    if (typeof obj.text === "string" && (obj.text as string).startsWith("{")) {
+      try {
+        const inner = JSON.parse(obj.text as string);
+        if (inner.id && (inner.text || inner.note)) {
+          return {
+            id: inner.id,
+            text: inner.text || inner.note,
+            status: inner.status || item.status,
+            created_at: inner.created_at || item.created_at || new Date().toISOString(),
+            ...(sourceSession && { source_session: sourceSession }),
+            ...(inner.resolved_at && { resolved_at: inner.resolved_at }),
+          } as ThreadObject;
+        }
+      } catch {
+        // Not valid JSON in text field, keep as-is
+      }
+    }
+
     return item;
   });
 }

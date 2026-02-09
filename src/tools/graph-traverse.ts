@@ -91,7 +91,7 @@ const SELECT_COLS =
   "id,subject,predicate,object,event_time,decay_weight,source_type,source_id,source_linear_issue,created_by";
 
 const KNOWN_AGENTS = ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"];
-const KNOWN_PERSONAS = ["Elena", "Marcus", "Reiko", "Jax"];
+const KNOWN_PERSONAS = ["Elena", "Marcus", "Reiko", "Jax", "Chris Crawford"];
 
 // --- Node Normalization ---
 

@@ -85,6 +85,29 @@ export function normalizePersonaLabel(raw: string): string {
   return canonical || name;
 }
 
+/** Set of canonical persona names (Orchestra team members + human). */
+const KNOWN_PERSONAS = new Set(Object.values(CANONICAL_PERSONA_NAMES));
+
+/**
+ * Determine if a name refers to an Orchestra persona vs an agent.
+ * Returns true for Elena, Marcus, Reiko, Jax, Chris Crawford.
+ */
+function isPersonaName(name: string): boolean {
+  return KNOWN_PERSONAS.has(normalizePersonaLabel(name));
+}
+
+/**
+ * Build a prefixed node label: "Persona: X" for known personas, "Agent: X" for agents.
+ * Normalizes persona names to canonical form.
+ */
+export function buildInfluencerLabel(rawName: string): string {
+  const normalized = normalizePersonaLabel(rawName);
+  if (isPersonaName(normalized)) {
+    return `Persona: ${normalized}`;
+  }
+  return `Agent: ${rawName}`;
+}
+
 /**
  * Build a human-readable subject label following the existing DB convention:
  * "Win: Read-side enrichment pattern for denormalization gaps"
@@ -148,7 +171,7 @@ export function extractLearningTriples(params: LearningTripleParams): TripleCand
       ...base,
       subject: subjectLabel,
       predicate: "influenced_by",
-      object: `Agent: ${params.persona_name}`,
+      object: buildInfluencerLabel(params.persona_name),
     });
   }
 
@@ -210,14 +233,14 @@ export function extractDecisionTriples(params: DecisionTripleParams): TripleCand
   if (params.personas_involved?.length) {
     const seen = new Set<string>();
     for (const persona of params.personas_involved) {
-      const normalized = normalizePersonaLabel(persona);
-      if (seen.has(normalized)) continue; // dedup after normalization
-      seen.add(normalized);
+      const label = buildInfluencerLabel(persona);
+      if (seen.has(label)) continue; // dedup after normalization
+      seen.add(label);
       triples.push({
         ...base,
         subject: subjectLabel,
         predicate: "influenced_by",
-        object: `Persona: ${normalized}`,
+        object: label,
       });
     }
   }

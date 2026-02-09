@@ -18,6 +18,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ListThreadsParams, ListThreadsResult, ThreadObject } from "../types/index.js";
 
 export async function listThreads(
@@ -60,7 +61,7 @@ export async function listThreads(
   }).catch(() => {});
 
   return {
-    threads,
+    threads: threads.map(formatThreadForDisplay),
     total_open: totalOpen,
     total_resolved: totalResolved,
     performance: perfData,

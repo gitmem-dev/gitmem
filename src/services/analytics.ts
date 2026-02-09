@@ -7,7 +7,7 @@
  * Uses directQuery for raw Supabase REST access (no ww-mcp dependency).
  */
 
-import { directQuery } from "./supabase-client.js";
+import { directQuery, directQueryAll } from "./supabase-client.js";
 import { getCache } from "./cache.js";
 import type { Project } from "../types/index.js";
 
@@ -93,11 +93,10 @@ export async function querySessionsByDateRange(
         "created_at": `gte.${startDate}`,
       };
 
-      return directQuery<SessionRecord>("orchestra_sessions", {
+      return directQueryAll<SessionRecord>("orchestra_sessions", {
         select: "id,session_title,session_date,agent,linear_issue,decisions,open_threads,closing_reflection,close_compliance,created_at,project",
         filters,
         order: "created_at.desc",
-        limit: 1000,
       });
     }
   );
@@ -201,11 +200,10 @@ export async function queryScarUsageByDateRange(
         surfaced_at: `gte.${startDate}`,
       };
 
-      return directQuery<ScarUsageRecord>("scar_usage", {
+      return directQueryAll<ScarUsageRecord>("scar_usage", {
         select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
         filters,
         order: "surfaced_at.desc",
-        limit: 1000,
       });
     }
   );
@@ -571,4 +569,157 @@ export function aggregateClosingReflections(
     wrong_assumptions: truncate(all.wrong_assumptions),
     do_differently: truncate(all.do_differently),
   };
+}
+
+// --- Formatters ---
+
+/**
+ * Format summary analytics as compact markdown.
+ */
+export function formatSummary(data: SummaryAnalytics): string {
+  const { period, total_sessions, sessions_with_reflections, sessions_with_issues,
+          total_decisions, total_open_threads, agents, close_type_distribution, top_issues } = data;
+
+  const lines: string[] = [
+    `## ${period.days}-Day Summary (${period.start} to ${period.end})`,
+    ``,
+    `**Sessions:** ${total_sessions} | **Decisions:** ${total_decisions} | **Open Threads:** ${total_open_threads}`,
+    `**With Reflections:** ${sessions_with_reflections} | **With Issues:** ${sessions_with_issues}`,
+    ``,
+    `### Agents`,
+  ];
+
+  for (const agent of agents) {
+    const closes = Object.entries(agent.close_types)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => `${count} ${type}`)
+      .join(", ");
+    lines.push(`- **${agent.agent}**: ${agent.session_count} sessions, ${agent.decisions_total} decisions (${closes})`);
+  }
+
+  lines.push(``, `### Close Types`);
+  for (const [type, count] of Object.entries(close_type_distribution).sort((a, b) => b[1] - a[1])) {
+    const pct = total_sessions > 0 ? ((count / total_sessions) * 100).toFixed(0) : "0";
+    lines.push(`- ${type}: ${count} (${pct}%)`);
+  }
+
+  if (top_issues.length > 0) {
+    lines.push(``, `### Top Issues`);
+    for (const { issue, session_count } of top_issues) {
+      lines.push(`- ${issue}: ${session_count} sessions`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Format reflections as compact markdown (top N per category).
+ */
+export function formatReflections(
+  data: {
+    period: { start: string; end: string; days: number };
+    total_sessions_scanned: number;
+    sessions_with_reflections: number;
+    what_broke: ReflectionCategory;
+    what_worked: ReflectionCategory;
+    wrong_assumptions: ReflectionCategory;
+    do_differently: ReflectionCategory;
+  },
+  topN: number = 10
+): string {
+  const lines: string[] = [
+    `## ${data.period.days}-Day Reflections (${data.period.start} to ${data.period.end})`,
+    ``,
+    `**Sessions:** ${data.total_sessions_scanned} | **With Reflections:** ${data.sessions_with_reflections}`,
+    ``,
+  ];
+
+  const sections = [
+    { title: "What Broke", cat: data.what_broke },
+    { title: "What Worked", cat: data.what_worked },
+    { title: "Wrong Assumptions", cat: data.wrong_assumptions },
+    { title: "Do Differently", cat: data.do_differently },
+  ];
+
+  for (const { title, cat } of sections) {
+    lines.push(`### ${title} (${cat.total_count})`);
+    if (cat.entries.length === 0) {
+      lines.push(`*None*`);
+    } else {
+      for (const e of cat.entries.slice(0, topN)) {
+        lines.push(`- [${e.agent}, ${e.date}] ${e.text}`);
+      }
+      if (cat.total_count > topN) {
+        lines.push(`*...and ${cat.total_count - topN} more*`);
+      }
+    }
+    lines.push(``);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Format blindspots as compact markdown.
+ */
+export function formatBlindspots(data: BlindspotsData): string {
+  const lines: string[] = [
+    `## ${data.period.days}-Day Blindspots (${data.period.start} to ${data.period.end})`,
+    ``,
+    `**Scars Surfaced:** ${data.total_scars_surfaced} unique | **Usages:** ${data.total_scar_usages}`,
+    ``,
+  ];
+
+  // Top ignored scars
+  lines.push(`### Most Ignored Scars`);
+  const topIgnored = data.ignored_scars.slice(0, 15);
+  if (topIgnored.length === 0) {
+    lines.push(`*None*`);
+  } else {
+    for (const s of topIgnored) {
+      const pct = (s.ignore_rate * 100).toFixed(0);
+      lines.push(`- [${s.severity}] **${s.title}**: ${s.times_ignored}/${s.times_surfaced} ignored (${pct}%)`);
+    }
+  }
+  lines.push(``);
+
+  // Failed applications
+  lines.push(`### Failed Applications`);
+  const topFailed = data.failed_applications.slice(0, 10);
+  if (topFailed.length === 0) {
+    lines.push(`*None*`);
+  } else {
+    for (const s of topFailed) {
+      const pct = (s.failure_rate * 100).toFixed(0);
+      lines.push(`- **${s.title}**: ${s.times_failed}/${s.times_applied} failed (${pct}%)`);
+    }
+  }
+  lines.push(``);
+
+  // Agent effectiveness
+  lines.push(`### Agent Effectiveness`);
+  for (const a of data.agent_effectiveness) {
+    const appPct = (a.application_rate * 100).toFixed(0);
+    const successPct = (a.success_rate * 100).toFixed(0);
+    lines.push(`- **${a.agent}**: ${a.scars_surfaced} surfaced, ${a.scars_applied} applied (${appPct}%), ${successPct}% success`);
+  }
+  lines.push(``);
+
+  // Severity breakdown
+  lines.push(`### By Severity`);
+  for (const s of data.severity_breakdown) {
+    const pct = (s.application_rate * 100).toFixed(0);
+    lines.push(`- **${s.severity}**: ${s.surfaced} surfaced, ${s.applied} applied, ${s.ignored} ignored (${pct}% rate)`);
+  }
+
+  // Repeat mistakes
+  if (data.repeat_mistakes.length > 0) {
+    lines.push(``, `### Repeat Mistakes (${data.repeat_mistakes.length})`);
+    for (const rm of data.repeat_mistakes) {
+      lines.push(`- **${rm.title}** (${rm.created_at.slice(0, 10)}): ${rm.reason}`);
+    }
+  }
+
+  return lines.join("\n");
 }

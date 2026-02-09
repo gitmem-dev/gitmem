@@ -30,6 +30,7 @@ import {
 import { setCurrentSession, getCurrentSession, addSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { setGitmemDir } from "../services/gitmem-dir.js";
+import { formatDate } from "../services/timezone.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
   SessionStartParams,
@@ -151,7 +152,7 @@ async function loadLastSession(
         session: {
           id: session.id,
           title: session.session_title || "Untitled Session",
-          date: session.session_date,
+          date: formatDate(session.session_date),
           key_decisions: normalizeDecisions(session.decisions || []),
           open_threads: session.open_threads || [],
         },
@@ -166,7 +167,7 @@ async function loadLastSession(
       session: {
         id: closedSession.id,
         title: closedSession.session_title || "Untitled Session",
-        date: closedSession.session_date,
+        date: formatDate(closedSession.session_date),
         key_decisions: normalizeDecisions(closedSession.decisions || []),
         open_threads: closedSession.open_threads || [],
       },
@@ -328,7 +329,7 @@ async function loadRecentDecisions(
       id: d.id,
       title: d.title,
       decision: d.decision,
-      date: d.decision_date,
+      date: formatDate(d.decision_date),
     }));
 
     return {
@@ -390,7 +391,7 @@ async function loadRecentWins(
       id: r.id,
       title: r.title,
       description: (r.description || "").slice(0, 200),
-      date: r.created_at.split("T")[0],
+      date: formatDate(r.created_at.split("T")[0]),
       source_issue: r.source_linear_issue,
     }));
 
@@ -498,7 +499,7 @@ async function sessionStartFree(
       lastSession = {
         id: closedSession.id,
         title: closedSession.session_title || "Untitled Session",
-        date: closedSession.session_date,
+        date: formatDate(closedSession.session_date),
         key_decisions: normalizeDecisions(closedSession.decisions || []),
         open_threads: closedSession.open_threads || [],
       };
@@ -542,7 +543,7 @@ async function sessionStartFree(
         id: d.id,
         title: d.title,
         decision: d.decision,
-        date: d.decision_date,
+        date: formatDate(d.decision_date),
       }));
   } catch (error) {
     console.error("[session_start] Failed to load decisions:", error);
@@ -565,7 +566,7 @@ async function sessionStartFree(
         id: w.id,
         title: w.title,
         description: (w.description || "").slice(0, 200),
-        date: w.created_at.split("T")[0],
+        date: formatDate(w.created_at.split("T")[0]),
         source_issue: w.source_linear_issue,
       }));
   } catch (error) {

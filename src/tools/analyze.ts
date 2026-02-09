@@ -18,6 +18,9 @@ import {
   queryRepeatMistakes,
   computeBlindspots,
   enrichScarUsageTitles,
+  formatSummary,
+  formatReflections,
+  formatBlindspots,
 } from "../services/analytics.js";
 import { hasSupabase } from "../services/tier.js";
 import {
@@ -26,6 +29,7 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
+import { formatDate } from "../services/timezone.js";
 import type { Project, PerformanceData } from "../types/index.js";
 import type { SummaryAnalytics, BlindspotsData } from "../services/analytics.js";
 
@@ -38,12 +42,14 @@ export interface AnalyzeParams {
   days?: number;
   project?: Project;
   agent?: string;
+  format?: "json" | "text";
 }
 
 export interface AnalyzeResult {
   success: boolean;
   lens: string;
-  data: SummaryAnalytics | ReflectionsData | BlindspotsData | null;
+  data?: SummaryAnalytics | ReflectionsData | BlindspotsData | null;
+  text?: string;
   error?: string;
   performance: PerformanceData;
 }
@@ -103,8 +109,8 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
 
           data = {
             period: {
-              start: startDate.slice(0, 10),
-              end: endDate.slice(0, 10),
+              start: formatDate(startDate.slice(0, 10)),
+              end: formatDate(endDate.slice(0, 10)),
               days,
             },
             total_sessions_scanned: sessions.length,
@@ -158,8 +164,29 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
       latency_ms: latencyMs,
       result_count: resultCount,
       phase_tag: "ad_hoc",
-      metadata: { lens, days, agent: params.agent },
+      metadata: { lens, days, agent: params.agent, format: params.format },
     }).catch(() => {});
+
+    // Return formatted text by default, raw JSON if requested
+    const fmt = params.format || "text";
+
+    if (fmt === "text" && data) {
+      let text = "";
+      if (lens === "summary" && "total_sessions" in data) {
+        text = formatSummary(data);
+      } else if (lens === "reflections" && "total_sessions_scanned" in data) {
+        text = formatReflections(data);
+      } else if (lens === "blindspots" && "total_scar_usages" in data) {
+        text = formatBlindspots(data);
+      }
+
+      return {
+        success: true,
+        lens,
+        text,
+        performance: perfData,
+      };
+    }
 
     return {
       success: true,

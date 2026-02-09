@@ -22,6 +22,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ResolveThreadParams, ResolveThreadResult } from "../types/index.js";
 
 export async function resolveThread(
@@ -96,7 +97,7 @@ export async function resolveThread(
 
   return {
     success: true,
-    resolved_thread: resolved,
+    resolved_thread: formatThreadForDisplay(resolved),
     performance: perfData,
   };
 }

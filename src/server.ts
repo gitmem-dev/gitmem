@@ -287,7 +287,9 @@ export function createServer(): Server {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result, null, 2),
+            text: (result && typeof result === "object" && "text" in result && typeof result.text === "string")
+              ? result.text
+              : JSON.stringify(result, null, 2),
           },
         ],
       };

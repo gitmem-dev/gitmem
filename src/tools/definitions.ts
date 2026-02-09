@@ -1489,7 +1489,7 @@ export const TOOLS = [
   // ============================================================================
   {
     name: "analyze",
-    description: "Session analytics and insights engine. Provides structured analysis of session history, closing reflections, agent patterns, and scar blindspots.",
+    description: "Session analytics and insights engine. Returns formatted markdown by default. Use format=json for raw data.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1510,6 +1510,11 @@ export const TOOLS = [
         agent: {
           type: "string",
           description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+        },
+        format: {
+          type: "string",
+          enum: ["text", "json"],
+          description: "Output format: text (default, compact markdown) or json (raw data)",
         },
       },
     },
@@ -1517,7 +1522,7 @@ export const TOOLS = [
   // gitmem-analyze alias (OD-567)
   {
     name: "gitmem-analyze",
-    description: "gitmem-analyze (analyze) - Session analytics and insights engine",
+    description: "gitmem-analyze (analyze) - Session analytics. Returns formatted markdown by default.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1538,6 +1543,11 @@ export const TOOLS = [
         agent: {
           type: "string",
           description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+        },
+        format: {
+          type: "string",
+          enum: ["text", "json"],
+          description: "Output format: text (default) or json (raw data)",
         },
       },
     },
@@ -1545,7 +1555,7 @@ export const TOOLS = [
   // gm-analyze ultra-short alias (OD-567)
   {
     name: "gm-analyze",
-    description: "gm-analyze (analyze) - Session analytics and insights engine",
+    description: "gm-analyze (analyze) - Session analytics. Returns formatted markdown by default.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1566,6 +1576,11 @@ export const TOOLS = [
         agent: {
           type: "string",
           description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+        },
+        format: {
+          type: "string",
+          enum: ["text", "json"],
+          description: "Output format: text (default) or json (raw data)",
         },
       },
     },

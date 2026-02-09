@@ -236,6 +236,85 @@ export async function directQuery<T = unknown>(
 }
 
 /**
+ * Paginated fetch — retrieves ALL matching rows using PostgREST Range headers.
+ * Use instead of directQuery when the result set may exceed a single page.
+ *
+ * @param pageSize  Rows per request (default 1000)
+ * @param maxRows   Safety cap to prevent runaway queries (default 10000)
+ */
+export async function directQueryAll<T = unknown>(
+  table: string,
+  options: {
+    select?: string;
+    filters?: Record<string, string>;
+    order?: string;
+  } = {},
+  pageSize: number = 1000,
+  maxRows: number = 10000
+): Promise<T[]> {
+  if (!isConfigured()) {
+    throw new Error("Supabase not configured");
+  }
+
+  const { select = "*", filters = {}, order } = options;
+  const allRows: T[] = [];
+  let offset = 0;
+
+  while (offset < maxRows) {
+    const url = new URL(`${SUPABASE_REST_URL}/${table}`);
+    url.searchParams.set("select", select);
+
+    for (const [key, value] of Object.entries(filters)) {
+      const filterValue = value.includes('.') ? value : `eq.${value}`;
+      url.searchParams.set(key, filterValue);
+    }
+
+    if (order) {
+      url.searchParams.set("order", order);
+    }
+
+    const rangeEnd = offset + pageSize - 1;
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Range": `${offset}-${rangeEnd}`,
+        "Range-Unit": "items",
+        "Prefer": "count=exact",
+        "Accept-Profile": "public",
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Supabase REST error: ${response.status} - ${text.slice(0, 200)}`);
+    }
+
+    const rows = await response.json() as T[];
+    allRows.push(...rows);
+
+    // Check Content-Range header: "0-999/1234" or "*/0" for empty
+    const contentRange = response.headers.get("content-range");
+    if (!contentRange || rows.length < pageSize) {
+      break; // No more rows or last page
+    }
+
+    const match = contentRange.match(/\/(\d+)/);
+    if (match) {
+      const total = parseInt(match[1]);
+      if (offset + pageSize >= total) break;
+    }
+
+    offset += pageSize;
+  }
+
+  return allRows;
+}
+
+/**
  * Knowledge triple from knowledge_triples table (OD-466)
  */
 export interface KnowledgeTriple {

@@ -20,6 +20,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
+import { formatTimestamp } from "../services/timezone.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -103,14 +104,14 @@ export async function log(params: LogParams): Promise<LogResult> {
       const latencyMs = timer.stop();
 
       return {
-        entries: filtered,
+        entries: filtered.map(e => ({ ...e, created_at: formatTimestamp(e.created_at) })),
         total: filtered.length,
         filters: {
           project,
           learning_type: typeFilter,
           severity: severityFilter,
           since_days: sinceDays,
-          since_date: sinceDate,
+          since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
         },
         performance: buildPerformanceData("log", latencyMs, filtered.length, {
           search_mode: "local",
@@ -191,14 +192,14 @@ export async function log(params: LogParams): Promise<LogResult> {
     }).catch(() => {});
 
     return {
-      entries: records,
+      entries: records.map(e => ({ ...e, created_at: formatTimestamp(e.created_at) })),
       total: records.length,
       filters: {
         project,
         learning_type: typeFilter,
         severity: severityFilter,
         since_days: sinceDays,
-        since_date: sinceDate,
+        since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
       },
       performance: perfData,
     };

@@ -21,6 +21,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ThreadObject, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -102,7 +103,7 @@ export async function createThread(
 
   return {
     success: true,
-    thread,
+    thread: formatThreadForDisplay(thread),
     total_open: totalOpen,
     performance: perfData,
   };

@@ -44,6 +44,48 @@ const HALF_LIFE_PROCESS = 9999;
 // --- Helpers ---
 
 /**
+ * Canonical persona name map.
+ * Raw personas_involved values may contain full names or contextual suffixes.
+ * This ensures consistent node identity in the knowledge graph.
+ */
+const CANONICAL_PERSONA_NAMES: Record<string, string> = {
+  "elena vos": "Elena",
+  "elena": "Elena",
+  "marcus thorne": "Marcus",
+  "marcus": "Marcus",
+  "reiko tanaka": "Reiko",
+  "reiko": "Reiko",
+  "jax": "Jax",
+  "jax dimitri": "Jax",
+  "jax reed": "Jax",
+  "chris crawford": "Chris Crawford",
+  "chris": "Chris Crawford",
+};
+
+/**
+ * Normalize a persona label to its canonical form.
+ * Strips contextual suffixes like " - UX navigation clarity" or ": Prefers non-invasive..."
+ * Then maps to canonical short name if known.
+ *
+ * Examples:
+ *   "Elena Vos" → "Elena"
+ *   "Marcus - Architectural pattern" → "Marcus"
+ *   "Elena: Prefers non-invasive instrumentation" → "Elena"
+ *   "Chris Crawford - Process decision" → "Chris Crawford"
+ */
+export function normalizePersonaLabel(raw: string): string {
+  // Strip contextual suffix after " - " or ": "
+  let name = raw.split(" - ")[0].split(": ")[0].trim();
+
+  // Strip parenthetical role descriptions like "(Integration & Deployment)"
+  name = name.replace(/\s*\(.*?\)\s*$/, "").trim();
+
+  // Look up canonical name (case-insensitive)
+  const canonical = CANONICAL_PERSONA_NAMES[name.toLowerCase()];
+  return canonical || name;
+}
+
+/**
  * Build a human-readable subject label following the existing DB convention:
  * "Win: Read-side enrichment pattern for denormalization gaps"
  */
@@ -166,12 +208,16 @@ export function extractDecisionTriples(params: DecisionTripleParams): TripleCand
 
   // RULE 2: Each persona -> "influenced_by"
   if (params.personas_involved?.length) {
+    const seen = new Set<string>();
     for (const persona of params.personas_involved) {
+      const normalized = normalizePersonaLabel(persona);
+      if (seen.has(normalized)) continue; // dedup after normalization
+      seen.add(normalized);
       triples.push({
         ...base,
         subject: subjectLabel,
         predicate: "influenced_by",
-        object: `Persona: ${persona}`,
+        object: `Persona: ${normalized}`,
       });
     }
   }

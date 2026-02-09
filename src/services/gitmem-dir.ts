@@ -33,15 +33,22 @@ export function getGitmemDir(): string {
     return cachedGitmemDir;
   }
 
-  // 2. Walk up from CWD looking for existing .gitmem directory with active-session.json
+  // 2. Walk up from CWD looking for existing .gitmem directory
+  //    Sentinel files checked in priority order:
+  //    - active-sessions.json  (new multi-session registry, GIT-19)
+  //    - config.json           (project-level gitmem config)
+  //    - active-session.json   (legacy single-session file, backward compat)
+  const sentinels = ["active-sessions.json", "config.json", "active-session.json"];
   let dir = process.cwd();
   const root = path.parse(dir).root;
   while (dir !== root) {
     const candidate = path.join(dir, ".gitmem");
-    if (fs.existsSync(path.join(candidate, "active-session.json"))) {
-      cachedGitmemDir = candidate;
-      console.error(`[gitmem-dir] Found .gitmem via walk-up: ${candidate}`);
-      return candidate;
+    for (const sentinel of sentinels) {
+      if (fs.existsSync(path.join(candidate, sentinel))) {
+        cachedGitmemDir = candidate;
+        console.error(`[gitmem-dir] Found .gitmem via walk-up (${sentinel}): ${candidate}`);
+        return candidate;
+      }
     }
     dir = path.dirname(dir);
   }
@@ -57,6 +64,26 @@ export function getGitmemDir(): string {
  */
 export function getGitmemPath(filename: string): string {
   return path.join(getGitmemDir(), filename);
+}
+
+/**
+ * Get the per-session directory path: .gitmem/sessions/<sessionId>/
+ * Creates the directory if it doesn't exist.
+ */
+export function getSessionDir(sessionId: string): string {
+  const sessionsDir = path.join(getGitmemDir(), "sessions", sessionId);
+  if (!fs.existsSync(sessionsDir)) {
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    console.error(`[gitmem-dir] Created session directory: ${sessionsDir}`);
+  }
+  return sessionsDir;
+}
+
+/**
+ * Get a file path within a per-session directory.
+ */
+export function getSessionPath(sessionId: string, filename: string): string {
+  return path.join(getSessionDir(sessionId), filename);
 }
 
 /**

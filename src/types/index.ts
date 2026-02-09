@@ -480,3 +480,20 @@ export interface ResolveThreadResult {
   error?: string;
   performance: PerformanceData;
 }
+
+// --- GIT-19: Multi-Session Concurrency ---
+
+/** A single entry in the active-sessions registry */
+export interface ActiveSessionEntry {
+  session_id: string;
+  agent: AgentIdentity;
+  started_at: string; // ISO-8601
+  hostname: string; // os.hostname()
+  pid: number; // process.pid
+  project: Project;
+}
+
+/** The shape of .gitmem/active-sessions.json on disk */
+export interface ActiveSessionsRegistry {
+  sessions: ActiveSessionEntry[];
+}

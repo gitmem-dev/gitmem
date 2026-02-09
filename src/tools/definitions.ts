@@ -572,6 +572,25 @@ export const TOOLS = [
       },
     },
   },
+  {
+    name: "create_thread",
+    description:
+      "Create an open thread to track unresolved work across sessions. Works with or without an active session. Use when you need to capture a thread outside of session close.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: {
+          type: "string",
+          description: "Thread description — what needs to be tracked or resolved",
+        },
+        linear_issue: {
+          type: "string",
+          description: "Associated Linear issue (e.g., OD-XXX)",
+        },
+      },
+      required: ["text"],
+    },
+  },
 
   // ============================================================================
   // SHORT ALIASES (gitmem-*)
@@ -1093,6 +1112,19 @@ export const TOOLS = [
       },
     },
   },
+  // gitmem-ct (create_thread)
+  {
+    name: "gitmem-ct",
+    description: "gitmem-ct (create_thread) - Create an open thread to track across sessions",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "Thread description" },
+        linear_issue: { type: "string", description: "Associated Linear issue" },
+      },
+      required: ["text"],
+    },
+  },
   // ============================================================================
   // GM-* SHORT, MEMORABLE ALIASES (user-facing ergonomics)
   // ============================================================================
@@ -1385,6 +1417,19 @@ export const TOOLS = [
       },
     },
   },
+  // gm-thread-new (create_thread)
+  {
+    name: "gm-thread-new",
+    description: "gm-thread-new (create_thread) - Create an open thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "Thread description" },
+        linear_issue: { type: "string", description: "Associated Linear issue" },
+      },
+      required: ["text"],
+    },
+  },
   // ============================================================================
   // ANALYTICS TOOLS (OD-567)
   // ============================================================================
@@ -1567,6 +1612,105 @@ export const TOOLS = [
       },
     },
   },
+
+  // --- Knowledge Graph Traversal (Phase 3) ---
+
+  {
+    name: "graph_traverse",
+    description: "Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to OD-466', 'what did CLI produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        lens: {
+          type: "string",
+          enum: ["connected_to", "produced_by", "provenance", "stats"],
+          description: "Traversal mode: connected_to (all connections to a node), produced_by (what an agent/persona produced), provenance (trace origin chain), stats (aggregate counts)",
+        },
+        node: {
+          type: "string",
+          description: "Starting node. Examples: 'OD-466', 'CLI', 'Elena', 'Scar: Done ≠ Deployed'. Required for all lenses except stats.",
+        },
+        predicate: {
+          type: "string",
+          enum: ["created_in", "influenced_by", "supersedes", "demonstrates"],
+          description: "Filter by predicate (optional)",
+        },
+        depth: {
+          type: "number",
+          description: "Max chain depth for provenance lens (default: 3)",
+        },
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: orchestra_dev)",
+        },
+        limit: {
+          type: "number",
+          description: "Max triples to return (default: 50)",
+        },
+      },
+      required: ["lens"],
+    },
+  },
+  {
+    name: "gitmem-graph",
+    description: "gitmem-graph (graph_traverse) - Traverse knowledge graph over institutional memory triples",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        lens: {
+          type: "string",
+          enum: ["connected_to", "produced_by", "provenance", "stats"],
+          description: "Traversal mode",
+        },
+        node: {
+          type: "string",
+          description: "Starting node (e.g., 'OD-466', 'CLI', 'Elena')",
+        },
+        predicate: {
+          type: "string",
+          enum: ["created_in", "influenced_by", "supersedes", "demonstrates"],
+          description: "Filter by predicate",
+        },
+        depth: { type: "number", description: "Max depth for provenance (default: 3)" },
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope",
+        },
+        limit: { type: "number", description: "Max triples (default: 50)" },
+      },
+      required: ["lens"],
+    },
+  },
+  {
+    name: "gm-graph",
+    description: "gm-graph (graph_traverse) - Traverse knowledge graph",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        lens: {
+          type: "string",
+          enum: ["connected_to", "produced_by", "provenance", "stats"],
+          description: "Traversal mode",
+        },
+        node: { type: "string", description: "Starting node" },
+        predicate: {
+          type: "string",
+          enum: ["created_in", "influenced_by", "supersedes", "demonstrates"],
+          description: "Filter by predicate",
+        },
+        depth: { type: "number", description: "Max depth for provenance" },
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope",
+        },
+        limit: { type: "number", description: "Max triples" },
+      },
+      required: ["lens"],
+    },
+  },
 ];
 
 /**
@@ -1594,6 +1738,10 @@ export const ANALYZE_TOOL_NAMES = new Set([
   "analyze", "gitmem-analyze", "gm-analyze",
 ]);
 
+export const GRAPH_TOOL_NAMES = new Set([
+  "graph_traverse", "gitmem-graph", "gm-graph",
+]);
+
 /**
  * Get tools registered for the current tier.
  * Free: core tools only (7 canonical + aliases)
@@ -1612,6 +1760,9 @@ export function getRegisteredTools() {
       return hasCacheManagement();
     }
     if (ANALYZE_TOOL_NAMES.has(tool.name)) {
+      return hasSupabase();
+    }
+    if (GRAPH_TOOL_NAMES.has(tool.name)) {
       return hasSupabase();
     }
     return true;

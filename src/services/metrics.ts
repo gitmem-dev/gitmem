@@ -24,10 +24,12 @@ export type ToolName =
   | "save_transcript"
   | "get_transcript"
   | "analyze"
+  | "graph_traverse"
   | "prepare_context"
   | "absorb_observations"
   | "list_threads"
-  | "resolve_thread";
+  | "resolve_thread"
+  | "create_thread";
 
 /**
  * Phase tags for context
@@ -87,10 +89,12 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   save_transcript: 5000,  // Large payload upload
   get_transcript: 3000,   // Retrieval
   analyze: 3000,          // Session analytics queries
+  graph_traverse: 3000,   // Knowledge graph traversal
   prepare_context: 500,   // Same pipeline as search, different formatter
   absorb_observations: 500, // In-memory + optional upsert
   list_threads: 100,        // In-memory read
   resolve_thread: 100,      // In-memory mutation + file write
+  create_thread: 100,       // In-memory mutation + file write
 };
 
 /**

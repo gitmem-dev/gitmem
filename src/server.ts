@@ -25,11 +25,15 @@ import { search } from "./tools/search.js";
 import { log } from "./tools/log.js";
 import { analyze } from "./tools/analyze.js";
 import type { AnalyzeParams } from "./tools/analyze.js";
+import { graphTraverse } from "./tools/graph-traverse.js";
+import type { GraphTraverseParams } from "./tools/graph-traverse.js";
 import { prepareContext } from "./tools/prepare-context.js";
 import type { PrepareContextParams } from "./tools/prepare-context.js";
 import { absorbObservations } from "./tools/absorb-observations.js";
 import { listThreads } from "./tools/list-threads.js";
 import { resolveThread } from "./tools/resolve-thread.js";
+import { createThread } from "./tools/create-thread.js";
+import type { CreateThreadParams } from "./tools/create-thread.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -181,6 +185,11 @@ export function createServer(): Server {
         case "gm-resolve":
           result = await resolveThread(toolArgs as unknown as ResolveThreadParams);
           break;
+        case "create_thread":
+        case "gitmem-ct":
+        case "gm-thread-new":
+          result = await createThread(toolArgs as unknown as CreateThreadParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -241,6 +250,13 @@ export function createServer(): Server {
           };
           break;
         }
+
+        // Knowledge graph traversal (Phase 3)
+        case "graph_traverse":
+        case "gitmem-graph":
+        case "gm-graph":
+          result = await graphTraverse(toolArgs as unknown as GraphTraverseParams);
+          break;
 
         // Cache management tools (OD-473)
         case "gitmem-cache-status":

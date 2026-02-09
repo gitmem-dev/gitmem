@@ -268,7 +268,12 @@ async function cmdSessionStart() {
       lines.push(``);
       lines.push(`Open threads (${result.open_threads.length}):`);
       for (const thread of result.open_threads.slice(0, 5)) {
-        lines.push(`  - ${thread}`);
+        const text = typeof thread === "string" ? thread : thread.text;
+        const truncated = text && text.length > 80 ? text.slice(0, 77) + "..." : text;
+        lines.push(`  - ${truncated || "[unnamed thread]"}`);
+      }
+      if (result.open_threads.length > 5) {
+        lines.push(`  ... and ${result.open_threads.length - 5} more`);
       }
     }
 
@@ -355,7 +360,12 @@ async function cmdSessionRefresh() {
       lines.push(``);
       lines.push(`Open threads (${result.open_threads.length}):`);
       for (const thread of result.open_threads.slice(0, 5)) {
-        lines.push(`  - ${thread}`);
+        const text = typeof thread === "string" ? thread : thread.text;
+        const truncated = text && text.length > 80 ? text.slice(0, 77) + "..." : text;
+        lines.push(`  - ${truncated || "[unnamed thread]"}`);
+      }
+      if (result.open_threads.length > 5) {
+        lines.push(`  ... and ${result.open_threads.length - 5} more`);
       }
     }
 

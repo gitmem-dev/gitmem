@@ -226,7 +226,7 @@ async function queryRelevantScars(
       }
       if (lastSession.open_threads?.length) {
         // Include up to 3 open threads
-        queryParts.push(lastSession.open_threads.slice(0, 3).join(" "));
+        queryParts.push(lastSession.open_threads.slice(0, 3).map(t => typeof t === "string" ? t : t.text).join(" "));
       }
     }
 

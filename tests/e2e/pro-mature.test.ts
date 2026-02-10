@@ -26,8 +26,15 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { BASELINES } from "../performance/baselines.js";
 
-// This test requires Docker - skip if not available
-const DOCKER_AVAILABLE = process.env.DOCKER_HOST || process.platform !== "win32";
+// This test requires Docker - probe for a working container runtime
+let DOCKER_AVAILABLE = false;
+try {
+  const { execFileSync } = await import("child_process");
+  execFileSync("docker", ["info"], { timeout: 5_000, stdio: "ignore" });
+  DOCKER_AVAILABLE = true;
+} catch {
+  // docker not installed or not running
+}
 
 describe.skipIf(!DOCKER_AVAILABLE)("Pro Tier - Mature System E2E", () => {
   let container: StartedPostgreSqlContainer;

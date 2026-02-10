@@ -628,7 +628,7 @@ export const TOOLS = [
   {
     name: "create_thread",
     description:
-      "Create an open thread to track unresolved work across sessions. Works with or without an active session. Use when you need to capture a thread outside of session close.",
+      "Create an open thread to track unresolved work across sessions. Includes semantic dedup: if a similar open thread exists (cosine similarity > 0.85), returns the existing thread instead. Check the 'deduplicated' field in the response.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1211,7 +1211,7 @@ export const TOOLS = [
   // gitmem-ct (create_thread)
   {
     name: "gitmem-ct",
-    description: "gitmem-ct (create_thread) - Create an open thread to track across sessions",
+    description: "gitmem-ct (create_thread) - Create an open thread with semantic dedup (cosine > 0.85 blocks duplicates)",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1553,7 +1553,7 @@ export const TOOLS = [
   // gm-thread-new (create_thread)
   {
     name: "gm-thread-new",
-    description: "gm-thread-new (create_thread) - Create an open thread",
+    description: "gm-thread-new (create_thread) - Create an open thread with semantic dedup",
     inputSchema: {
       type: "object" as const,
       properties: {

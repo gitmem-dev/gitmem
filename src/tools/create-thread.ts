@@ -7,6 +7,10 @@
  * OD-620: Writes to Supabase (source of truth) + local file (cache).
  * Falls back to local-only if Supabase is unavailable.
  *
+ * Phase 3: Semantic dedup gate — before creating, checks existing open
+ * threads by embedding cosine similarity (> 0.85 threshold). Returns
+ * existing thread instead of creating a duplicate.
+ *
  * Performance target: <500ms (Supabase write + file write)
  */
 
@@ -17,13 +21,20 @@ import {
   loadThreadsFile,
   saveThreadsFile,
 } from "../services/thread-manager.js";
-import { createThreadInSupabase } from "../services/thread-supabase.js";
+import {
+  createThreadInSupabase,
+  loadOpenThreadEmbeddings,
+  touchThreadsInSupabase,
+} from "../services/thread-supabase.js";
+import { checkDuplicate } from "../services/thread-dedup.js";
+import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import {
   Timer,
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
+import type { ThreadWithEmbedding } from "../services/thread-dedup.js";
 import type { ThreadObject, PerformanceData, Project } from "../types/index.js";
 
 // --- Types ---
@@ -44,6 +55,14 @@ export interface CreateThreadResult {
   total_open: number;
   supabase_synced: boolean;
   performance: PerformanceData;
+  /** Phase 3: true when dedup gate found an existing duplicate */
+  deduplicated?: boolean;
+  /** Phase 3: dedup gate details */
+  dedup?: {
+    method: "embedding" | "text_normalization" | "skipped";
+    similarity: number | null;
+    matched_thread_id: string | null;
+  };
 }
 
 // --- Handler ---
@@ -68,18 +87,100 @@ export async function createThread(
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
   const project = params.project || "orchestra_dev";
+  const trimmedText = params.text.trim();
 
+  // Phase 3: Generate embedding for new text (best-effort)
+  let newEmbedding: number[] | null = null;
+  if (isEmbeddingAvailable()) {
+    try {
+      newEmbedding = await embed(trimmedText);
+    } catch (err) {
+      console.error("[create-thread] Embedding generation failed (continuing without):", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Phase 3: Load existing open threads with embeddings for dedup check
+  let existingThreads: ThreadWithEmbedding[] = [];
+  const loadedFromSupabase = await loadOpenThreadEmbeddings(project);
+  if (loadedFromSupabase) {
+    existingThreads = loadedFromSupabase;
+  } else {
+    // Supabase unavailable: use local threads for text-only fallback
+    const localThreads = loadThreadsFile().filter((t) => t.status === "open");
+    existingThreads = localThreads.map((t) => ({
+      thread_id: t.id,
+      text: t.text,
+      embedding: null,
+    }));
+  }
+
+  // Phase 3: Run dedup check
+  const dedupResult = checkDuplicate(trimmedText, newEmbedding, existingThreads);
+
+  // If duplicate found, touch existing thread and return it
+  if (dedupResult.is_duplicate && dedupResult.matched_thread_id) {
+    // Touch the existing thread to keep it vital
+    await touchThreadsInSupabase([dedupResult.matched_thread_id]);
+
+    const fileThreads = loadThreadsFile();
+    const totalOpen = fileThreads.filter((t) => t.status === "open").length;
+
+    // Find the existing thread to return
+    const existingThread: ThreadObject = fileThreads.find(
+      (t) => t.id === dedupResult.matched_thread_id
+    ) || {
+      id: dedupResult.matched_thread_id,
+      text: dedupResult.matched_text || trimmedText,
+      status: "open",
+      created_at: new Date().toISOString(),
+    };
+
+    const latencyMs = timer.stop();
+
+    recordMetrics({
+      id: metricsId,
+      tool_name: "create_thread" as any,
+      query_text: `dedup:${dedupResult.matched_thread_id}`,
+      tables_searched: ["orchestra_threads"],
+      latency_ms: latencyMs,
+      result_count: 0,
+      phase_tag: "ad_hoc",
+      metadata: {
+        dedup_blocked: true,
+        dedup_method: dedupResult.method,
+        dedup_similarity: dedupResult.similarity,
+        matched_thread_id: dedupResult.matched_thread_id,
+      },
+    }).catch(() => {});
+
+    return {
+      success: true,
+      thread: formatThreadForDisplay(existingThread),
+      total_open: totalOpen,
+      supabase_synced: true,
+      performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
+      deduplicated: true,
+      dedup: {
+        method: dedupResult.method,
+        similarity: dedupResult.similarity,
+        matched_thread_id: dedupResult.matched_thread_id,
+      },
+    };
+  }
+
+  // Not a duplicate — create new thread
   const thread: ThreadObject = {
     id: generateThreadId(),
-    text: params.text.trim(),
+    text: trimmedText,
     status: "open",
     created_at: new Date().toISOString(),
     ...(sessionId && { source_session: sessionId }),
   };
 
-  // OD-620: Write to Supabase (source of truth) — non-blocking on failure
+  // OD-620: Write to Supabase (source of truth) with embedding — non-blocking on failure
   let supabaseSynced = false;
-  const supabaseResult = await createThreadInSupabase(thread, project);
+  const embeddingJson = newEmbedding ? JSON.stringify(newEmbedding) : null;
+  const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);
   if (supabaseResult) {
     supabaseSynced = true;
   }
@@ -113,6 +214,7 @@ export async function createThread(
       thread_id: thread.id,
       has_session: !!sessionId,
       supabase_synced: supabaseSynced,
+      embedding_generated: newEmbedding !== null,
     },
   }).catch(() => {});
 
@@ -122,5 +224,11 @@ export async function createThread(
     total_open: totalOpen,
     supabase_synced: supabaseSynced,
     performance: perfData,
+    deduplicated: false,
+    dedup: {
+      method: dedupResult.method,
+      similarity: dedupResult.similarity,
+      matched_thread_id: null,
+    },
   };
 }

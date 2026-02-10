@@ -13,6 +13,7 @@ import * as supabase from "./supabase-client.js";
 import { hasSupabase } from "./tier.js";
 import { computeVitality, detectThreadClass } from "./thread-vitality.js";
 import type { ThreadClass } from "./thread-vitality.js";
+import type { ThreadWithEmbedding } from "./thread-dedup.js";
 import type { ThreadObject, Project } from "../types/index.js";
 
 // ---------- Supabase Row Types ----------
@@ -43,11 +44,11 @@ export interface ThreadRow {
 
 /**
  * Map a local ThreadObject to a Supabase row for insert/upsert.
- * Leaves embedding null (Phase 3 concern).
  */
 export function threadObjectToRow(
   thread: ThreadObject,
-  project: Project = "orchestra_dev"
+  project: Project = "orchestra_dev",
+  embedding?: string | null
 ): Record<string, unknown> {
   const now = new Date();
   const createdAt = thread.created_at || now.toISOString();
@@ -74,6 +75,7 @@ export function threadObjectToRow(
     resolved_by_session: thread.resolved_by_session || null,
     project,
     metadata: {},
+    ...(embedding != null && { embedding }),
   };
 }
 
@@ -121,14 +123,15 @@ function mapStatusFromSupabase(status: string): "open" | "resolved" {
  */
 export async function createThreadInSupabase(
   thread: ThreadObject,
-  project: Project = "orchestra_dev"
+  project: Project = "orchestra_dev",
+  embedding?: string | null
 ): Promise<ThreadRow | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
   }
 
   try {
-    const row = threadObjectToRow(thread, project);
+    const row = threadObjectToRow(thread, project, embedding);
     const result = await supabase.directUpsert<ThreadRow>(
       "orchestra_threads",
       row
@@ -386,5 +389,63 @@ export async function syncThreadsToSupabase(
       console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, error instanceof Error ? error.message : error);
       // Continue with other threads
     }
+  }
+}
+
+// ---------- Embedding Queries (Phase 3) ----------
+
+/**
+ * Parse embedding from Supabase REST API response.
+ * REST returns vector columns as JSON strings, not arrays.
+ */
+function parseEmbedding(raw: string | number[] | null | undefined): number[] | null {
+  if (raw === null || raw === undefined) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Invalid JSON
+    }
+  }
+  return null;
+}
+
+/**
+ * Load open threads WITH embeddings from Supabase for dedup comparison.
+ * Uses the full orchestra_threads table (not _lite view) to include embedding column.
+ * Returns null if Supabase is unavailable.
+ */
+export async function loadOpenThreadEmbeddings(
+  project: Project = "orchestra_dev"
+): Promise<ThreadWithEmbedding[] | null> {
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    return null;
+  }
+
+  try {
+    const rows = await supabase.directQuery<{
+      thread_id: string;
+      text: string;
+      embedding: string | number[] | null;
+    }>("orchestra_threads", {
+      select: "thread_id,text,embedding",
+      filters: {
+        project,
+        status: "not.in.(resolved,archived)",
+      },
+      limit: 100,
+    });
+
+    console.error(`[thread-supabase] Loaded ${rows.length} thread embeddings for dedup`);
+    return rows.map((row) => ({
+      thread_id: row.thread_id,
+      text: row.text,
+      embedding: parseEmbedding(row.embedding),
+    }));
+  } catch (error) {
+    console.error("[thread-supabase] Failed to load thread embeddings:", error instanceof Error ? error.message : error);
+    return null;
   }
 }

@@ -47,6 +47,7 @@
   "files": [
     "dist",
     "bin",
+    "hooks",
     "schema",
     "CLAUDE.md.template",
     "README.md",

@@ -5,16 +5,17 @@
  * that carry over between sessions, with IDs for resolution.
  *
  * OD-622: Primary read from Supabase (source of truth).
- * Falls back to in-memory session state, then .gitmem/threads.json
- * if Supabase is unavailable.
+ * Falls back to session-based aggregation (same as session_start),
+ * then in-memory session state, then .gitmem/threads.json.
  *
  * Performance target: <500ms (Supabase query with fallback)
  */
 
 import { v4 as uuidv4 } from "uuid";
 import { getThreads } from "../services/session-state.js";
-import { loadThreadsFile } from "../services/thread-manager.js";
+import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
 import { listThreadsFromSupabase } from "../services/thread-supabase.js";
+import * as supabase from "../services/supabase-client.js";
 import {
   Timer,
   recordMetrics,
@@ -22,6 +23,15 @@ import {
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ListThreadsParams, ListThreadsResult, ThreadObject } from "../types/index.js";
+
+/** Minimal session shape for aggregation (matches session_start) */
+interface SessionRecord {
+  id: string;
+  session_title: string;
+  session_date: string;
+  open_threads?: (string | ThreadObject)[];
+  close_compliance?: Record<string, unknown> | null;
+}
 
 export async function listThreads(
   params: ListThreadsParams
@@ -34,7 +44,7 @@ export async function listThreads(
   const project = params.project || "orchestra_dev";
 
   let allThreads: ThreadObject[] | null = null;
-  let source: "supabase" | "memory" | "file" = "file";
+  let source: "supabase" | "aggregation" | "memory" | "file" = "file";
 
   // OD-622: Try Supabase first (source of truth)
   const supabaseThreads = await listThreadsFromSupabase(project, {
@@ -47,16 +57,37 @@ export async function listThreads(
     source = "supabase";
   }
 
-  // Fallback: in-memory session state
+  // Fallback: aggregate from recent sessions, merged with local file
+  // (same pattern as session_start: aggregation + mergeThreadStates with local file)
   if (allThreads === null) {
-    const memoryThreads = getThreads();
-    if (memoryThreads.length > 0) {
-      allThreads = memoryThreads;
-      source = "memory";
+    try {
+      const sessions = await supabase.listRecords<SessionRecord>({
+        table: "orchestra_sessions_lite",
+        filters: { project },
+        limit: 10,
+        orderBy: { column: "created_at", ascending: false },
+      });
+
+      if (sessions.length > 0) {
+        const result = aggregateThreads(sessions);
+        const aggregated = [...result.open, ...result.recently_resolved];
+
+        // Merge with local file — mergeThreadStates prefers resolved over open,
+        // so local resolve_thread calls survive even if sessions still show "open"
+        const fileThreads = loadThreadsFile();
+        const merged = fileThreads.length > 0
+          ? mergeThreadStates(aggregated, fileThreads)
+          : aggregated;
+
+        allThreads = merged;
+        source = "aggregation";
+      }
+    } catch (error) {
+      console.error("[list_threads] Session aggregation fallback failed:", error instanceof Error ? error.message : error);
     }
   }
 
-  // Fallback: local file
+  // Fallback: local file only (if aggregation failed entirely)
   if (allThreads === null) {
     allThreads = loadThreadsFile();
     source = "file";
@@ -73,13 +104,12 @@ export async function listThreads(
     threads = allThreads.filter((t) => t.status === statusFilter);
   }
 
-  // Count totals (for non-Supabase sources, count from all threads)
+  // Count totals
   let totalOpen: number;
   let totalResolved: number;
   if (source === "supabase" && !includeResolved) {
-    // We only have filtered results from Supabase, so counts are approximate
     totalOpen = threads.length;
-    totalResolved = 0;  // We didn't fetch resolved
+    totalResolved = 0;
   } else {
     totalOpen = allThreads.filter((t) => t.status === "open").length;
     totalResolved = allThreads.filter((t) => t.status === "resolved").length;
@@ -92,7 +122,7 @@ export async function listThreads(
     id: metricsId,
     tool_name: "list_threads",
     query_text: `list:${statusFilter}:${includeResolved ? "all" : "filtered"}`,
-    tables_searched: source === "supabase" ? ["orchestra_threads_lite"] : [],
+    tables_searched: source === "supabase" ? ["orchestra_threads_lite"] : source === "aggregation" ? ["orchestra_sessions_lite"] : [],
     latency_ms: latencyMs,
     result_count: threads.length,
     phase_tag: "ad_hoc",

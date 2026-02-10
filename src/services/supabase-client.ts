@@ -416,6 +416,55 @@ export async function directUpsert<T = unknown>(
 }
 
 /**
+ * Patch (partial update) existing records in Supabase REST API.
+ *
+ * Uses HTTP PATCH for true partial updates — only the provided fields are
+ * modified.  Unlike directUpsert (POST + merge-duplicates), this does NOT
+ * try to INSERT first, so NOT NULL columns that aren't changing can be
+ * omitted from `data`.
+ *
+ * @param table   Target table name
+ * @param filters PostgREST filter to identify the row(s) to update
+ * @param data    Fields to update (partial — omitted columns stay unchanged)
+ */
+export async function directPatch<T = unknown>(
+  table: string,
+  filters: Record<string, string>,
+  data: Record<string, unknown>
+): Promise<T[]> {
+  if (!isConfigured()) {
+    throw new Error("Supabase not configured");
+  }
+
+  const url = new URL(`${SUPABASE_REST_URL}/${table}`);
+
+  // Apply filters (same logic as directQuery)
+  for (const [key, value] of Object.entries(filters)) {
+    const filterValue = value.includes(".") ? value : `eq.${value}`;
+    url.searchParams.set(key, filterValue);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "PATCH",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+      "Content-Profile": "public",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase patch error: ${response.status} - ${text.slice(0, 200)}`);
+  }
+
+  return response.json() as Promise<T[]>;
+}
+
+/**
  * Load all learnings with embeddings directly from Supabase
  *
  * This bypasses ww-mcp because we need the embedding vectors for local search.

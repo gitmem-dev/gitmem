@@ -187,20 +187,19 @@ export async function resolveThreadInSupabase(
     }
 
     const uuid = rows[0].id;
-    const updateData: Record<string, unknown> = {
-      id: uuid,
+    const patchData: Record<string, unknown> = {
       status: "resolved",
       resolved_at: options.resolvedAt || new Date().toISOString(),
     };
 
     if (options.resolutionNote) {
-      updateData.resolution_note = options.resolutionNote;
+      patchData.resolution_note = options.resolutionNote;
     }
     if (options.resolvedBySession) {
-      updateData.resolved_by_session = options.resolvedBySession;
+      patchData.resolved_by_session = options.resolvedBySession;
     }
 
-    await supabase.directUpsert("orchestra_threads", updateData);
+    await supabase.directPatch("orchestra_threads", { id: uuid }, patchData);
     console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
     return true;
   } catch (error) {
@@ -232,12 +231,18 @@ export async function listThreadsFromSupabase(
 
     // Apply status filter unless including all
     if (!options.includeResolved && options.statusFilter) {
-      // Map local status to Supabase status for filtering
-      const supabaseStatus = mapStatusToSupabase(options.statusFilter);
-      filters.status = supabaseStatus;
+      if (options.statusFilter === "open") {
+        // "open" in local status = all non-terminal Supabase statuses
+        filters.status = "not.in.(resolved,archived)";
+      } else if (options.statusFilter === "resolved") {
+        filters.status = "resolved";
+      } else {
+        // Pass through any Supabase-native status
+        filters.status = options.statusFilter;
+      }
     } else if (!options.includeResolved) {
-      // Default: exclude resolved
-      filters.status = "not.eq.resolved";
+      // Default: exclude resolved and archived
+      filters.status = "not.in.(resolved,archived)";
     }
 
     const rows = await supabase.directQuery<ThreadRow>("orchestra_threads_lite", {
@@ -381,8 +386,7 @@ export async function touchThreadsInSupabase(
         delete metadata.dormant_since;
       }
 
-      await supabase.directUpsert("orchestra_threads", {
-        id: row.id,
+      await supabase.directPatch("orchestra_threads", { id: row.id }, {
         touch_count: newTouchCount,
         last_touched_at: nowIso,
         vitality_score: vitality.vitality_score,
@@ -477,8 +481,7 @@ export async function archiveDormantThreads(
       const daysDormant = (now.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysDormant >= dormantDays) {
-        await supabase.directUpsert("orchestra_threads", {
-          id: row.id,
+        await supabase.directPatch("orchestra_threads", { id: row.id }, {
           status: "archived",
         });
         archived_ids.push(row.thread_id);

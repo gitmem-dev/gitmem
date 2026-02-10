@@ -11,6 +11,8 @@
 
 import * as supabase from "./supabase-client.js";
 import { hasSupabase } from "./tier.js";
+import { computeVitality, detectThreadClass } from "./thread-vitality.js";
+import type { ThreadClass } from "./thread-vitality.js";
 import type { ThreadObject, Project } from "../types/index.js";
 
 // ---------- Supabase Row Types ----------
@@ -47,15 +49,25 @@ export function threadObjectToRow(
   thread: ThreadObject,
   project: Project = "orchestra_dev"
 ): Record<string, unknown> {
+  const now = new Date();
+  const createdAt = thread.created_at || now.toISOString();
+  const threadClass: ThreadClass = detectThreadClass(thread.text);
+  const vitality = computeVitality({
+    last_touched_at: createdAt,
+    touch_count: 1,
+    created_at: createdAt,
+    thread_class: threadClass,
+  }, now);
+
   return {
     thread_id: thread.id,              // "t-XXXXXXXX" -> thread_id column
     text: thread.text,
     status: mapStatusToSupabase(thread.status),
-    thread_class: "backlog",           // Phase 1 default
-    vitality_score: 1.0,               // Phase 2 concern
-    last_touched_at: thread.created_at || new Date().toISOString(),
+    thread_class: threadClass,
+    vitality_score: vitality.vitality_score,
+    last_touched_at: createdAt,
     touch_count: 1,
-    created_at: thread.created_at || new Date().toISOString(),
+    created_at: createdAt,
     resolved_at: thread.resolved_at || null,
     resolution_note: thread.resolution_note || null,
     source_session: thread.source_session || null,
@@ -246,7 +258,7 @@ export async function loadActiveThreadsFromSupabase(
       select: "*",
       filters: {
         project,
-        status: "not.in.(archived)",
+        status: "not.in.(archived,dormant)",
       },
       order: "vitality_score.desc,last_touched_at.desc",
       limit: 100,
@@ -293,9 +305,9 @@ export async function touchThreadsInSupabase(
 
   for (const threadId of threadIds) {
     try {
-      // Fetch current state
+      // Fetch current state (need created_at and thread_class for vitality recomputation)
       const rows = await supabase.directQuery<ThreadRow>("orchestra_threads", {
-        select: "id,touch_count",
+        select: "id,touch_count,created_at,thread_class,status",
         filters: { thread_id: threadId },
         limit: 1,
       });
@@ -303,10 +315,28 @@ export async function touchThreadsInSupabase(
       if (rows.length === 0) continue;
 
       const row = rows[0];
+
+      // Skip resolved/archived threads — no point recomputing vitality
+      if (row.status === "resolved" || row.status === "archived") continue;
+
+      const now = new Date();
+      const newTouchCount = (row.touch_count || 0) + 1;
+      const nowIso = now.toISOString();
+
+      // Recompute vitality with updated recency + frequency
+      const vitality = computeVitality({
+        last_touched_at: nowIso,
+        touch_count: newTouchCount,
+        created_at: row.created_at,
+        thread_class: (row.thread_class as ThreadClass) || "backlog",
+      }, now);
+
       await supabase.directUpsert("orchestra_threads", {
         id: row.id,
-        touch_count: (row.touch_count || 0) + 1,
-        last_touched_at: new Date().toISOString(),
+        touch_count: newTouchCount,
+        last_touched_at: nowIso,
+        vitality_score: vitality.vitality_score,
+        status: vitality.status,
       });
     } catch (error) {
       console.error(`[thread-supabase] Failed to touch thread ${threadId}:`, error instanceof Error ? error.message : error);

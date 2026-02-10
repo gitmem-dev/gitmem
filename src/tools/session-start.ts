@@ -861,12 +861,12 @@ function formatStartDisplay(result: SessionStartResult): string {
   if (result.open_threads?.length) {
     lines.push("");
     lines.push(`Open threads (${result.open_threads.length}):`);
-    for (const t of result.open_threads.slice(0, 8)) {
+    for (const t of result.open_threads.slice(0, 7)) {
       const text = t.text.length > 70 ? t.text.slice(0, 67) + "..." : t.text;
       lines.push(`  ${t.id}: ${text}`);
     }
-    if (result.open_threads.length > 8) {
-      lines.push(`  ... and ${result.open_threads.length - 8} more`);
+    if (result.open_threads.length > 7) {
+      lines.push(`  ... and ${result.open_threads.length - 7} more`);
     }
   }
 

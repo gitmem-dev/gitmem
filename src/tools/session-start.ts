@@ -498,7 +498,8 @@ async function sessionStartFree(
   project: Project,
   timer: Timer,
   metricsId: string,
-  existingSessionId?: string
+  existingSessionId?: string,
+  existingStartedAt?: Date
 ): Promise<SessionStartResult> {
   const storage = getStorage();
   const isResuming = !!existingSessionId;
@@ -650,11 +651,12 @@ async function sessionStartFree(
     console.warn("[session_start] Failed to persist session files:", error);
   }
 
+  // t-f7c2fa01: On resume, preserve original startedAt so session_close duration is accurate
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
-    startedAt: new Date(),
+    startedAt: (isResuming && existingStartedAt) || new Date(),
     surfacedScars,
     threads: freeMergedThreads,
   });
@@ -707,12 +709,14 @@ function readSessionFile(sessionId: string): Record<string, unknown> | null {
 function restoreSessionState(
   existing: Record<string, unknown>,
   fallbackAgent: AgentIdentity,
-): { sessionId: string; agent: AgentIdentity; linearIssue?: string } {
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date } {
+  const startedAt = existing.started_at ? new Date(existing.started_at as string) : undefined;
+
   setCurrentSession({
     sessionId: existing.session_id as string,
     linearIssue: existing.linear_issue as string | undefined,
     agent: (existing.agent as AgentIdentity) || fallbackAgent,
-    startedAt: existing.started_at ? new Date(existing.started_at as string) : new Date(),
+    startedAt: startedAt || new Date(),
     surfacedScars: (existing.surfaced_scars as SurfacedScar[]) || [],
   });
 
@@ -724,6 +728,7 @@ function restoreSessionState(
     sessionId: existing.session_id as string,
     agent: (existing.agent as AgentIdentity) || fallbackAgent,
     linearIssue: existing.linear_issue as string | undefined,
+    startedAt,
   };
 }
 
@@ -737,7 +742,7 @@ function restoreSessionState(
 function checkExistingSession(
   agent: AgentIdentity,
   force?: boolean
-): { sessionId: string; agent: AgentIdentity; linearIssue?: string } | null {
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date } | null {
   if (force) {
     console.error("[session_start] force=true, skipping active session guard");
     return null;
@@ -963,7 +968,7 @@ export async function sessionStart(
 
   // Free tier: all-local path
   if (!hasSupabase()) {
-    return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId);
+    return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt);
   }
 
   // 2. Load last session first (needed for scar context)
@@ -1091,11 +1096,12 @@ export async function sessionStart(
   // OD-547: Set active session for variant assignment in recall
   // OD-552: Initialize with surfaced scars for auto-bridge at close time
   // OD-thread-lifecycle: Initialize with merged threads (aggregated + mid-session preserved)
+  // t-f7c2fa01: On resume, preserve original startedAt so session_close duration is accurate
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
-    startedAt: new Date(),
+    startedAt: (isResuming && existingSession?.startedAt) || new Date(),
     surfacedScars,
     threads: mergedThreads,
   });

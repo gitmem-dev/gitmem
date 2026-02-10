@@ -289,12 +289,22 @@ export async function loadActiveThreadsFromSupabase(
     const recentlyResolved: ThreadObject[] = [];
     const displayInfo: ThreadDisplayInfo[] = [];
 
+    // Deduplicate by text content (mirrors aggregateThreads logic)
+    const seenText = new Set<string>();
+    const seenIds = new Set<string>();
+
     // Recently resolved = resolved in last 14 days
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 14);
     const cutoffStr = cutoff.toISOString();
 
     for (const row of rows) {
+      // Deduplicate by both thread ID and normalized text
+      const key = (row.text || "").toLowerCase().trim();
+      if (seenIds.has(row.id) || (key && seenText.has(key))) continue;
+      seenIds.add(row.id);
+      if (key) seenText.add(key);
+
       const thread = rowToThreadObject(row);
       if (row.status === "resolved") {
         if (row.resolved_at && row.resolved_at >= cutoffStr) {
@@ -329,7 +339,8 @@ export async function loadActiveThreadsFromSupabase(
       }
     }
 
-    console.error(`[thread-supabase] Loaded ${open.length} open, ${recentlyResolved.length} recently resolved threads from Supabase`);
+    const dupsRemoved = rows.length - open.length - recentlyResolved.length;
+    console.error(`[thread-supabase] Loaded ${open.length} open, ${recentlyResolved.length} recently resolved threads from Supabase (${dupsRemoved} duplicates removed)`);
     return { open, recentlyResolved, displayInfo };
   } catch (error) {
     console.error("[thread-supabase] Failed to load active threads:", error instanceof Error ? error.message : error);

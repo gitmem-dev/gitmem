@@ -399,8 +399,12 @@ export async function sessionClose(
 
   // Close type auto-detection: reject mismatched close types based on session activity.
   // Standard close on a short/trivial session is wasteful; quick close on a long session loses data.
+  // t-f7c2fa01: If closing_reflection is already present (agent answered 7 questions),
+  // skip the mismatch gate — the ceremony is done, rejecting it wastes work.
+  const hasReflection = params.closing_reflection &&
+    Object.keys(params.closing_reflection).length > 0;
   const activity = getSessionActivity();
-  if (activity && params.close_type) {
+  if (activity && params.close_type && !hasReflection) {
     const isMinimal = activity.recall_count === 0 &&
                       activity.observation_count === 0 &&
                       activity.children_count === 0;

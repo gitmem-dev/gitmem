@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Hooks plugin bundled**: `gitmem install-hooks` / `uninstall-hooks` CLI commands (OD-605, OD-606)
+- **CLI `check` command wired**: `gitmem check` now reachable from CLI (was defined but unreachable)
+- **Fresh-install E2E tests**: 16 integration tests covering CLI commands, hooks, and MCP server lifecycle (OD-607)
+- **README rewrite**: External-developer-facing docs with no internal jargon (OD-608)
+- **CONTRIBUTING.md**: Dev setup, testing tiers, and PR guidelines
+
 ## [0.2.0] - 2026-02-08
 
 ### Added

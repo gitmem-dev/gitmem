@@ -40,4 +40,4 @@ RUN npx gitmem init \
  && npx gitmem install-hooks \
  && git add -A && git commit -m "initial setup with gitmem"
 
-CMD ["claude"]
+CMD ["claude", "--dangerously-skip-permissions"]

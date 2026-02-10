@@ -19,7 +19,7 @@ describe("SessionStartParamsSchema", () => {
         issue_title: "Test issue",
         issue_description: "Description here",
         issue_labels: ["bug", "urgent"],
-        project: "orchestra_dev",
+        project: "my-project",
         force: true,
       });
       expect(result.success).toBe(true);
@@ -36,7 +36,7 @@ describe("SessionStartParamsSchema", () => {
     });
 
     it("accepts both project values", () => {
-      const projects = ["orchestra_dev", "weekend_warrior"];
+      const projects = ["my-project", "other-project"];
       for (const project of projects) {
         const result = SessionStartParamsSchema.safeParse({ project });
         expect(result.success).toBe(true);
@@ -68,9 +68,9 @@ describe("SessionStartParamsSchema", () => {
 
   describe("validateSessionStartParams helper", () => {
     it("returns success for valid params", () => {
-      const result = validateSessionStartParams({ project: "orchestra_dev" });
+      const result = validateSessionStartParams({ project: "my-project" });
       expect(result.success).toBe(true);
-      expect(result.data?.project).toBe("orchestra_dev");
+      expect(result.data?.project).toBe("my-project");
     });
 
     it("returns error for invalid params", () => {

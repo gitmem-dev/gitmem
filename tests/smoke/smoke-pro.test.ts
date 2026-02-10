@@ -80,7 +80,7 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
       async () => {
         return callTool(mcp.client, "session_start", {
           agent_identity: "CLI",
-          project: "orchestra_dev",
+          project: "test-project",
           force: true,
         });
       }
@@ -142,7 +142,7 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
       async () => {
         return callTool(mcp.client, "recall", {
           plan: "deploy to production",
-          project: "orchestra_dev",
+          project: "test-project",
           match_count: 3,
         });
       }
@@ -202,7 +202,7 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
 
     const { result } = await timedStep("cache_status", async () => {
       return callTool(mcp.client, "gitmem-cache-status", {
-        project: "orchestra_dev",
+        project: "test-project",
       });
     });
 

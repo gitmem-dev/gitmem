@@ -49,7 +49,7 @@ describe("PrepareContextParamsSchema", () => {
         format: "full",
         max_tokens: 300,
         agent_role: "reviewer",
-        project: "orchestra_dev",
+        project: "my-project",
       });
       expect(result.success).toBe(true);
       expect(result.data).toEqual({
@@ -57,15 +57,15 @@ describe("PrepareContextParamsSchema", () => {
         format: "full",
         max_tokens: 300,
         agent_role: "reviewer",
-        project: "orchestra_dev",
+        project: "my-project",
       });
     });
 
-    it("accepts gate format with weekend_warrior project", () => {
+    it("accepts gate format with other-project project", () => {
       const result = PrepareContextParamsSchema.safeParse({
         plan: "test trading logic",
         format: "gate",
-        project: "weekend_warrior",
+        project: "other-project",
       });
       expect(result.success).toBe(true);
     });

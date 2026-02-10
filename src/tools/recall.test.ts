@@ -101,14 +101,14 @@ describe("recall", () => {
     vi.mocked(supabase.cachedScarSearch).mockResolvedValue({ results: [], cache_hit: false });
 
     const result = await recall({
-      plan: "trading feature",
-      project: "weekend_warrior",
+      plan: "custom project feature",
+      project: "other-project",
       match_count: 5,
     });
 
-    expect(result.project).toBe("weekend_warrior");
+    expect(result.project).toBe("other-project");
     expect(result.match_count).toBe(5);
-    expect(supabase.cachedScarSearch).toHaveBeenCalledWith("trading feature", 5, "weekend_warrior");
+    expect(supabase.cachedScarSearch).toHaveBeenCalledWith("custom project feature", 5, "other-project");
   });
 
   it("handles search errors gracefully", async () => {

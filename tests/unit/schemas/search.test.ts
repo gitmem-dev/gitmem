@@ -18,7 +18,7 @@ describe("SearchParamsSchema", () => {
       const result = SearchParamsSchema.safeParse({
         query: "deployment verification",
         match_count: 10,
-        project: "orchestra_dev",
+        project: "my-project",
         severity: "high",
         learning_type: "scar",
       });

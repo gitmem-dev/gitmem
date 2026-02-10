@@ -456,22 +456,7 @@ else
          "exit=$EXIT_CODE, file=$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
 fi
 
-# Test 4.3: semantic_search call → LOOKED event logged
-setup_state 0 0
-create_session_registry "test-session"
-rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
-OUTPUT=$(echo '{"tool_name":"mcp__supabase__semantic_search","tool_input":{"query":"hook enforcement"}}' | \
-    bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
-
-if [ -f "$AUDIT_FILE" ] && grep -q '"type":"LOOKED"' "$AUDIT_FILE" && grep -q 'semantic_search' "$AUDIT_FILE"; then
-    pass "semantic_search → LOOKED event in audit.jsonl"
-else
-    fail "semantic_search → LOOKED event" \
-         "audit.jsonl contains LOOKED + semantic_search" \
-         "$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
-fi
-
-# Test 4.4: Consequential Bash (git push) → ACTION event logged
+# Test 4.3: Consequential Bash (git push) → ACTION event logged
 setup_state 0 0
 create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
@@ -486,7 +471,7 @@ else
          "$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
 fi
 
-# Test 4.5: Non-consequential Bash (ls) → no audit entry
+# Test 4.4: Non-consequential Bash (ls) → no audit entry
 setup_state 0 0
 create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
@@ -502,38 +487,7 @@ else
          "exit=$EXIT_CODE, audit=$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
 fi
 
-# Test 4.6: Linear update_issue to Done → ACTION event
-setup_state 0 0
-create_session_registry "test-session"
-rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
-OUTPUT=$(echo '{"tool_name":"mcp__linear__update_issue","tool_input":{"id":"OD-100","state":"Done"}}' | \
-    bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
-
-if [ -f "$AUDIT_FILE" ] && grep -q '"type":"ACTION"' "$AUDIT_FILE" && grep -q 'OD-100' "$AUDIT_FILE"; then
-    pass "Linear update_issue Done → ACTION event"
-else
-    fail "Linear Done → ACTION event" \
-         "audit.jsonl contains ACTION + OD-100" \
-         "$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
-fi
-
-# Test 4.7: Linear update_issue to non-Done state → no audit entry
-setup_state 0 0
-create_session_registry "test-session"
-rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
-OUTPUT=$(echo '{"tool_name":"mcp__linear__update_issue","tool_input":{"id":"OD-100","state":"In Progress"}}' | \
-    bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
-EXIT_CODE=$?
-
-if [ $EXIT_CODE -eq 0 ] && [ ! -f "$AUDIT_FILE" ]; then
-    pass "Linear update to In Progress → no audit entry"
-else
-    fail "Linear non-Done → no audit" \
-         "no audit.jsonl" \
-         "audit=$([ -f $AUDIT_FILE ] && cat $AUDIT_FILE || echo 'missing')"
-fi
-
-# Test 4.8: Write .sql file → ACTION event
+# Test 4.5: Write .sql file → ACTION event
 setup_state 0 0
 create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"

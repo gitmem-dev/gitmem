@@ -73,28 +73,12 @@ case "$TOOL_NAME" in
         QUERY=$(parse_json "$HOOK_INPUT" ".tool_input.query")
         DETAIL="query: ${QUERY:-<no query>}"
         ;;
-    mcp__supabase__semantic_search|mcp__supabase__scar_search)
-        EVENT_TYPE="LOOKED"
-        QUERY=$(parse_json "$HOOK_INPUT" ".tool_input.query")
-        DETAIL="query: ${QUERY:-<no query>}"
-        ;;
     Bash)
         COMMAND=$(parse_json "$HOOK_INPUT" ".tool_input.command")
         if echo "$COMMAND" | grep -qE '(git\s+push|git\s+tag|npm\s+publish|npx\s+supabase\s+db\s+push|deploy|supabase\s+functions\s+deploy)'; then
             EVENT_TYPE="ACTION"
             DETAIL="command: $COMMAND"
         fi
-        ;;
-    mcp__linear__update_issue)
-        STATE=$(parse_json "$HOOK_INPUT" ".tool_input.state")
-        STATE_LOWER=$(echo "$STATE" | tr '[:upper:]' '[:lower:]')
-        case "$STATE_LOWER" in
-            done|complete|completed|closed)
-                EVENT_TYPE="ACTION"
-                ISSUE_ID=$(parse_json "$HOOK_INPUT" ".tool_input.id")
-                DETAIL="issue: ${ISSUE_ID:-unknown} -> ${STATE}"
-                ;;
-        esac
         ;;
     Write|Edit)
         FILE_PATH=$(parse_json "$HOOK_INPUT" ".tool_input.file_path")

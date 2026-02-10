@@ -18,12 +18,12 @@ import {
 } from "../../../src/schemas/common.js";
 
 describe("ProjectSchema", () => {
-  it("accepts orchestra_dev", () => {
-    expect(ProjectSchema.safeParse("orchestra_dev").success).toBe(true);
+  it("accepts default", () => {
+    expect(ProjectSchema.safeParse("default").success).toBe(true);
   });
 
-  it("accepts weekend_warrior", () => {
-    expect(ProjectSchema.safeParse("weekend_warrior").success).toBe(true);
+  it("accepts other-project", () => {
+    expect(ProjectSchema.safeParse("other-project").success).toBe(true);
   });
 
   it("accepts any string as project", () => {

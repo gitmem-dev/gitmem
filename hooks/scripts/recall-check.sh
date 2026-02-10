@@ -15,7 +15,6 @@
 #
 # Filter layer: Only triggers on consequential actions:
 #   - Bash: git push, git tag, npm publish, deploy commands
-#   - Linear: state changes to Done/Complete
 #   - Write/Edit: .sql migrations, .env files
 #
 # Input: JSON via stdin with tool_name and tool_input
@@ -102,16 +101,6 @@ case "$TOOL_NAME" in
         if echo "$COMMAND" | grep -qE '(git\s+push|git\s+tag|npm\s+publish|npx\s+supabase\s+db\s+push|deploy|supabase\s+functions\s+deploy)'; then
             IS_CONSEQUENTIAL=true
         fi
-        ;;
-    mcp__linear__update_issue)
-        # Check for Done/Complete state transitions
-        STATE=$(parse_json "$HOOK_INPUT" ".tool_input.state")
-        STATE_LOWER=$(echo "$STATE" | tr '[:upper:]' '[:lower:]')
-        case "$STATE_LOWER" in
-            done|complete|completed|closed)
-                IS_CONSEQUENTIAL=true
-                ;;
-        esac
         ;;
     Write|Edit)
         # Check for sensitive file types

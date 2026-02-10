@@ -22,7 +22,7 @@ const BASE_CREATION_PARAMS: ThreadCreationTripleParams = {
   text: "Fix auth timeout in production",
   session_id: "550e8400-e29b-41d4-a716-446655440000",
   linear_issue: "OD-123",
-  project: "orchestra_dev",
+  project: "test-project",
   agent: "CLI",
 };
 
@@ -31,7 +31,7 @@ const BASE_RESOLUTION_PARAMS: ThreadResolutionTripleParams = {
   text: "Fix auth timeout in production",
   resolution_note: "Fixed by increasing timeout to 30s",
   session_id: "660e8400-e29b-41d4-a716-446655440000",
-  project: "orchestra_dev",
+  project: "test-project",
   agent: "CLI",
 };
 
@@ -90,7 +90,7 @@ describe("extractThreadCreationTriples", () => {
       expect(triple.source_type).toBe("thread");
       expect(triple.source_id).toBe("t-abc12345");
       expect(triple.half_life_days).toBe(9999);
-      expect(triple.project).toBe("orchestra_dev");
+      expect(triple.project).toBe("test-project");
       expect(triple.created_by).toBe("CLI");
     }
   });

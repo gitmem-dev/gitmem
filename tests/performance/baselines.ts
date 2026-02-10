@@ -7,7 +7,7 @@
  * These baselines are derived from:
  * - OD-429 performance targets
  * - 2026-02-03 regression analysis (51s decisions query)
- * - Production measurements on orchestra_dev
+ * - Production measurements on real projects
  */
 
 /**

@@ -34,7 +34,7 @@ describe("AnalyzeParamsSchema", () => {
       const result = AnalyzeParamsSchema.safeParse({
         lens: "summary",
         days: 30,
-        project: "orchestra_dev",
+        project: "my-project",
         agent: "CLI",
       });
       expect(result.success).toBe(true);

@@ -123,8 +123,8 @@ describe("Cache Behavior", () => {
       const winsKey = (project: string, limit: number) => `wins:${project}:${limit}`;
 
       // Verify pattern consistency
-      expect(decisionsKey("orchestra_dev", 5)).toBe("decisions:orchestra_dev:5");
-      expect(winsKey("orchestra_dev", 8)).toBe("wins:orchestra_dev:8");
+      expect(decisionsKey("test-project", 5)).toBe("decisions:test-project:5");
+      expect(winsKey("test-project", 8)).toBe("wins:test-project:8");
 
       // Pattern structure should be identical: {type}:{project}:{limit}
       const decisionPattern = decisionsKey("test", 10).split(":");

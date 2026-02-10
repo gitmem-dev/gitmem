@@ -30,7 +30,7 @@ describe("OD-547: Agent-Keyed Variant Assignment", () => {
       // Now: agent identity is used instead, so variants are always assigned
       const result = await recall({
         plan: "deploy containerized app to production with full feature parity",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 3,
         // NO issue_id — this used to be the bug!
       });
@@ -121,7 +121,7 @@ describe("OD-547: Agent-Keyed Variant Assignment", () => {
     it("should assign variants when issue_id IS provided (regression)", async () => {
       const result = await recall({
         plan: "deploy containerized app to production with full feature parity",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 3,
         issue_id: "OD-547-REGRESSION",
       });

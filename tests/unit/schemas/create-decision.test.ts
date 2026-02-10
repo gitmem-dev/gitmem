@@ -26,7 +26,7 @@ describe("CreateDecisionParamsSchema", () => {
         docs_affected: ["docs/systems/enforcement/roadmap.md", "CLAUDE.md"],
         linear_issue: "OD-580",
         session_id: "test-session-123",
-        project: "orchestra_dev",
+        project: "my-project",
       });
       expect(result.success).toBe(true);
       expect(result.data?.alternatives_considered).toHaveLength(3);

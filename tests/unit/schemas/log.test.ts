@@ -15,7 +15,7 @@ describe("LogParamsSchema", () => {
     it("accepts full valid params", () => {
       const result = LogParamsSchema.safeParse({
         limit: 20,
-        project: "orchestra_dev",
+        project: "my-project",
         learning_type: "scar",
         severity: "high",
         since: 7,

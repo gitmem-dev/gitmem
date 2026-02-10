@@ -566,16 +566,16 @@ describe("prepare_context: project parameter", () => {
     expect(isLocalSearchReady).toHaveBeenCalledWith("default");
   });
 
-  it("passes weekend_warrior project through", async () => {
+  it("passes custom project through", async () => {
     setupLocalSearch([]);
 
     await prepareContext({
-      plan: "test ww project",
+      plan: "test custom project",
       format: "compact",
-      project: "weekend_warrior",
+      project: "other-project",
     });
 
-    expect(isLocalSearchReady).toHaveBeenCalledWith("weekend_warrior");
+    expect(isLocalSearchReady).toHaveBeenCalledWith("other-project");
   });
 });
 

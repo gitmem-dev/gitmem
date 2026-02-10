@@ -63,7 +63,7 @@ describe("CacheService", () => {
 
     it("generates different keys for different projects", () => {
       const key1 = cache.scarSearchKey("test", "default", 5);
-      const key2 = cache.scarSearchKey("test", "weekend_warrior", 5);
+      const key2 = cache.scarSearchKey("test", "other-project", 5);
       expect(key1).not.toBe(key2);
     });
 

@@ -43,7 +43,7 @@ describe("Cache Key Generation", () => {
   bench(
     "decisionsKey generation",
     () => {
-      cache.decisionsKey("orchestra_dev", 5);
+      cache.decisionsKey("test-project", 5);
     },
     { time: 1000, iterations: 50000 }
   );
@@ -51,7 +51,7 @@ describe("Cache Key Generation", () => {
   bench(
     "winsKey generation",
     () => {
-      cache.winsKey("orchestra_dev", 8);
+      cache.winsKey("test-project", 8);
     },
     { time: 1000, iterations: 50000 }
   );
@@ -59,7 +59,7 @@ describe("Cache Key Generation", () => {
   bench(
     "scarSearchKey generation (short query)",
     () => {
-      cache.scarSearchKey("test", "orchestra_dev", 5);
+      cache.scarSearchKey("test", "test-project", 5);
     },
     { time: 1000, iterations: 50000 }
   );
@@ -69,7 +69,7 @@ describe("Cache Key Generation", () => {
     () => {
       cache.scarSearchKey(
         "deployment verification process for production systems",
-        "orchestra_dev",
+        "test-project",
         10
       );
     },

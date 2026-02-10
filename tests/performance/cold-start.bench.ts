@@ -101,7 +101,7 @@ describe("Cold Start - Session Start (No Cache)", () => {
   bench(
     "cold session start - decisions only",
     async () => {
-      await cache.getOrFetchDecisions("orchestra_dev", 5, simulateDecisionsFetch);
+      await cache.getOrFetchDecisions("test-project", 5, simulateDecisionsFetch);
     },
     { time: 10000, iterations: 10 }
   );
@@ -109,7 +109,7 @@ describe("Cold Start - Session Start (No Cache)", () => {
   bench(
     "cold session start - wins only",
     async () => {
-      await cache.getOrFetchWins("orchestra_dev", 8, simulateWinsFetch);
+      await cache.getOrFetchWins("test-project", 8, simulateWinsFetch);
     },
     { time: 10000, iterations: 10 }
   );
@@ -118,8 +118,8 @@ describe("Cold Start - Session Start (No Cache)", () => {
     "cold session start - full (decisions + wins)",
     async () => {
       const [decisions, wins] = await Promise.all([
-        cache.getOrFetchDecisions("orchestra_dev", 5, simulateDecisionsFetch),
-        cache.getOrFetchWins("orchestra_dev", 8, simulateWinsFetch),
+        cache.getOrFetchDecisions("test-project", 5, simulateDecisionsFetch),
+        cache.getOrFetchWins("test-project", 8, simulateWinsFetch),
       ]);
     },
     { time: 15000, iterations: 5 }

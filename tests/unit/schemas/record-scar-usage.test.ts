@@ -139,7 +139,7 @@ describe("RecordScarUsageBatchParamsSchema", () => {
     it("accepts multiple entries", () => {
       const result = RecordScarUsageBatchParamsSchema.safeParse({
         scars: [validEntry, { ...validEntry, scar_identifier: "scar-2" }],
-        project: "orchestra_dev",
+        project: "my-project",
       });
       expect(result.success).toBe(true);
     });

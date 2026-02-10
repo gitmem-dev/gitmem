@@ -18,26 +18,26 @@ describe("RecallParamsSchema", () => {
     it("accepts full valid params", () => {
       const result = RecallParamsSchema.safeParse({
         plan: "deploy to production",
-        project: "orchestra_dev",
+        project: "my-project",
         match_count: 5,
         issue_id: "OD-123",
       });
       expect(result.success).toBe(true);
       expect(result.data).toEqual({
         plan: "deploy to production",
-        project: "orchestra_dev",
+        project: "my-project",
         match_count: 5,
         issue_id: "OD-123",
       });
     });
 
-    it("accepts weekend_warrior project", () => {
+    it("accepts other-project project", () => {
       const result = RecallParamsSchema.safeParse({
         plan: "test",
-        project: "weekend_warrior",
+        project: "other-project",
       });
       expect(result.success).toBe(true);
-      expect(result.data?.project).toBe("weekend_warrior");
+      expect(result.data?.project).toBe("other-project");
     });
   });
 
@@ -48,7 +48,7 @@ describe("RecallParamsSchema", () => {
     });
 
     it("rejects missing plan", () => {
-      const result = RecallParamsSchema.safeParse({ project: "orchestra_dev" });
+      const result = RecallParamsSchema.safeParse({ project: "my-project" });
       expect(result.success).toBe(false);
     });
 

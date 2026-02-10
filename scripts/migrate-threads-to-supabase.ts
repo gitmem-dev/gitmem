@@ -48,7 +48,7 @@ const THREAD_FILE_PATHS = [
 
 const BACKUP_PATH = path.resolve(__dirname, "thread-migration-backup.json");
 const TARGET_TABLE = "orchestra_threads";
-const PROJECT = "orchestra_dev";
+const PROJECT = "default";
 
 // Operational thread keywords (case-insensitive)
 const OPERATIONAL_KEYWORDS = [
@@ -241,7 +241,7 @@ async function collectFromSessions(): Promise<{
       select: "id,session_date,open_threads",
       filters: {
         open_threads: "not.is.null",
-        project: "orchestra_dev",
+        project: "default",
       },
       order: "created_at.desc",
       limit: 20,

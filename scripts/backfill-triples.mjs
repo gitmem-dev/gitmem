@@ -154,7 +154,7 @@ async function main() {
       source_linear_issue: l.source_linear_issue,
       persona_name: l.persona_name || "Unknown",
       domain: l.domain || [],
-      project: l.project || "orchestra_dev",
+      project: l.project || "default",
     });
     candidates.push(...triples);
   }
@@ -169,7 +169,7 @@ async function main() {
       personas_involved: d.personas_involved || [],
       linear_issue: d.linear_issue,
       session_id: d.session_id,
-      project: d.project || "orchestra_dev",
+      project: d.project || "default",
       agent,
     });
     // Fine-grained dedup: skip individual triples that already exist, not the whole decision

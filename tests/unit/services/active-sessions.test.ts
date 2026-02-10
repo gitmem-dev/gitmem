@@ -31,7 +31,7 @@ function makeEntry(overrides: Partial<ActiveSessionEntry> = {}): ActiveSessionEn
     started_at: overrides.started_at || new Date().toISOString(),
     hostname: overrides.hostname || os.hostname(),
     pid: overrides.pid ?? process.pid,
-    project: overrides.project || "orchestra_dev",
+    project: overrides.project || "default",
   };
 }
 
@@ -415,7 +415,7 @@ describe("migrateFromLegacy (GIT-23)", () => {
       session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
       agent: "CLI",
       started_at: "2026-02-09T10:00:00.000Z",
-      project: "orchestra_dev",
+      project: "default",
       surfaced_scars: [{ scar_id: "test", scar_title: "Test scar" }],
     };
     fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify(oldData, null, 2));
@@ -485,7 +485,7 @@ describe("migrateFromLegacy (GIT-23)", () => {
       session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
       agent: "DAC",
       started_at: "2026-02-09T10:00:00.000Z",
-      project: "orchestra_dev",
+      project: "default",
       // No hostname or pid — pre-GIT-20 format
     };
     fs.writeFileSync(path.join(tmpDir, "active-session.json"), JSON.stringify(oldData));

@@ -39,7 +39,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
       // First surface - creates assignment
       const result1 = await recall({
         plan: "deploy containerized app to production with full feature parity",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 1,
         issue_id: "OD-525-TEST",
       });
@@ -80,7 +80,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
       // Second surface - should reuse same assignment (same agent)
       const result2 = await recall({
         plan: "deploy containerized app to production with full feature parity",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 1,
         issue_id: "OD-525-TEST",
       });
@@ -152,7 +152,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
     it("should use original description for scars without variants", async () => {
       const result = await recall({
         plan: "implement brand new feature with no prior lessons",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 5,
       });
 
@@ -183,7 +183,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
     it("should assign variants to all scars that have them", async () => {
       const result = await recall({
         plan: "deploy containerized app, verify CODA-1 work, test infrastructure",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 5,
       });
 
@@ -209,7 +209,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
     it("should record enforcement metrics with agent_id", async () => {
       const result = await recall({
         plan: "deploy containerized app to production with full feature parity",
-        project: "orchestra_dev",
+        project: "test-project",
         match_count: 3,
         issue_id: "TEST-OD525-METRICS",
       });

@@ -94,7 +94,7 @@ function makeSupabaseThreadRow(overrides: Record<string, unknown> = {}) {
     related_issues: overrides.related_issues ?? null,
     domain: overrides.domain ?? null,
     embedding: overrides.embedding ?? null,
-    project: overrides.project ?? "orchestra_dev",
+    project: overrides.project ?? "test-project",
     metadata: overrides.metadata ?? {},
   };
 }
@@ -157,7 +157,7 @@ describe("Supabase CRUD: create_thread writes to Supabase", () => {
       text: thread.text,
       status: "active", // local "open" maps to Supabase "active"
       source_session: thread.source_session,
-      project: "orchestra_dev",
+      project: "test-project",
       vitality_score: 1.0,
       touch_count: 1,
     });
@@ -169,7 +169,7 @@ describe("Supabase CRUD: create_thread writes to Supabase", () => {
         thread_id: "t-create01",
         text: "New thread for Supabase",
         status: "active",
-        project: "orchestra_dev",
+        project: "test-project",
       })
     );
   });
@@ -279,7 +279,7 @@ describe("Supabase CRUD: list_threads reads from Supabase", () => {
 
     const result = await mockListRecords({
       table: "orchestra_threads",
-      filters: { status: "active", project: "orchestra_dev" },
+      filters: { status: "active", project: "test-project" },
       orderBy: { column: "last_touched_at", ascending: false },
     });
 
@@ -310,7 +310,7 @@ describe("Cache Sync: session_start populates local cache from Supabase", () => 
     // Simulate what session_start should do: fetch from Supabase, write to file
     const fetched = await mockListRecords({
       table: "orchestra_threads",
-      filters: { project: "orchestra_dev" },
+      filters: { project: "test-project" },
     });
     const threadObjects = fetched.map(supabaseRowToThreadObject);
 
@@ -602,7 +602,7 @@ describe("Edge Case: thread with null embedding accepted", () => {
       thread_id: "t-noembed1",
       text: "No embedding yet",
       embedding: null,
-      project: "orchestra_dev",
+      project: "test-project",
     });
 
     expect(result.embedding).toBeNull();
@@ -636,12 +636,12 @@ describe("Edge Case: project filter applied on list_threads", () => {
     const orchThread = makeSupabaseThreadRow({
       thread_id: "t-orch001",
       text: "Orchestra thread",
-      project: "orchestra_dev",
+      project: "test-project",
     });
     const wwThread = makeSupabaseThreadRow({
       thread_id: "t-ww00001",
       text: "Weekend warrior thread",
-      project: "weekend_warrior",
+      project: "other-project",
     });
 
     // Mock returns filtered results (as Supabase would with project filter)
@@ -657,14 +657,14 @@ describe("Edge Case: project filter applied on list_threads", () => {
     // Query with project filter
     const orchResults = await mockListRecords({
       table: "orchestra_threads",
-      filters: { project: "orchestra_dev" },
+      filters: { project: "test-project" },
     });
     expect(orchResults).toHaveLength(1);
     expect(orchResults[0].thread_id).toBe("t-orch001");
 
     const wwResults = await mockListRecords({
       table: "orchestra_threads",
-      filters: { project: "weekend_warrior" },
+      filters: { project: "other-project" },
     });
     expect(wwResults).toHaveLength(1);
     expect(wwResults[0].thread_id).toBe("t-ww00001");

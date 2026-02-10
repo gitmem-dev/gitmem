@@ -60,7 +60,7 @@ describe("Session Start Components", () => {
   bench(
     "cache key generation - decisions",
     () => {
-      cache.decisionsKey("orchestra_dev", 5);
+      cache.decisionsKey("test-project", 5);
     },
     {
       time: 1000,
@@ -71,7 +71,7 @@ describe("Session Start Components", () => {
   bench(
     "cache key generation - wins",
     () => {
-      cache.winsKey("orchestra_dev", 8);
+      cache.winsKey("test-project", 8);
     },
     {
       time: 1000,
@@ -82,7 +82,7 @@ describe("Session Start Components", () => {
   bench(
     "cache key generation - scar search",
     () => {
-      cache.scarSearchKey("deployment verification", "orchestra_dev", 5);
+      cache.scarSearchKey("deployment verification", "test-project", 5);
     },
     {
       time: 1000,
@@ -94,7 +94,7 @@ describe("Session Start Components", () => {
     "decisions - cache miss (simulated)",
     async () => {
       // Simulate cache miss - just the lookup cost
-      const key = cache.decisionsKey("orchestra_dev", 5);
+      const key = cache.decisionsKey("test-project", 5);
       await cache.getResult(key);
     },
     {
@@ -121,7 +121,7 @@ describe("Session Start Components", () => {
   bench(
     "wins - cache miss (simulated)",
     async () => {
-      const key = cache.winsKey("orchestra_dev", 8);
+      const key = cache.winsKey("test-project", 8);
       await cache.getResult(key);
     },
     {
@@ -200,13 +200,13 @@ describe("Session Start - Full Flow Simulation", () => {
     async () => {
       // Simulate full session_start with cached data
       const decisions = await cache.getOrFetchDecisions(
-        "orchestra_dev",
+        "test-project",
         5,
         async () => MOCK_DECISIONS
       );
 
       const wins = await cache.getOrFetchWins(
-        "orchestra_dev",
+        "test-project",
         8,
         async () => MOCK_WINS
       );

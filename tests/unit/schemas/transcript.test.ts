@@ -42,7 +42,7 @@ describe("SaveTranscriptParamsSchema", () => {
         session_id: "test-session",
         transcript: "Transcript content",
         format: "json",
-        project: "orchestra_dev",
+        project: "my-project",
       });
       expect(result.success).toBe(true);
     });

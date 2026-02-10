@@ -1,5 +1,5 @@
 {
-  "name": "@nteg-dev/gitmem",
+  "name": "gitmem",
   "version": "0.2.0",
   "description": "Institutional memory for AI coding agents. Never repeat the same mistake.",
   "type": "module",
@@ -70,6 +70,7 @@
   },
   "homepage": "https://github.com/nTEG-dev/gitmem#readme",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }

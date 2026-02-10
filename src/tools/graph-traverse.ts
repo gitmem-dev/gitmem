@@ -104,7 +104,7 @@ function normalizeNode(input: string): NormalizedNode {
   const trimmed = input.trim();
 
   // Already prefixed: "Scar: Title", "Issue: OD-466", etc.
-  if (/^(Scar|Win|Decision|Pattern|Anti-Pattern|Issue|Agent|Persona):/.test(trimmed)) {
+  if (/^(Scar|Win|Decision|Pattern|Anti-Pattern|Issue|Agent|Persona|Thread):/.test(trimmed)) {
     return { pattern: `*${trimmed}*`, type: trimmed.split(":")[0] };
   }
 
@@ -137,6 +137,7 @@ function detectNodeType(label: string): string {
   if (label.startsWith("Issue:")) return "Issue";
   if (label.startsWith("Agent:")) return "Agent";
   if (label.startsWith("Persona:")) return "Persona";
+  if (label.startsWith("Thread:")) return "Thread";
   return "Unknown";
 }
 

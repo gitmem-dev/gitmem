@@ -16,13 +16,16 @@ import { hasSupabase } from "./tier.js";
 
 // --- Types ---
 
-/** Controlled predicate vocabulary (Phase 2 subset) */
+/** Controlled predicate vocabulary */
 type Predicate =
   | "created_in"
   | "influenced_by"
   | "supersedes"
   | "demonstrates"
-  | "affects_doc";
+  | "affects_doc"
+  | "created_thread"
+  | "resolves_thread"
+  | "relates_to_thread";
 
 interface TripleCandidate {
   subject: string;
@@ -120,6 +123,7 @@ function buildSubjectLabel(type: string, title: string): string {
     pattern: "Pattern",
     anti_pattern: "Anti-Pattern",
     decision: "Decision",
+    thread: "Thread",
   };
   const label = typeLabels[type] || type.charAt(0).toUpperCase() + type.slice(1);
   return `${label}: ${title}`;
@@ -343,5 +347,110 @@ export function writeTriplesForLearning(params: LearningTripleParams): Promise<n
  */
 export function writeTriplesForDecision(params: DecisionTripleParams): Promise<number> {
   const triples = extractDecisionTriples(params);
+  return writeTriples(triples);
+}
+
+// --- Thread Triple Extraction (Phase 4) ---
+
+export interface ThreadCreationTripleParams {
+  thread_id: string;
+  text: string;
+  linear_issue?: string;
+  session_id?: string;
+  project: string;
+  agent: string;
+}
+
+/**
+ * Extract triples from a newly created thread.
+ * Pure function — no side effects.
+ */
+export function extractThreadCreationTriples(params: ThreadCreationTripleParams): TripleCandidate[] {
+  const triples: TripleCandidate[] = [];
+  const threadLabel = buildSubjectLabel("thread", params.text);
+  const base = {
+    source_type: "thread",
+    source_id: params.thread_id,
+    source_linear_issue: params.linear_issue,
+    project: params.project,
+    half_life_days: HALF_LIFE_PROCESS,
+    created_by: params.agent,
+  };
+
+  // RULE 1: session_id -> "created_thread" (Session created this thread)
+  if (params.session_id) {
+    triples.push({
+      ...base,
+      subject: `Session: ${params.session_id}`,
+      predicate: "created_thread",
+      object: threadLabel,
+    });
+  }
+
+  // RULE 2: linear_issue -> "relates_to_thread" (Thread relates to issue)
+  if (params.linear_issue) {
+    triples.push({
+      ...base,
+      subject: threadLabel,
+      predicate: "relates_to_thread",
+      object: `Issue: ${params.linear_issue}`,
+    });
+  }
+
+  return triples;
+}
+
+export interface ThreadResolutionTripleParams {
+  thread_id: string;
+  text: string;
+  resolution_note?: string;
+  session_id?: string;
+  project: string;
+  agent: string;
+}
+
+/**
+ * Extract triples from a resolved thread.
+ * Pure function — no side effects.
+ */
+export function extractThreadResolutionTriples(params: ThreadResolutionTripleParams): TripleCandidate[] {
+  const triples: TripleCandidate[] = [];
+  const threadLabel = buildSubjectLabel("thread", params.text);
+  const base = {
+    source_type: "thread",
+    source_id: params.thread_id,
+    project: params.project,
+    half_life_days: HALF_LIFE_PROCESS,
+    created_by: params.agent,
+  };
+
+  // RULE 1: session_id -> "resolves_thread" (Session resolved this thread)
+  if (params.session_id) {
+    triples.push({
+      ...base,
+      subject: `Session: ${params.session_id}`,
+      predicate: "resolves_thread",
+      object: threadLabel,
+    });
+  }
+
+  return triples;
+}
+
+/**
+ * Generate and write triples for a newly created thread.
+ * Fire-and-forget — call with .catch(() => {}).
+ */
+export function writeTriplesForThreadCreation(params: ThreadCreationTripleParams): Promise<number> {
+  const triples = extractThreadCreationTriples(params);
+  return writeTriples(triples);
+}
+
+/**
+ * Generate and write triples for a resolved thread.
+ * Fire-and-forget — call with .catch(() => {}).
+ */
+export function writeTriplesForThreadResolution(params: ThreadResolutionTripleParams): Promise<number> {
+  const triples = extractThreadResolutionTriples(params);
   return writeTriples(triples);
 }

@@ -28,6 +28,8 @@ import {
 } from "../services/thread-supabase.js";
 import { checkDuplicate } from "../services/thread-dedup.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
+import { writeTriplesForThreadCreation } from "../services/triple-writer.js";
+import { getAgentIdentity } from "../services/agent-detection.js";
 import {
   Timer,
   recordMetrics,
@@ -216,6 +218,16 @@ export async function createThread(
       supabase_synced: supabaseSynced,
       embedding_generated: newEmbedding !== null,
     },
+  }).catch(() => {});
+
+  // Phase 4: Knowledge graph triples (fire-and-forget)
+  writeTriplesForThreadCreation({
+    thread_id: thread.id,
+    text: trimmedText,
+    linear_issue: params.linear_issue,
+    session_id: sessionId,
+    project,
+    agent: getAgentIdentity(),
   }).catch(() => {});
 
   return {

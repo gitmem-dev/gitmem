@@ -20,6 +20,8 @@ import {
   saveThreadsFile,
 } from "../services/thread-manager.js";
 import { resolveThreadInSupabase } from "../services/thread-supabase.js";
+import { writeTriplesForThreadResolution } from "../services/triple-writer.js";
+import { getAgentIdentity } from "../services/agent-detection.js";
 import {
   Timer,
   recordMetrics,
@@ -103,6 +105,16 @@ export async function resolveThread(
       resolution_note: params.resolution_note,
       supabase_synced: supabaseSynced,
     },
+  }).catch(() => {});
+
+  // Phase 4: Knowledge graph triples (fire-and-forget)
+  writeTriplesForThreadResolution({
+    thread_id: resolved.id,
+    text: resolved.text,
+    resolution_note: params.resolution_note,
+    session_id: sessionId,
+    project: "orchestra_dev",
+    agent: getAgentIdentity(),
   }).catch(() => {});
 
   return {

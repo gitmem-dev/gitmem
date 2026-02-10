@@ -1,7 +1,11 @@
 #!/bin/bash
 # ============================================================================
 # gitmem-hooks — Integration Tests
-# Tests all three hook scripts against real scenarios
+# Tests all four hook scripts against real scenarios
+#
+# Updated for Phase 1 multi-session registry format (GIT-19):
+#   - active-sessions.json (plural) with {"sessions": [...]} array
+#   - Per-session data at .gitmem/sessions/{session_id}/session.json
 # ============================================================================
 
 set -e
@@ -41,6 +45,55 @@ trap "rm -rf $TMPDIR" EXIT
 cd "$TMPDIR"
 
 # ============================================================================
+# Helpers: multi-session registry format (Phase 1, GIT-19)
+# ============================================================================
+
+# Create multi-session registry (replaces old active-session.json singular)
+create_session_registry() {
+    local sid="${1:-test-session}"
+    mkdir -p "$TMPDIR/.gitmem"
+    echo "{\"sessions\":[{\"session_id\":\"$sid\"}]}" > "$TMPDIR/.gitmem/active-sessions.json"
+}
+
+# Remove session registry and per-session data
+remove_session_registry() {
+    rm -f "$TMPDIR/.gitmem/active-sessions.json"
+    rm -rf "$TMPDIR/.gitmem/sessions"
+}
+
+# Create per-session data file (needed by recall-check.sh for scar/confirmation checks)
+create_session_data() {
+    local sid="${1:-test-session}"
+    local surfaced_scars="${2:-[]}"
+    local confirmations="${3:-[]}"
+    mkdir -p "$TMPDIR/.gitmem/sessions/$sid"
+    echo "{\"surfaced_scars\":$surfaced_scars,\"confirmations\":$confirmations}" > "$TMPDIR/.gitmem/sessions/$sid/session.json"
+}
+
+# Helper: check if gitmem binary exists on disk (affects detection tests)
+gitmem_binary_on_disk() {
+    for p in "/workspace/gitmem/dist/index.js"; do
+        [ -f "$p" ] && return 0
+    done
+    command -v gitmem &>/dev/null && return 0
+    return 1
+}
+
+# Helper: set up state dir with known values
+setup_state() {
+    local tool_count="${1:-0}"
+    local start_offset="${2:-0}"  # seconds ago
+
+    rm -rf /tmp/gitmem-hooks-*
+    export CLAUDE_SESSION_ID="test-$$"
+    local STATE_DIR="/tmp/gitmem-hooks-test-$$"
+    mkdir -p "$STATE_DIR"
+    echo "$tool_count" > "$STATE_DIR/tool_call_count"
+    echo $(($(date +%s) - start_offset)) > "$STATE_DIR/start_time"
+    rm -f "$STATE_DIR/stop_hook_active"
+}
+
+# ============================================================================
 # TEST GROUP 1: session-start.sh
 # ============================================================================
 
@@ -51,11 +104,11 @@ echo -e "${YELLOW}=== SessionStart Hook ===${NC}"
 echo '{"mcpServers":{"gitmem":{"command":"node","args":["/path/to/gitmem"]}}}' > "$TMPDIR/.mcp.json"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
 
-if echo "$OUTPUT" | grep -q "IMMEDIATELY call gitmem session_start"; then
-    pass "Gitmem detected → outputs session_start instruction"
+if echo "$OUTPUT" | grep -q "SESSION START"; then
+    pass "Gitmem detected → outputs session start instruction"
 else
-    fail "Gitmem detected → outputs session_start instruction" \
-         "Contains 'IMMEDIATELY call gitmem session_start'" \
+    fail "Gitmem detected → outputs session start instruction" \
+         "Contains 'SESSION START'" \
          "$OUTPUT"
 fi
 
@@ -68,40 +121,61 @@ else
     pass "Output is plain text, not JSON"
 fi
 
-# Test 1.3: Gitmem NOT detected
+# Test 1.3: Gitmem NOT in .mcp.json (may still detect via disk fallback)
 rm "$TMPDIR/.mcp.json"
 echo '{"mcpServers":{"other-tool":{}}}' > "$TMPDIR/.mcp.json"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
 
-if echo "$OUTPUT" | grep -q "not detected"; then
-    pass "Gitmem not in .mcp.json → outputs 'not detected' message"
+if gitmem_binary_on_disk; then
+    # Gitmem binary exists on disk — detection cascade finds it even without .mcp.json
+    if echo "$OUTPUT" | grep -q "SESSION START"; then
+        pass "Gitmem not in .mcp.json but found on disk → still detected (correct cascade)"
+    else
+        fail "Gitmem not in .mcp.json but found on disk → still detected" \
+             "Contains 'SESSION START' (disk fallback)" \
+             "$OUTPUT"
+    fi
 else
-    fail "Gitmem not in .mcp.json → outputs 'not detected' message" \
-         "Contains 'not detected'" \
-         "$OUTPUT"
+    if echo "$OUTPUT" | grep -q "not detected"; then
+        pass "Gitmem not in .mcp.json, no binary → outputs 'not detected' message"
+    else
+        fail "Gitmem not in .mcp.json, no binary → outputs 'not detected'" \
+             "Contains 'not detected'" \
+             "$OUTPUT"
+    fi
 fi
 
-# Test 1.4: No .mcp.json at all
+# Test 1.4: No .mcp.json at all (may still detect via disk fallback)
 rm "$TMPDIR/.mcp.json"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
 
-if echo "$OUTPUT" | grep -q "not detected"; then
-    pass "No .mcp.json file → outputs 'not detected' message"
+if gitmem_binary_on_disk; then
+    if echo "$OUTPUT" | grep -q "SESSION START"; then
+        pass "No .mcp.json but gitmem on disk → still detected (correct cascade)"
+    else
+        fail "No .mcp.json but gitmem on disk → still detected" \
+             "Contains 'SESSION START' (disk fallback)" \
+             "$OUTPUT"
+    fi
 else
-    fail "No .mcp.json file → outputs 'not detected' message" \
-         "Contains 'not detected'" \
-         "$OUTPUT"
+    if echo "$OUTPUT" | grep -q "not detected"; then
+        pass "No .mcp.json file, no binary → outputs 'not detected' message"
+    else
+        fail "No .mcp.json file, no binary → outputs 'not detected'" \
+             "Contains 'not detected'" \
+             "$OUTPUT"
+    fi
 fi
 
 # Test 1.5: gitmem-mcp alternate name detected
 echo '{"mcpServers":{"gitmem-mcp":{"command":"node"}}}' > "$TMPDIR/.mcp.json"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
 
-if echo "$OUTPUT" | grep -q "IMMEDIATELY call gitmem session_start"; then
+if echo "$OUTPUT" | grep -q "SESSION START"; then
     pass "gitmem-mcp alternate name → detected"
 else
     fail "gitmem-mcp alternate name → detected" \
-         "Contains 'IMMEDIATELY call gitmem session_start'" \
+         "Contains 'SESSION START'" \
          "$OUTPUT"
 fi
 
@@ -124,23 +198,9 @@ rm -rf /tmp/gitmem-hooks-*
 echo ""
 echo -e "${YELLOW}=== Stop Hook (Session Close Check) ===${NC}"
 
-# Helper: set up state dir with known values
-setup_state() {
-    local tool_count="${1:-0}"
-    local start_offset="${2:-0}"  # seconds ago
-
-    rm -rf /tmp/gitmem-hooks-*
-    export CLAUDE_SESSION_ID="test-$$"
-    local STATE_DIR="/tmp/gitmem-hooks-test-$$"
-    mkdir -p "$STATE_DIR"
-    echo "$tool_count" > "$STATE_DIR/tool_call_count"
-    echo $(($(date +%s) - start_offset)) > "$STATE_DIR/start_time"
-    rm -f "$STATE_DIR/stop_hook_active"
-}
-
 # Test 2.1: No session, no work → allows stop
 setup_state 0 0
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
@@ -154,8 +214,7 @@ fi
 
 # Test 2.2: THE BUG FIX — session_start called, <5 calls, <5 min → allows stop
 setup_state 2 60  # 2 tool calls, 60 seconds ago
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
@@ -169,8 +228,7 @@ fi
 
 # Test 2.3: session_start called, >5 tool calls → blocks
 setup_state 10 60  # 10 tool calls, 60 seconds ago
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 
 if echo "$OUTPUT" | grep -q "block"; then
@@ -183,8 +241,7 @@ fi
 
 # Test 2.4: session_start called, >5 min → blocks
 setup_state 2 600  # 2 tool calls, 600 seconds (10 min) ago
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 
 if echo "$OUTPUT" | grep -q "block"; then
@@ -195,14 +252,14 @@ else
          "$OUTPUT"
 fi
 
-# Test 2.5: Session properly closed (active-session.json removed) → allows stop
+# Test 2.5: Session properly closed (registry empty) → allows stop
 setup_state 10 600  # meaningful work
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -q "block"; then
-    pass "Session closed (no active-session.json) → allows stop"
+    pass "Session closed (registry removed) → allows stop"
 else
     fail "Session closed → allows stop" \
          "exit 0, no block" \
@@ -211,8 +268,7 @@ fi
 
 # Test 2.6: Infinite loop guard — second stop attempt passes through
 setup_state 10 60
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 # First stop — should block
 echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null > /dev/null
 # Second stop — should pass through (guard active)
@@ -229,7 +285,7 @@ fi
 
 # Test 2.7: No state dir at all, no session → allows stop
 rm -rf /tmp/gitmem-hooks-*
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
@@ -244,7 +300,7 @@ fi
 # Test 2.8: >5 calls but NO session_start → should NOT block
 # (meaningful by tool count but no session to close)
 setup_state 10 60
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
@@ -256,27 +312,25 @@ else
          "exit=$EXIT_CODE, output=$OUTPUT"
 fi
 
-# Test 2.9: THE REAL BUG — No state dir + active-session.json → allows stop
+# Test 2.9: THE REAL BUG — No state dir + active session registry → allows stop
 # (Plugin SessionStart hook didn't fire, user called session_start manually,
 #  but no tracking data exists. Must NOT block with bogus duration calculation.)
 rm -rf /tmp/gitmem-hooks-*
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ] && ! echo "$OUTPUT" | grep -q "block"; then
-    pass "No state dir + active-session.json → allows stop (no tracking data)"
+    pass "No state dir + active session → allows stop (no tracking data)"
 else
-    fail "No state dir + active-session.json → allows stop" \
+    fail "No state dir + active session → allows stop" \
          "exit 0, no block (graceful degradation)" \
          "exit=$EXIT_CODE, output=$OUTPUT"
 fi
 
-# Test 2.10: No state dir + active-session.json → creates state dir for next time
+# Test 2.10: No state dir + active session → creates state dir for next time
 rm -rf /tmp/gitmem-hooks-*
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null > /dev/null
 if [ -d "/tmp/gitmem-hooks-test-$$" ] && [ -f "/tmp/gitmem-hooks-test-$$/start_time" ]; then
     pass "No state dir + session → creates state dir for future tracking"
@@ -294,7 +348,7 @@ echo ""
 echo -e "${YELLOW}=== PreToolUse Hook (Recall Check) ===${NC}"
 
 # Test 3.1: No active session → passes silently
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
     bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 EXIT_CODE=$?
@@ -309,8 +363,8 @@ fi
 
 # Test 3.2: Non-consequential Bash command → passes silently
 setup_state 10 60
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
+create_session_data "test-session" "[]" "[]"
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | \
     bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 EXIT_CODE=$?
@@ -325,8 +379,8 @@ fi
 
 # Test 3.3: Consequential Bash (git push) with no recall → nags after >3 calls
 setup_state 0 0
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
+create_session_data "test-session" "[]" "[]"
 
 # Run 4 git push calls to exceed the 3-call threshold
 for i in 1 2 3; do
@@ -347,8 +401,8 @@ fi
 
 # Test 3.4: Write to .sql file → consequential
 setup_state 5 0
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
+create_session_data "test-session" "[]" "[]"
 OUTPUT=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/path/to/migration.sql"}}' | \
     bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 
@@ -371,7 +425,7 @@ echo ""
 echo -e "${YELLOW}=== PostToolUse Hook (Audit Trail) ===${NC}"
 
 # Test 4.1: No active session → passes silently (no audit written)
-rm -f "$TMPDIR/.gitmem/active-session.json"
+remove_session_registry
 rm -rf /tmp/gitmem-hooks-*
 setup_state 0 0
 OUTPUT=$(echo '{"tool_name":"mcp__gitmem__recall","tool_input":{"query":"test"}}' | \
@@ -388,8 +442,7 @@ fi
 
 # Test 4.2: recall call → LOOKED event logged
 setup_state 0 0
-mkdir -p "$TMPDIR/.gitmem"
-echo '{"session_id":"test"}' > "$TMPDIR/.gitmem/active-session.json"
+create_session_registry "test-session"
 OUTPUT=$(echo '{"tool_name":"mcp__gitmem__recall","tool_input":{"query":"deployment verification"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
 EXIT_CODE=$?
@@ -405,6 +458,7 @@ fi
 
 # Test 4.3: semantic_search call → LOOKED event logged
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"mcp__supabase__semantic_search","tool_input":{"query":"hook enforcement"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -419,6 +473,7 @@ fi
 
 # Test 4.4: Consequential Bash (git push) → ACTION event logged
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -433,6 +488,7 @@ fi
 
 # Test 4.5: Non-consequential Bash (ls) → no audit entry
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -448,6 +504,7 @@ fi
 
 # Test 4.6: Linear update_issue to Done → ACTION event
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"mcp__linear__update_issue","tool_input":{"id":"OD-100","state":"Done"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -462,9 +519,11 @@ fi
 
 # Test 4.7: Linear update_issue to non-Done state → no audit entry
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"mcp__linear__update_issue","tool_input":{"id":"OD-100","state":"In Progress"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
+EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ] && [ ! -f "$AUDIT_FILE" ]; then
     pass "Linear update to In Progress → no audit entry"
@@ -476,6 +535,7 @@ fi
 
 # Test 4.8: Write .sql file → ACTION event
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/path/to/migration.sql"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -490,6 +550,7 @@ fi
 
 # Test 4.9: Write .ts file → no audit entry (non-sensitive)
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 OUTPUT=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/path/to/component.ts"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null)
@@ -504,6 +565,7 @@ fi
 
 # Test 4.10: Multiple events → JSONL appends (multiple lines)
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 echo '{"tool_name":"mcp__gitmem__recall","tool_input":{"query":"test"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null
@@ -526,6 +588,7 @@ fi
 
 # Test 4.11: Hook always exits 0 (never blocks)
 setup_state 0 0
+create_session_registry "test-session"
 rm -f "/tmp/gitmem-hooks-test-$$/audit.jsonl"
 echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
     bash "$SCRIPT_DIR/scripts/post-tool-use.sh" 2>/dev/null

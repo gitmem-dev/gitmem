@@ -5,7 +5,7 @@
  * and adds smoke-specific timing instrumentation.
  */
 
-// Re-export everything from mcp-client — no duplication
+// Re-export everything from mcp-client — single source of truth
 export {
   createMcpClient,
   callTool,
@@ -17,6 +17,7 @@ export {
   createTierEnv,
   CORE_TOOLS,
   PRO_TOOLS,
+  EXPECTED_TOOL_COUNTS,
   type McpTestClient,
   type ToolCallResult,
 } from "../e2e/mcp-client.js";
@@ -43,27 +44,3 @@ export async function timedStep<T>(
     throw error;
   }
 }
-
-/**
- * Expected tool counts per tier.
- *
- * Derived from src/tools/definitions.ts gating logic:
- *   Total TOOLS array:        70
- *   CACHE_TOOL_NAMES (pro+):   6
- *   ANALYZE_TOOL_NAMES (pro+): 3
- *   BATCH_TOOL_NAMES (dev):    2
- *   TRANSCRIPT_TOOL_NAMES (dev): 4
- *   graph_traverse (pro+):     3
- *
- *   free = 70 - 6 - 3 - 2 - 4 - 3 = 52
- *   pro  = 70 - 2 - 4              = 64
- *   dev  = 70
- *
- * If these numbers change, a tool was added/removed from definitions.ts.
- * Update this constant and investigate.
- */
-export const EXPECTED_TOOL_COUNTS = {
-  free: 52,
-  pro: 64,
-  dev: 70,
-} as const;

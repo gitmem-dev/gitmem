@@ -33,6 +33,7 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.38",
     "@testcontainers/postgresql": "^10.6.0",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.10.0",

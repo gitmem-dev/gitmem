@@ -1,5 +1,5 @@
 /**
- * Thread Vitality Scoring (Phase 2)
+ * Thread Vitality Scoring (Phase 2) + Lifecycle State Machine (Phase 6)
  *
  * Computes vitality from recency + frequency (two of four eventual components).
  * Importance and relevance deferred to Phases 3-4 (knowledge graph + per-session embeddings).
@@ -21,12 +21,16 @@
  *   vitality > 0.5  → "active"
  *   0.2 <= v <= 0.5 → "cooling"
  *   vitality < 0.2  → "dormant"
+ *
+ * Phase 6 Lifecycle:
+ *   EMERGING (< 24h old) → ACTIVE → COOLING → DORMANT → ARCHIVED (30+ days dormant)
+ *   Any state → RESOLVED (explicit resolve)
  */
 
 // ---------- Types ----------
 
 export type ThreadClass = "operational" | "backlog";
-export type VitalityStatus = "active" | "cooling" | "dormant";
+export type VitalityStatus = "emerging" | "active" | "cooling" | "dormant";
 
 export interface VitalityInput {
   last_touched_at: string;
@@ -40,6 +44,14 @@ export interface VitalityResult {
   status: VitalityStatus;
   recency_component: number;
   frequency_component: number;
+}
+
+// Phase 6: Lifecycle state machine
+export type LifecycleStatus = "emerging" | "active" | "cooling" | "dormant" | "archived";
+
+export interface LifecycleInput extends VitalityInput {
+  current_status: string;   // Current Supabase status
+  dormant_since?: string;   // ISO timestamp when thread became dormant (null if not dormant)
 }
 
 // ---------- Constants ----------
@@ -58,6 +70,10 @@ const STATUS_THRESHOLDS = {
   active: 0.5,
   cooling: 0.2,
 } as const;
+
+// Phase 6 lifecycle constants
+export const EMERGING_WINDOW_HOURS = 24;
+export const ARCHIVAL_DORMANT_DAYS = 30;
 
 const OPERATIONAL_KEYWORDS = [
   "deploy", "fix", "debug", "hotfix", "urgent", "broken",
@@ -96,6 +112,58 @@ export function computeVitality(input: VitalityInput, now?: Date): VitalityResul
     recency_component: round(recency, 4),
     frequency_component: round(frequency, 4),
   };
+}
+
+// ---------- Lifecycle State Machine (Phase 6) ----------
+
+/**
+ * Compute the full lifecycle status for a thread.
+ * Wraps vitality scoring with age-based emerging window and archival logic.
+ *
+ * State machine:
+ *   EMERGING (< 24h) → ACTIVE → COOLING → DORMANT → ARCHIVED (30+ days dormant)
+ *   Any state → RESOLVED (handled externally by resolve_thread)
+ */
+export function computeLifecycleStatus(
+  input: LifecycleInput,
+  now?: Date
+): { lifecycle_status: LifecycleStatus; vitality: VitalityResult } {
+  const currentTime = now || new Date();
+
+  // Terminal states: archived and resolved stay as-is
+  if (input.current_status === "archived" || input.current_status === "resolved") {
+    const vitality = computeVitality(input, currentTime);
+    return {
+      lifecycle_status: input.current_status as LifecycleStatus,
+      vitality,
+    };
+  }
+
+  // Emerging window: threads < 24h old
+  const created = new Date(input.created_at);
+  const hoursAlive = (currentTime.getTime() - created.getTime()) / (1000 * 60 * 60);
+  if (hoursAlive < EMERGING_WINDOW_HOURS) {
+    const vitality = computeVitality(input, currentTime);
+    return { lifecycle_status: "emerging", vitality };
+  }
+
+  // Compute vitality for normal lifecycle
+  const vitality = computeVitality(input, currentTime);
+
+  // Archival: dormant for 30+ days
+  if (
+    input.current_status === "dormant" &&
+    input.dormant_since
+  ) {
+    const dormantStart = new Date(input.dormant_since);
+    const daysDormant = (currentTime.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDormant >= ARCHIVAL_DORMANT_DAYS) {
+      return { lifecycle_status: "archived", vitality };
+    }
+  }
+
+  // Normal vitality-derived status (active/cooling/dormant)
+  return { lifecycle_status: vitality.status as LifecycleStatus, vitality };
 }
 
 // ---------- Components ----------

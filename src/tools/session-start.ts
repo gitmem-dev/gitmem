@@ -29,7 +29,8 @@ import {
 } from "../services/metrics.js";
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
-import { loadActiveThreadsFromSupabase } from "../services/thread-supabase.js"; // OD-623
+import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js"; // OD-623, Phase 6
+import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
@@ -118,6 +119,7 @@ async function loadLastSession(
   session: LastSession | null;
   aggregated_open_threads: ThreadObject[];
   recently_resolved_threads: ThreadObject[];
+  displayInfo: ThreadDisplayInfo[];
   latency_ms: number;
   network_call: boolean;
 }> {
@@ -136,13 +138,18 @@ async function loadLastSession(
     // OD-623: Try loading threads from Supabase (source of truth) first
     let aggregated_open_threads: ThreadObject[];
     let recently_resolved_threads: ThreadObject[];
+    let displayInfo: ThreadDisplayInfo[] = [];
     const supabaseThreads = await loadActiveThreadsFromSupabase(project);
 
     if (supabaseThreads !== null) {
       // Supabase is source of truth for threads
       aggregated_open_threads = supabaseThreads.open;
       recently_resolved_threads = supabaseThreads.recentlyResolved;
+      displayInfo = supabaseThreads.displayInfo;
       console.error(`[session_start] Loaded threads from Supabase: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved`);
+
+      // Phase 6: Auto-archive dormant threads (fire-and-forget)
+      archiveDormantThreads(project).catch(() => {});
     } else {
       // Fallback: aggregate from session records (original behavior)
       const threadResult = aggregateThreads(sessions);
@@ -154,7 +161,7 @@ async function loadLastSession(
     const latency_ms = timer.stop();
 
     if (sessions.length === 0) {
-      return { session: null, aggregated_open_threads, recently_resolved_threads, latency_ms, network_call: true };
+      return { session: null, aggregated_open_threads, recently_resolved_threads, displayInfo, latency_ms, network_call: true };
     }
 
     // Find the most recent session that was properly closed
@@ -174,6 +181,7 @@ async function loadLastSession(
         },
         aggregated_open_threads,
         recently_resolved_threads,
+        displayInfo,
         latency_ms,
         network_call: true,
       };
@@ -189,12 +197,13 @@ async function loadLastSession(
       },
       aggregated_open_threads,
       recently_resolved_threads,
+      displayInfo,
       latency_ms,
       network_call: true, // Always hits Supabase (no caching for sessions yet)
     };
   } catch (error) {
     console.error("[session_start] Failed to load last session:", error);
-    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], latency_ms: timer.stop(), network_call: true };
+    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], displayInfo: [], latency_ms: timer.stop(), network_call: true };
   }
 }
 
@@ -836,7 +845,7 @@ function writeSessionFiles(
  * Format pre-formatted display string for session_start/session_refresh results.
  * Agents echo this verbatim for consistent CLI output.
  */
-function formatStartDisplay(result: SessionStartResult): string {
+function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>): string {
   const lines: string[] = [];
 
   // Header
@@ -858,13 +867,21 @@ function formatStartDisplay(result: SessionStartResult): string {
     }
   }
 
-  // Open threads
+  // Open threads (Phase 6: enriched with vitality info when available)
   if (result.open_threads?.length) {
     lines.push("");
     lines.push(`Open threads (${result.open_threads.length}):`);
     for (const t of result.open_threads.slice(0, 7)) {
-      const text = t.text.length > 70 ? t.text.slice(0, 67) + "..." : t.text;
-      lines.push(`  ${t.id}: ${text}`);
+      const text = t.text.length > 55 ? t.text.slice(0, 52) + "..." : t.text;
+      const info = displayInfoMap?.get(t.id);
+      if (info) {
+        const status = info.lifecycle_status.toUpperCase();
+        const score = info.vitality_score.toFixed(2);
+        const age = info.days_since_touch === 0 ? "today" : `${info.days_since_touch}d ago`;
+        lines.push(`  ${t.id}: ${text} [${status} ${score}] (${info.thread_class}, ${age})`);
+      } else {
+        lines.push(`  ${t.id}: ${text}`);
+      }
     }
     if (result.open_threads.length > 7) {
       lines.push(`  ... and ${result.open_threads.length - 7} more`);
@@ -1057,6 +1074,7 @@ export async function sessionStart(
 
   const aggregatedThreads = lastSessionResult.aggregated_open_threads;
   const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
+  const threadDisplayInfo = lastSessionResult.displayInfo;
 
   // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
   // writeSessionFiles merges aggregated threads with existing file threads to preserve
@@ -1136,7 +1154,12 @@ export async function sessionStart(
     },
   }).catch(() => {});
 
-  result.display = formatStartDisplay(result);
+  // Phase 6: Build display info map for enriched thread rendering
+  const displayInfoMap = new Map<string, ThreadDisplayInfo>();
+  for (const info of threadDisplayInfo) {
+    displayInfoMap.set(info.thread.id, info);
+  }
+  result.display = formatStartDisplay(result, displayInfoMap);
 
   // Write display to per-session dir
   try {
@@ -1242,6 +1265,7 @@ export async function sessionRefresh(
 
   const refreshAggregatedThreads = lastSessionResult.aggregated_open_threads;
   const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
+  const refreshDisplayInfo = lastSessionResult.displayInfo;
 
   // 4. Extract PROJECT STATE (OD-534)
   const projectState = lastSession?.open_threads
@@ -1360,7 +1384,12 @@ export async function sessionRefresh(
     },
   }).catch(() => {});
 
-  result.display = formatStartDisplay(result);
+  // Phase 6: Build display info map for enriched thread rendering
+  const refreshDisplayInfoMap = new Map<string, ThreadDisplayInfo>();
+  for (const info of refreshDisplayInfo) {
+    refreshDisplayInfoMap.set(info.thread.id, info);
+  }
+  result.display = formatStartDisplay(result, refreshDisplayInfoMap);
 
   // Write display to per-session dir
   try {

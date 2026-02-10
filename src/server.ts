@@ -40,6 +40,8 @@ import { promoteSuggestion } from "./tools/promote-suggestion.js";
 import type { PromoteSuggestionParams } from "./tools/promote-suggestion.js";
 import { dismissSuggestion } from "./tools/dismiss-suggestion.js";
 import type { DismissSuggestionParams } from "./tools/dismiss-suggestion.js";
+import { cleanupThreads } from "./tools/cleanup-threads.js";
+import type { CleanupThreadsParams } from "./tools/cleanup-threads.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -217,6 +219,11 @@ export function createServer(): Server {
         case "gm-dismiss":
           result = await dismissSuggestion(toolArgs as unknown as DismissSuggestionParams);
           break;
+        case "cleanup_threads":
+        case "gitmem-cleanup":
+        case "gm-cleanup":
+          result = await cleanupThreads(toolArgs as unknown as CleanupThreadsParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -236,6 +243,7 @@ export function createServer(): Server {
             { alias: "gitmem-rt", full: "resolve_thread", description: "Mark a thread as resolved" },
             { alias: "gitmem-ps", full: "promote_suggestion", description: "Promote a suggested thread to open thread" },
             { alias: "gitmem-ds", full: "dismiss_suggestion", description: "Dismiss a suggested thread" },
+            { alias: "gitmem-cleanup", full: "cleanup_threads", description: "Triage threads by lifecycle health" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });

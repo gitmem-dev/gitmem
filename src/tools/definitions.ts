@@ -683,6 +683,28 @@ export const TOOLS = [
     },
   },
 
+  // --- Thread Lifecycle Cleanup Tool (Phase 6) ---
+
+  {
+    name: "cleanup_threads",
+    description:
+      "Triage open threads by lifecycle health. Groups threads as active/cooling/dormant with vitality scores. Use auto_archive=true to archive threads dormant 30+ days. Review and resolve stale threads to keep your thread list healthy.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: orchestra_dev)",
+        },
+        auto_archive: {
+          type: "boolean",
+          description: "If true, auto-archive threads that have been dormant for 30+ days",
+        },
+      },
+    },
+  },
+
   // ============================================================================
   // SHORT ALIASES (gitmem-*)
   // Self-documenting: each description includes both alias and full name
@@ -1284,6 +1306,18 @@ export const TOOLS = [
       required: ["suggestion_id"],
     },
   },
+  // gitmem-cleanup (cleanup_threads) — Phase 6
+  {
+    name: "gitmem-cleanup",
+    description: "gitmem-cleanup (cleanup_threads) - Triage threads by lifecycle health",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"] },
+        auto_archive: { type: "boolean", description: "Auto-archive dormant threads (30+ days)" },
+      },
+    },
+  },
 
   // ============================================================================
   // GM-* SHORT, MEMORABLE ALIASES (user-facing ergonomics)
@@ -1650,6 +1684,18 @@ export const TOOLS = [
         suggestion_id: { type: "string", description: "Suggestion ID" },
       },
       required: ["suggestion_id"],
+    },
+  },
+  // gm-cleanup (cleanup_threads) — Phase 6
+  {
+    name: "gm-cleanup",
+    description: "gm-cleanup (cleanup_threads) - Triage threads by health",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"] },
+        auto_archive: { type: "boolean", description: "Auto-archive dormant threads" },
+      },
     },
   },
   // ============================================================================

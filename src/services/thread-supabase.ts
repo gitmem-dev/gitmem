@@ -11,8 +11,8 @@
 
 import * as supabase from "./supabase-client.js";
 import { hasSupabase } from "./tier.js";
-import { computeVitality, detectThreadClass } from "./thread-vitality.js";
-import type { ThreadClass } from "./thread-vitality.js";
+import { computeVitality, computeLifecycleStatus, detectThreadClass } from "./thread-vitality.js";
+import type { ThreadClass, LifecycleStatus } from "./thread-vitality.js";
 import type { ThreadWithEmbedding } from "./thread-dedup.js";
 import type { ThreadObject, Project } from "../types/index.js";
 
@@ -40,6 +40,15 @@ export interface ThreadRow {
   metadata: Record<string, unknown>;
 }
 
+/** Display-enriched thread info for session_start (Phase 6) */
+export interface ThreadDisplayInfo {
+  thread: ThreadObject;
+  vitality_score: number;
+  lifecycle_status: LifecycleStatus;
+  thread_class: string;
+  days_since_touch: number;
+}
+
 // ---------- Mapping Helpers ----------
 
 /**
@@ -53,17 +62,20 @@ export function threadObjectToRow(
   const now = new Date();
   const createdAt = thread.created_at || now.toISOString();
   const threadClass: ThreadClass = detectThreadClass(thread.text);
-  const vitality = computeVitality({
+
+  // Phase 6: Use lifecycle status for new threads (will be "emerging" if < 24h old)
+  const { lifecycle_status, vitality } = computeLifecycleStatus({
     last_touched_at: createdAt,
     touch_count: 1,
     created_at: createdAt,
     thread_class: threadClass,
+    current_status: mapStatusToSupabase(thread.status),
   }, now);
 
   return {
     thread_id: thread.id,              // "t-XXXXXXXX" -> thread_id column
     text: thread.text,
-    status: mapStatusToSupabase(thread.status),
+    status: thread.status === "resolved" ? "resolved" : lifecycle_status,
     thread_class: threadClass,
     vitality_score: vitality.vitality_score,
     last_touched_at: createdAt,
@@ -250,7 +262,7 @@ export async function listThreadsFromSupabase(
  */
 export async function loadActiveThreadsFromSupabase(
   project: Project = "orchestra_dev"
-): Promise<{ open: ThreadObject[]; recentlyResolved: ThreadObject[] } | null> {
+): Promise<{ open: ThreadObject[]; recentlyResolved: ThreadObject[]; displayInfo: ThreadDisplayInfo[] } | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
   }
@@ -267,8 +279,10 @@ export async function loadActiveThreadsFromSupabase(
       limit: 100,
     });
 
+    const now = new Date();
     const open: ThreadObject[] = [];
     const recentlyResolved: ThreadObject[] = [];
+    const displayInfo: ThreadDisplayInfo[] = [];
 
     // Recently resolved = resolved in last 14 days
     const cutoff = new Date();
@@ -284,11 +298,34 @@ export async function loadActiveThreadsFromSupabase(
         // Older resolved threads are skipped
       } else {
         open.push(thread);
+
+        // Phase 6: Compute lifecycle display info for open threads
+        const lastTouched = new Date(row.last_touched_at);
+        const daysSinceTouch = Math.max(
+          (now.getTime() - lastTouched.getTime()) / (1000 * 60 * 60 * 24),
+          0
+        );
+        const { lifecycle_status } = computeLifecycleStatus({
+          last_touched_at: row.last_touched_at,
+          touch_count: row.touch_count,
+          created_at: row.created_at,
+          thread_class: (row.thread_class as ThreadClass) || "backlog",
+          current_status: row.status,
+          dormant_since: (row.metadata as Record<string, unknown>)?.dormant_since as string | undefined,
+        }, now);
+
+        displayInfo.push({
+          thread,
+          vitality_score: row.vitality_score,
+          lifecycle_status,
+          thread_class: row.thread_class || "backlog",
+          days_since_touch: Math.round(daysSinceTouch),
+        });
       }
     }
 
     console.error(`[thread-supabase] Loaded ${open.length} open, ${recentlyResolved.length} recently resolved threads from Supabase`);
-    return { open, recentlyResolved };
+    return { open, recentlyResolved, displayInfo };
   } catch (error) {
     console.error("[thread-supabase] Failed to load active threads:", error instanceof Error ? error.message : error);
     return null;
@@ -326,20 +363,31 @@ export async function touchThreadsInSupabase(
       const newTouchCount = (row.touch_count || 0) + 1;
       const nowIso = now.toISOString();
 
-      // Recompute vitality with updated recency + frequency
-      const vitality = computeVitality({
+      // Recompute lifecycle status (Phase 6: includes emerging/archival logic)
+      const { lifecycle_status, vitality } = computeLifecycleStatus({
         last_touched_at: nowIso,
         touch_count: newTouchCount,
         created_at: row.created_at,
         thread_class: (row.thread_class as ThreadClass) || "backlog",
+        current_status: row.status,
+        dormant_since: (row.metadata as Record<string, unknown>)?.dormant_since as string | undefined,
       }, now);
+
+      // Track dormant_since in metadata for archival computation
+      const metadata: Record<string, unknown> = { ...(row.metadata || {}) };
+      if (lifecycle_status === "dormant" && row.status !== "dormant") {
+        metadata.dormant_since = nowIso;
+      } else if (lifecycle_status !== "dormant") {
+        delete metadata.dormant_since;
+      }
 
       await supabase.directUpsert("orchestra_threads", {
         id: row.id,
         touch_count: newTouchCount,
         last_touched_at: nowIso,
         vitality_score: vitality.vitality_score,
-        status: vitality.status,
+        status: lifecycle_status,
+        metadata,
       });
     } catch (error) {
       console.error(`[thread-supabase] Failed to touch thread ${threadId}:`, error instanceof Error ? error.message : error);
@@ -389,6 +437,62 @@ export async function syncThreadsToSupabase(
       console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, error instanceof Error ? error.message : error);
       // Continue with other threads
     }
+  }
+}
+
+// ---------- Archival (Phase 6) ----------
+
+/**
+ * Archive dormant threads that have been dormant for 30+ days.
+ * Reads metadata.dormant_since to determine eligibility.
+ * Called at session_start as fire-and-forget.
+ */
+export async function archiveDormantThreads(
+  project: Project = "orchestra_dev",
+  dormantDays: number = 30
+): Promise<{ archived_count: number; archived_ids: string[] }> {
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    return { archived_count: 0, archived_ids: [] };
+  }
+
+  try {
+    // Fetch dormant threads
+    const rows = await supabase.directQuery<ThreadRow>("orchestra_threads", {
+      select: "id,thread_id,metadata",
+      filters: {
+        project,
+        status: "dormant",
+      },
+      limit: 100,
+    });
+
+    const now = new Date();
+    const archived_ids: string[] = [];
+
+    for (const row of rows) {
+      const dormantSince = (row.metadata as Record<string, unknown>)?.dormant_since as string | undefined;
+      if (!dormantSince) continue;
+
+      const dormantStart = new Date(dormantSince);
+      const daysDormant = (now.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (daysDormant >= dormantDays) {
+        await supabase.directUpsert("orchestra_threads", {
+          id: row.id,
+          status: "archived",
+        });
+        archived_ids.push(row.thread_id);
+      }
+    }
+
+    if (archived_ids.length > 0) {
+      console.error(`[thread-supabase] Auto-archived ${archived_ids.length} dormant threads: ${archived_ids.join(", ")}`);
+    }
+
+    return { archived_count: archived_ids.length, archived_ids };
+  } catch (error) {
+    console.error("[thread-supabase] Failed to archive dormant threads:", error instanceof Error ? error.message : error);
+    return { archived_count: 0, archived_ids: [] };
   }
 }
 

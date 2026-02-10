@@ -31,7 +31,8 @@ export type ToolName =
   | "list_threads"
   | "resolve_thread"
   | "create_thread"
-  | "confirm_scars";
+  | "confirm_scars"
+  | "cleanup_threads";
 
 /**
  * Phase tags for context
@@ -100,6 +101,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   resolve_thread: 100,      // In-memory mutation + file write
   create_thread: 100,       // In-memory mutation + file write
   confirm_scars: 500,       // In-memory validation + file write
+  cleanup_threads: 2000,    // Fetch all threads + lifecycle computation
 };
 
 /**

@@ -29,10 +29,56 @@ When working on this project, follow these memory protocols:
 - For architectural or significant operational decisions, log them with `create_decision`
 - Include what alternatives were considered and why they were rejected
 
-### At session end
-- On "closing", "done for now", or "wrapping up", call `session_close`
-- Reflect on what worked, what broke, and what to do differently
-- Record which scars you applied during the session
+### At session end (closing ceremony)
+
+On "closing", "done for now", or "wrapping up", run the **standard closing ceremony**:
+
+1. **Ask the human these 7 reflection questions** (display them, wait for answers):
+   - Q1 `what_broke`: What broke that you didn't expect?
+   - Q2 `what_took_longer`: What took longer than it should have?
+   - Q3 `do_differently`: What would you do differently next time?
+   - Q4 `what_worked`: What pattern or approach worked well?
+   - Q5 `wrong_assumption`: What assumption was wrong?
+   - Q6 `scars_applied`: Which scars or institutional knowledge did you apply?
+   - Q7 `institutional_memory`: What from this session should be captured as institutional memory?
+
+2. **Ask for corrections**: "Any corrections or additions to my answers?"
+
+3. **Write structured payload** to `.gitmem/closing-payload.json`:
+   ```json
+   {
+     "closing_reflection": {
+       "what_broke": "...",
+       "what_took_longer": "...",
+       "do_differently": "...",
+       "what_worked": "...",
+       "wrong_assumption": "...",
+       "scars_applied": "...",
+       "institutional_memory": "..."
+     },
+     "task_completion": {
+       "started_at": "ISO timestamp",
+       "completed_at": "ISO timestamp",
+       "questions_displayed_at": "ISO timestamp",
+       "reflection_completed_at": "ISO timestamp",
+       "human_asked_at": "ISO timestamp",
+       "human_response_at": "ISO timestamp",
+       "human_response": "human's correction text or empty"
+     },
+     "human_corrections": "",
+     "scars_to_record": [],
+     "learnings_created": [],
+     "open_threads": [],
+     "decisions": []
+   }
+   ```
+
+4. **Call `session_close`** with only `session_id` and `close_type: "standard"`
+
+**Do NOT** skip the questions or write freeform text. The ceremony is the same regardless of tier.
+
+For short exploratory sessions (< 30 min, no real work), use `close_type: "quick"` instead — no questions needed.
+
 - **Run tests before pushing** — `npm run test:unit` at minimum
 
 ## Tool quick reference

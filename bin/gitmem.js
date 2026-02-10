@@ -7,6 +7,7 @@
  *   gitmem setup           — Output SQL to paste into Supabase SQL Editor (pro/dev)
  *   gitmem init            — Load starter scars (local JSON or Supabase)
  *   gitmem configure       — Generate .mcp.json entry for Claude Code
+ *   gitmem check           — Run diagnostic health check
  *   gitmem install-hooks   — Install Claude Code hooks plugin
  *   gitmem uninstall-hooks — Remove Claude Code hooks plugin
  *   gitmem server          — Start MCP server (default)
@@ -38,6 +39,8 @@ Usage:
   npx gitmem setup             Output SQL for Supabase schema setup (pro/dev tier)
   npx gitmem init              Load starter scars (auto-detects tier)
   npx gitmem configure         Generate .mcp.json config for Claude Code
+  npx gitmem check              Run diagnostic health check
+  npx gitmem check --full       Full diagnostic with benchmarks
   npx gitmem install-hooks     Install Claude Code hooks plugin
   npx gitmem uninstall-hooks   Remove Claude Code hooks plugin
   npx gitmem server            Start MCP server (default)
@@ -572,6 +575,9 @@ switch (command) {
     break;
   case "configure":
     cmdConfigure();
+    break;
+  case "check":
+    import("../dist/commands/check.js").then((m) => m.main(process.argv.slice(3)));
     break;
   case "install-hooks":
     cmdInstallHooks();

@@ -1,41 +1,43 @@
 # GitMem Clean Room Test Container
 #
-# Simulates a first-time user installing gitmem from GitHub Packages.
+# Simulates a first-time user installing gitmem from a local tarball.
 # No gitmem source code — only what npm delivers.
 #
-# Build: docker compose build
-# Run:   docker compose run --rm smoke
-#        docker compose run --rm manual
+# Quick start (from repo root):
+#   npm run build && npm pack --pack-destination testing/clean-room/
+#   docker build -t gitmem-fresh testing/clean-room/
+#   docker run -it --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gitmem-fresh
 
 FROM node:20-slim
 
-# System dependencies (minimal)
+# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     jq \
   && rm -rf /var/lib/apt/lists/*
 
-# Create non-root developer user (simulates real dev)
+# Install Claude CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create non-root developer user
 RUN useradd -m -s /bin/bash developer
 USER developer
-WORKDIR /home/developer
-
-# Configure npm for GitHub Packages auth (uses NPM_TOKEN at runtime)
-RUN echo "@nteg-dev:registry=https://npm.pkg.github.com" > ~/.npmrc \
- && echo '//npm.pkg.github.com/:_authToken=${NPM_TOKEN}' >> ~/.npmrc
-
-# Copy sample project (fake workspace)
-COPY --chown=developer:developer sample-project/ /home/developer/my-project/
-
-# Initialize git in the sample project (gitmem expects a git repo)
-RUN cd /home/developer/my-project && git init && git add -A && \
-    git -c user.email="dev@test.local" -c user.name="Test Dev" commit -m "initial"
-
-# Copy test scripts
-COPY --chown=developer:developer smoke-test.sh /home/developer/smoke-test.sh
-COPY --chown=developer:developer mcp-smoke.ts /home/developer/mcp-smoke.ts
-
-RUN chmod +x /home/developer/smoke-test.sh
-
 WORKDIR /home/developer/my-project
+
+# Init a git repo (gitmem expects one)
+RUN git init && git config user.email "dev@test.local" && git config user.name "Test Dev"
+
+# Install gitmem from tarball
+COPY --chown=developer:developer gitmem-mcp-*.tgz /tmp/
+RUN npm init -y && npm install /tmp/gitmem-mcp-*.tgz
+
+# Run the fresh-install flow
+RUN npx gitmem init \
+ && npx gitmem check \
+ && cp node_modules/gitmem-mcp/CLAUDE.md.template CLAUDE.md \
+ && echo '{"mcpServers":{"gitmem":{"command":"npx","args":["-y","gitmem-mcp"]}}}' > .mcp.json \
+ && npx gitmem install-hooks \
+ && git add -A && git commit -m "initial setup with gitmem"
+
+CMD ["claude"]

@@ -850,8 +850,8 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
 
   // Header
   const label = result.refreshed ? "SESSION REFRESH" : (result.resumed ? "SESSION RESUMED" : "SESSION START");
-  lines.push(`${label} — ACTIVE`);
-  lines.push(`Session: ${result.session_id.slice(0, 8)} | Agent: ${result.agent}`);
+  lines.push(`## ${label} — ACTIVE`);
+  lines.push(`**Session:** \`${result.session_id.slice(0, 8)}\` | **Agent:** ${result.agent}`);
 
   // Last session
   if (result.last_session) {
@@ -859,10 +859,11 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
       ? result.last_session.title.slice(0, 67) + "..."
       : result.last_session.title;
     lines.push("");
-    lines.push(`Last session: "${title}" (${result.last_session.date})`);
+    lines.push(`### Last Session`);
+    lines.push(`"${title}" (${result.last_session.date})`);
     if (result.last_session.key_decisions?.length) {
       for (const d of result.last_session.key_decisions.slice(0, 3)) {
-        lines.push(`  Decision: ${d}`);
+        lines.push(`- Decision: ${d}`);
       }
     }
   }
@@ -870,7 +871,7 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   // Open threads (Phase 6: enriched with vitality info when available)
   if (result.open_threads?.length) {
     lines.push("");
-    lines.push(`Open threads (${result.open_threads.length}):`);
+    lines.push(`### Open Threads (${result.open_threads.length})`);
     for (const t of result.open_threads.slice(0, 7)) {
       const text = t.text.length > 55 ? t.text.slice(0, 52) + "..." : t.text;
       const info = displayInfoMap?.get(t.id);
@@ -878,56 +879,57 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
         const status = info.lifecycle_status.toUpperCase();
         const score = info.vitality_score.toFixed(2);
         const age = info.days_since_touch === 0 ? "today" : `${info.days_since_touch}d ago`;
-        lines.push(`  ${t.id}: ${text} [${status} ${score}] (${info.thread_class}, ${age})`);
+        lines.push(`- \`${t.id}\`: ${text} **[${status} ${score}]** (${info.thread_class}, ${age})`);
       } else {
-        lines.push(`  ${t.id}: ${text}`);
+        lines.push(`- \`${t.id}\`: ${text}`);
       }
     }
     if (result.open_threads.length > 7) {
-      lines.push(`  ... and ${result.open_threads.length - 7} more`);
+      lines.push(`- *... and ${result.open_threads.length - 7} more*`);
     }
   }
 
   // Suggested threads (Phase 5: Implicit Thread Detection)
   if (result.suggested_threads?.length) {
     lines.push("");
-    lines.push(`Suggested threads (${result.suggested_threads.length}) — recurring topics not yet tracked:`);
+    lines.push(`### Suggested Threads (${result.suggested_threads.length})`);
+    lines.push(`*Recurring topics not yet tracked:*`);
     for (const s of result.suggested_threads.slice(0, 3)) {
       const text = s.text.length > 60 ? s.text.slice(0, 57) + "..." : s.text;
-      lines.push(`  ${s.id}: ${text} (${s.evidence_sessions.length} sessions)`);
+      lines.push(`- \`${s.id}\`: ${text} (${s.evidence_sessions.length} sessions)`);
     }
     if (result.suggested_threads.length > 3) {
-      lines.push(`  ... and ${result.suggested_threads.length - 3} more`);
+      lines.push(`- *... and ${result.suggested_threads.length - 3} more*`);
     }
-    lines.push(`  Use promote_suggestion or dismiss_suggestion to manage.`);
+    lines.push(`\nUse \`promote_suggestion\` or \`dismiss_suggestion\` to manage.`);
   }
 
   // Relevant scars
   if (result.relevant_scars?.length) {
     lines.push("");
-    lines.push(`Relevant scars (${result.relevant_scars.length}):`);
+    lines.push(`### Relevant Scars (${result.relevant_scars.length})`);
     for (const s of result.relevant_scars.slice(0, 5)) {
       const severity = (s.severity || "medium").toUpperCase();
       const title = s.title.length > 60 ? s.title.slice(0, 57) + "..." : s.title;
-      lines.push(`  [${severity}] ${title}`);
+      lines.push(`- **[${severity}]** ${title}`);
     }
   }
 
   // Recent decisions
   if (result.recent_decisions?.length) {
     lines.push("");
-    lines.push(`Recent decisions (${result.recent_decisions.length}):`);
+    lines.push(`### Recent Decisions (${result.recent_decisions.length})`);
     for (const d of result.recent_decisions.slice(0, 3)) {
-      lines.push(`  - ${d.title} (${d.date})`);
+      lines.push(`- ${d.title} *(${d.date})*`);
     }
   }
 
   // Recent wins
   if (result.recent_wins?.length) {
     lines.push("");
-    lines.push(`Recent wins (${result.recent_wins.length}):`);
+    lines.push(`### Recent Wins (${result.recent_wins.length})`);
     for (const w of result.recent_wins.slice(0, 3)) {
-      lines.push(`  - ${w.title} (${w.date})`);
+      lines.push(`- ${w.title} *(${w.date})*`);
     }
   }
 

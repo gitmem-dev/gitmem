@@ -679,6 +679,7 @@ async function sessionStartFree(
     relevant_scars: scars,
     recent_decisions: decisions,
     ...(freeWins.length > 0 && { recent_wins: freeWins }),
+    gitmem_dir: getGitmemDir(),
     performance,
   };
   freeResult.display = formatStartDisplay(freeResult);
@@ -810,6 +811,7 @@ function writeSessionFiles(
     project,
     hostname: os.hostname(),
     pid: process.pid,
+    gitmem_dir: gitmemDir,
     surfaced_scars: surfacedScars,
     threads,
     ...(recordingPath && { recording_path: recordingPath }),
@@ -878,6 +880,9 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   const label = result.refreshed ? "SESSION REFRESH" : (result.resumed ? "SESSION RESUMED" : "SESSION START");
   lines.push(`## ${label} — ACTIVE`);
   lines.push(`**Session:** \`${result.session_id.slice(0, 8)}\` | **Agent:** ${result.agent}`);
+  if (result.gitmem_dir) {
+    lines.push(`**Payload path:** \`${result.gitmem_dir}/closing-payload.json\``);
+  }
 
   // Last session
   if (result.last_session) {
@@ -1150,6 +1155,7 @@ export async function sessionStart(
     recent_decisions: decisions,
     ...(wins.length > 0 && { recent_wins: wins }),
     ...(recordingPath && { recording_path: recordingPath }),
+    gitmem_dir: getGitmemDir(),
     performance,
   };
 

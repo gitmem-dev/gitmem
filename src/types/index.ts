@@ -196,6 +196,8 @@ export interface SessionStartResult {
   message?: string;
   /** Asciinema recording path for session replay (from GITMEM_RECORDING_PATH env var) */
   recording_path?: string;
+  /** Resolved .gitmem directory path — use for closing-payload.json writes */
+  gitmem_dir?: string;
   /** Pre-formatted display string for consistent CLI output */
   display?: string;
 }

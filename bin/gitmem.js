@@ -4,15 +4,28 @@
  * GitMem CLI
  *
  * Commands:
- *   gitmem setup     — Output SQL to paste into Supabase SQL Editor (pro/dev)
- *   gitmem init      — Load starter scars (local JSON or Supabase)
- *   gitmem configure — Generate .mcp.json entry for Claude Code
- *   gitmem server    — Start MCP server (default)
+ *   gitmem setup           — Output SQL to paste into Supabase SQL Editor (pro/dev)
+ *   gitmem init            — Load starter scars (local JSON or Supabase)
+ *   gitmem configure       — Generate .mcp.json entry for Claude Code
+ *   gitmem install-hooks   — Install Claude Code hooks plugin
+ *   gitmem uninstall-hooks — Remove Claude Code hooks plugin
+ *   gitmem server          — Start MCP server (default)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  cpSync,
+  rmSync,
+  readdirSync,
+  chmodSync,
+  statSync,
+} from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { homedir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const command = process.argv[2];
@@ -22,11 +35,13 @@ function printUsage() {
 GitMem — Institutional Memory for AI Coding
 
 Usage:
-  npx gitmem setup      Output SQL for Supabase schema setup (pro/dev tier)
-  npx gitmem init       Load starter scars (auto-detects tier)
-  npx gitmem configure  Generate .mcp.json config for Claude Code
-  npx gitmem server     Start MCP server (default)
-  npx gitmem help       Show this help message
+  npx gitmem setup             Output SQL for Supabase schema setup (pro/dev tier)
+  npx gitmem init              Load starter scars (auto-detects tier)
+  npx gitmem configure         Generate .mcp.json config for Claude Code
+  npx gitmem install-hooks     Install Claude Code hooks plugin
+  npx gitmem uninstall-hooks   Remove Claude Code hooks plugin
+  npx gitmem server            Start MCP server (default)
+  npx gitmem help              Show this help message
 
 Free Tier (zero config):
   1. npx gitmem init
@@ -347,6 +362,207 @@ async function cmdSessionRefresh() {
   }
 }
 
+/**
+ * Install the bundled hooks plugin to ~/.claude/plugins/gitmem-hooks/
+ *
+ * Copies the hooks/ directory from this package into the Claude Code
+ * plugins directory. Use --force to overwrite an existing installation.
+ */
+function cmdInstallHooks() {
+  const force = process.argv.includes("--force");
+  const hooksSource = join(__dirname, "..", "hooks");
+  const pluginsDir = join(homedir(), ".claude", "plugins");
+  const targetDir = join(pluginsDir, "gitmem-hooks");
+
+  console.log("GitMem Hooks Plugin — Install");
+  console.log("=============================");
+  console.log("");
+
+  // Check that bundled hooks exist
+  if (!existsSync(hooksSource) || !existsSync(join(hooksSource, ".claude-plugin", "plugin.json"))) {
+    console.error("Error: Bundled hooks directory not found.");
+    console.error("Expected at:", hooksSource);
+    console.error("Ensure the package is installed correctly.");
+    process.exit(1);
+  }
+
+  // Check if already installed
+  if (existsSync(targetDir) && !force) {
+    console.log("Hooks plugin is already installed at:");
+    console.log(`  ${targetDir}`);
+    console.log("");
+    console.log("To reinstall (overwrite), run:");
+    console.log("  npx gitmem install-hooks --force");
+    return;
+  }
+
+  // Create plugins directory if needed
+  if (!existsSync(pluginsDir)) {
+    mkdirSync(pluginsDir, { recursive: true });
+  }
+
+  // Copy hooks to target
+  console.log(`Source:  ${hooksSource}`);
+  console.log(`Target:  ${targetDir}`);
+  console.log("");
+
+  try {
+    cpSync(hooksSource, targetDir, { recursive: true });
+  } catch (err) {
+    console.error("Error copying hooks plugin:", err.message);
+    process.exit(1);
+  }
+
+  // Make shell scripts executable
+  const scriptsDir = join(targetDir, "scripts");
+  if (existsSync(scriptsDir)) {
+    for (const file of readdirSync(scriptsDir)) {
+      if (file.endsWith(".sh")) {
+        chmodSync(join(scriptsDir, file), 0o755);
+      }
+    }
+  }
+  const testsDir = join(targetDir, "tests");
+  if (existsSync(testsDir)) {
+    for (const file of readdirSync(testsDir)) {
+      if (file.endsWith(".sh")) {
+        chmodSync(join(testsDir, file), 0o755);
+      }
+    }
+  }
+
+  console.log("Installed successfully!");
+  console.log("");
+
+  // Verify gitmem MCP is configured (non-blocking warning)
+  let mcpFound = false;
+  const mcpPaths = [
+    join(process.cwd(), ".mcp.json"),
+    join(process.cwd(), ".claude", "mcp.json"),
+    join(homedir(), ".claude.json"),
+  ];
+  for (const p of mcpPaths) {
+    if (existsSync(p)) {
+      try {
+        const cfg = JSON.parse(readFileSync(p, "utf-8"));
+        const servers = cfg.mcpServers || {};
+        if (servers.gitmem || servers["gitmem-mcp"]) {
+          mcpFound = true;
+          break;
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  if (!mcpFound) {
+    console.log("WARNING: gitmem MCP server not detected in .mcp.json.");
+    console.log("  Hooks will be silent until gitmem MCP is configured.");
+    console.log("  Run: npx gitmem configure");
+    console.log("");
+  }
+
+  console.log("Next steps:");
+  console.log("  1. Restart Claude Code (exit and re-open)");
+  console.log("  2. The plugin hooks will activate on next session");
+  console.log("");
+  console.log("To update after a gitmem version bump:");
+  console.log("  npx gitmem install-hooks --force");
+}
+
+/**
+ * Uninstall the hooks plugin from ~/.claude/plugins/gitmem-hooks/
+ *
+ * Removes the plugin directory, cleans up enabledPlugins from settings,
+ * and removes temp state directories.
+ */
+function cmdUninstallHooks() {
+  const pluginDir = join(homedir(), ".claude", "plugins", "gitmem-hooks");
+
+  console.log("GitMem Hooks Plugin — Uninstall");
+  console.log("===============================");
+  console.log("");
+
+  // Remove plugin directory
+  if (existsSync(pluginDir)) {
+    rmSync(pluginDir, { recursive: true, force: true });
+    console.log("[uninstall] Removed plugin directory:", pluginDir);
+  } else {
+    console.log("[uninstall] Plugin directory not found (already removed)");
+  }
+
+  // Clean enabledPlugins from .claude/settings.json
+  // (Key scar: claude plugin uninstall doesn't always clean this up)
+  const settingsFiles = [
+    join(process.cwd(), ".claude", "settings.json"),
+    join(process.cwd(), ".claude", "settings.local.json"),
+  ];
+
+  for (const settingsPath of settingsFiles) {
+    if (existsSync(settingsPath)) {
+      try {
+        const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
+        if (cfg.enabledPlugins) {
+          let cleaned = false;
+          for (const key of Object.keys(cfg.enabledPlugins)) {
+            if (key.startsWith("gitmem-hooks")) {
+              delete cfg.enabledPlugins[key];
+              cleaned = true;
+            }
+          }
+          if (cleaned) {
+            writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
+            console.log(`[cleanup] Removed enabledPlugins entry from ${settingsPath}`);
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  // Clean temp state directories
+  let cleaned = 0;
+  try {
+    const tmpDir = "/tmp";
+    for (const entry of readdirSync(tmpDir)) {
+      if (entry.startsWith("gitmem-hooks-")) {
+        const fullPath = join(tmpDir, entry);
+        try {
+          if (statSync(fullPath).isDirectory()) {
+            rmSync(fullPath, { recursive: true, force: true });
+            cleaned++;
+          }
+        } catch {
+          // ignore permission errors on other users' temp dirs
+        }
+      }
+    }
+  } catch {
+    // /tmp read error — not critical
+  }
+
+  if (cleaned > 0) {
+    console.log(`[cleanup] Removed ${cleaned} temp state director(ies) from /tmp/`);
+  }
+
+  // Clean debug log
+  const debugLog = "/tmp/gitmem-hooks-plugin-debug.log";
+  if (existsSync(debugLog)) {
+    rmSync(debugLog, { force: true });
+    console.log("[cleanup] Removed debug log");
+  }
+
+  console.log("");
+  console.log("Uninstall complete.");
+  console.log("");
+  console.log("Notes:");
+  console.log("  - gitmem MCP server config (.mcp.json) was NOT modified");
+  console.log("  - Restart Claude Code for changes to take effect");
+  console.log("  - To reinstall: npx gitmem install-hooks");
+}
+
 switch (command) {
   case "setup":
     cmdSetup();
@@ -356,6 +572,12 @@ switch (command) {
     break;
   case "configure":
     cmdConfigure();
+    break;
+  case "install-hooks":
+    cmdInstallHooks();
+    break;
+  case "uninstall-hooks":
+    cmdUninstallHooks();
     break;
   case "session-start":
     cmdSessionStart();

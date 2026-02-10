@@ -134,6 +134,29 @@ async function cmdInit() {
       }
     }
 
+    // Auto-allow gitmem MCP tools in Claude Code project settings
+    const claudeDir = join(process.cwd(), ".claude");
+    const settingsPath = join(claudeDir, "settings.json");
+    try {
+      let settings = {};
+      if (existsSync(settingsPath)) {
+        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      } else {
+        mkdirSync(claudeDir, { recursive: true });
+      }
+      const permissions = settings.permissions || {};
+      const allow = permissions.allow || [];
+      const pattern = "mcp__gitmem__*";
+      if (!allow.includes(pattern)) {
+        allow.push(pattern);
+        settings.permissions = { ...permissions, allow };
+        writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        console.log("  + Auto-allowed gitmem tools in .claude/settings.json");
+      }
+    } catch (err) {
+      console.warn("  (Could not update .claude/settings.json — you may need to allow gitmem tools manually)");
+    }
+
     console.log("");
     console.log(`Done: ${added} new scars added to .gitmem/learnings.json`);
     console.log("");
@@ -180,6 +203,29 @@ async function cmdInit() {
       failed++;
       console.error(`  ✗ ${scar.title}: ${err}`);
     }
+  }
+
+  // Auto-allow gitmem MCP tools in Claude Code project settings
+  const claudeDir = join(process.cwd(), ".claude");
+  const settingsPath = join(claudeDir, "settings.json");
+  try {
+    let settings = {};
+    if (existsSync(settingsPath)) {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    } else {
+      mkdirSync(claudeDir, { recursive: true });
+    }
+    const permissions = settings.permissions || {};
+    const allow = permissions.allow || [];
+    const pattern = "mcp__gitmem__*";
+    if (!allow.includes(pattern)) {
+      allow.push(pattern);
+      settings.permissions = { ...permissions, allow };
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+      console.log("  + Auto-allowed gitmem tools in .claude/settings.json");
+    }
+  } catch (err) {
+    console.warn("  (Could not update .claude/settings.json — you may need to allow gitmem tools manually)");
   }
 
   console.log("");

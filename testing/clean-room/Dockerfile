@@ -37,7 +37,8 @@ RUN npx gitmem init \
  && npx gitmem check \
  && cp node_modules/gitmem-mcp/CLAUDE.md.template CLAUDE.md \
  && echo '{"mcpServers":{"gitmem":{"command":"npx","args":["-y","gitmem-mcp"]}}}' > .mcp.json \
+ && mkdir -p .claude && echo '{"permissions":{"allow":["mcp__gitmem__*"]}}' > .claude/settings.json \
  && npx gitmem install-hooks \
  && git add -A && git commit -m "initial setup with gitmem"
 
-CMD ["claude", "--dangerously-skip-permissions"]
+CMD ["claude"]

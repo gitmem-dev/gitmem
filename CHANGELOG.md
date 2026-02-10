@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-02-10
+
 ### Added
 - **Hooks plugin bundled**: `gitmem install-hooks` / `uninstall-hooks` CLI commands (OD-605, OD-606)
 - **CLI `check` command wired**: `gitmem check` now reachable from CLI (was defined but unreachable)
 - **Fresh-install E2E tests**: 16 integration tests covering CLI commands, hooks, and MCP server lifecycle (OD-607)
 - **README rewrite**: External-developer-facing docs with no internal jargon (OD-608)
 - **CONTRIBUTING.md**: Dev setup, testing tiers, and PR guidelines
+- **First public npm release** (OD-609)
+
+### Changed
+- Package name standardized to `gitmem-mcp` for npm
+- `gitmem configure` output uses `gitmem-mcp` (matching npm package name)
+- Removed internal project defaults from CLI commands
 
 ## [0.2.0] - 2026-02-08
 
@@ -49,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache management (status, flush, health)
 - Agent identity detection
 
-[Unreleased]: https://github.com/nTEG-dev/gitmem/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nTEG-dev/gitmem/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/nTEG-dev/gitmem/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/nTEG-dev/gitmem/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nTEG-dev/gitmem/releases/tag/v0.1.0

@@ -201,7 +201,7 @@ function cmdConfigure() {
       mcpServers: {
         gitmem: {
           command: "npx",
-          args: ["-y", "@nteg-dev/gitmem"],
+          args: ["-y", "gitmem-mcp"],
         },
       },
     };
@@ -220,7 +220,7 @@ function cmdConfigure() {
       mcpServers: {
         gitmem: {
           command: "npx",
-          args: ["-y", "@nteg-dev/gitmem"],
+          args: ["-y", "gitmem-mcp"],
           env: {
             SUPABASE_URL: "https://YOUR_PROJECT.supabase.co",
             SUPABASE_SERVICE_ROLE_KEY: "eyJ...",
@@ -256,7 +256,7 @@ function cmdConfigure() {
  */
 async function cmdSessionStart() {
   const args = process.argv.slice(3);
-  let project = "orchestra_dev";
+  let project = undefined;
   let agentIdentity = undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -601,7 +601,7 @@ switch (command) {
     printUsage();
     break;
   case undefined:
-    // Default: start MCP server (npx @nteg-dev/gitmem should start serving)
+    // Default: start MCP server (npx gitmem-mcp should start serving)
     import("../dist/index.js");
     break;
   default:

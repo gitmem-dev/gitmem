@@ -262,7 +262,7 @@ Batch triage tool for thread health review. Groups threads by lifecycle status.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `project` | `string` | `"orchestra_dev"` | Project scope |
+| `project` | `string` | -- | Project scope |
 | `auto_archive` | `boolean` | `false` | Auto-archive threads dormant 30+ days |
 
 Returns: `{ summary, groups: { emerging, active, cooling, dormant }, archived_count, archived_ids, performance }`

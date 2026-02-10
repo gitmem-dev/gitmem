@@ -6,7 +6,7 @@ Doc-debt tracking closes this gap by connecting decisions to the documents they 
 
 ## The Problem
 
-Five scars in Orchestra's institutional memory document this pattern:
+Five scars in institutional memory document this pattern:
 
 - Decisions get captured in PMEM (institutional memory) but affected docs never update
 - Code changes outpace documentation

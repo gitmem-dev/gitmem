@@ -15,7 +15,7 @@ import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
-import { syncThreadsToSupabase } from "../services/thread-supabase.js"; // OD-624
+import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js"; // OD-624
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -34,6 +34,7 @@ import * as path from "path";
 import * as os from "os";
 import { getGitmemPath, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
+import { loadSuggestions, saveSuggestions, detectSuggestedThreads, loadRecentSessionEmbeddings } from "../services/thread-suggestions.js";
 import type {
   SessionCloseParams,
   SessionCloseResult,
@@ -891,6 +892,30 @@ export async function sessionClose(
     }
 
     await supabase.directUpsert("orchestra_sessions", sessionData);
+
+    // Phase 5: Implicit thread detection (fire-and-forget)
+    if (sessionData.embedding) {
+      (async () => {
+        try {
+          const sessionEmb = JSON.parse(sessionData.embedding as string);
+          const suggestProject = (existingSession?.project as string) || "orchestra_dev";
+          const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
+          const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
+          if (recentSessions && threadEmbs) {
+            const existing = loadSuggestions();
+            const updated = detectSuggestedThreads(
+              { session_id: sessionId, title: sessionData.session_title as string, embedding: sessionEmb },
+              recentSessions,
+              threadEmbs,
+              existing
+            );
+            saveSuggestions(updated);
+          }
+        } catch (err) {
+          console.error("[session_close] Thread suggestion detection failed (non-fatal):", err);
+        }
+      })();
+    }
 
     // 7. Record scar usage if provided (parallel with metrics)
     // OD-552: scars_to_record may now come from auto-bridge above

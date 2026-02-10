@@ -36,6 +36,10 @@ import { listThreads } from "./tools/list-threads.js";
 import { resolveThread } from "./tools/resolve-thread.js";
 import { createThread } from "./tools/create-thread.js";
 import type { CreateThreadParams } from "./tools/create-thread.js";
+import { promoteSuggestion } from "./tools/promote-suggestion.js";
+import type { PromoteSuggestionParams } from "./tools/promote-suggestion.js";
+import { dismissSuggestion } from "./tools/dismiss-suggestion.js";
+import type { DismissSuggestionParams } from "./tools/dismiss-suggestion.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -203,6 +207,16 @@ export function createServer(): Server {
         case "gm-thread-new":
           result = await createThread(toolArgs as unknown as CreateThreadParams);
           break;
+        case "promote_suggestion":
+        case "gitmem-ps":
+        case "gm-promote":
+          result = await promoteSuggestion(toolArgs as unknown as PromoteSuggestionParams);
+          break;
+        case "dismiss_suggestion":
+        case "gitmem-ds":
+        case "gm-dismiss":
+          result = await dismissSuggestion(toolArgs as unknown as DismissSuggestionParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -220,6 +234,8 @@ export function createServer(): Server {
             { alias: "gitmem-ao", full: "absorb_observations", description: "Capture sub-agent/teammate observations" },
             { alias: "gitmem-lt", full: "list_threads", description: "List open threads across sessions" },
             { alias: "gitmem-rt", full: "resolve_thread", description: "Mark a thread as resolved" },
+            { alias: "gitmem-ps", full: "promote_suggestion", description: "Promote a suggested thread to open thread" },
+            { alias: "gitmem-ds", full: "dismiss_suggestion", description: "Dismiss a suggested thread" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });

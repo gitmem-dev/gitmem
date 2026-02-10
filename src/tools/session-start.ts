@@ -34,6 +34,7 @@ import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-d
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
+import { loadSuggestions, getPendingSuggestions } from "../services/thread-suggestions.js";
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
   SessionStartParams,
@@ -870,6 +871,20 @@ function formatStartDisplay(result: SessionStartResult): string {
     }
   }
 
+  // Suggested threads (Phase 5: Implicit Thread Detection)
+  if (result.suggested_threads?.length) {
+    lines.push("");
+    lines.push(`Suggested threads (${result.suggested_threads.length}) — recurring topics not yet tracked:`);
+    for (const s of result.suggested_threads.slice(0, 3)) {
+      const text = s.text.length > 60 ? s.text.slice(0, 57) + "..." : s.text;
+      lines.push(`  ${s.id}: ${text} (${s.evidence_sessions.length} sessions)`);
+    }
+    if (result.suggested_threads.length > 3) {
+      lines.push(`  ... and ${result.suggested_threads.length - 3} more`);
+    }
+    lines.push(`  Use promote_suggestion or dismiss_suggestion to manage.`);
+  }
+
   // Relevant scars
   if (result.relevant_scars?.length) {
     lines.push("");
@@ -1078,6 +1093,10 @@ export async function sessionStart(
     ...(recentlyResolvedThreads.length > 0 && {
       recently_resolved: recentlyResolvedThreads,
     }),
+    ...(() => {
+      const pending = getPendingSuggestions(loadSuggestions());
+      return pending.length > 0 ? { suggested_threads: pending } : {};
+    })(),
     relevant_scars: scars,
     recent_decisions: decisions,
     ...(wins.length > 0 && { recent_wins: wins }),

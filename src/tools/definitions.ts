@@ -645,6 +645,44 @@ export const TOOLS = [
     },
   },
 
+  // --- Thread Suggestion Tools (Phase 5: Implicit Thread Detection) ---
+
+  {
+    name: "promote_suggestion",
+    description:
+      "Promote a suggested thread to an open thread. Takes a suggestion_id from session_start's suggested_threads list and creates a real thread from it.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: {
+          type: "string",
+          description: 'Suggestion ID (e.g., "ts-a1b2c3d4") from suggested_threads list',
+        },
+        project: {
+          type: "string",
+          enum: ["orchestra_dev", "weekend_warrior"],
+          description: "Project scope (default: orchestra_dev)",
+        },
+      },
+      required: ["suggestion_id"],
+    },
+  },
+  {
+    name: "dismiss_suggestion",
+    description:
+      "Dismiss a suggested thread. Incremented dismiss count — suggestions dismissed 3+ times are permanently suppressed.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: {
+          type: "string",
+          description: 'Suggestion ID (e.g., "ts-a1b2c3d4") from suggested_threads list',
+        },
+      },
+      required: ["suggestion_id"],
+    },
+  },
+
   // ============================================================================
   // SHORT ALIASES (gitmem-*)
   // Self-documenting: each description includes both alias and full name
@@ -1221,6 +1259,32 @@ export const TOOLS = [
       required: ["text"],
     },
   },
+  // gitmem-ps (promote_suggestion) — Phase 5
+  {
+    name: "gitmem-ps",
+    description: "gitmem-ps (promote_suggestion) - Promote a suggested thread to an open thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: { type: "string", description: "Suggestion ID (e.g., ts-a1b2c3d4)" },
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+      },
+      required: ["suggestion_id"],
+    },
+  },
+  // gitmem-ds (dismiss_suggestion) — Phase 5
+  {
+    name: "gitmem-ds",
+    description: "gitmem-ds (dismiss_suggestion) - Dismiss a suggested thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: { type: "string", description: "Suggestion ID (e.g., ts-a1b2c3d4)" },
+      },
+      required: ["suggestion_id"],
+    },
+  },
+
   // ============================================================================
   // GM-* SHORT, MEMORABLE ALIASES (user-facing ergonomics)
   // ============================================================================
@@ -1561,6 +1625,31 @@ export const TOOLS = [
         linear_issue: { type: "string", description: "Associated Linear issue" },
       },
       required: ["text"],
+    },
+  },
+  // gm-promote (promote_suggestion) — Phase 5
+  {
+    name: "gm-promote",
+    description: "gm-promote (promote_suggestion) - Promote a suggested thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: { type: "string", description: "Suggestion ID" },
+        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+      },
+      required: ["suggestion_id"],
+    },
+  },
+  // gm-dismiss (dismiss_suggestion) — Phase 5
+  {
+    name: "gm-dismiss",
+    description: "gm-dismiss (dismiss_suggestion) - Dismiss a suggested thread",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        suggestion_id: { type: "string", description: "Suggestion ID" },
+      },
+      required: ["suggestion_id"],
     },
   },
   // ============================================================================

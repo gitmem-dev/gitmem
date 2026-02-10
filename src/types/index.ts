@@ -88,6 +88,32 @@ export interface ThreadObject {
   resolution_note?: string;
 }
 
+// Thread suggestion types (Phase 5: Implicit Thread Detection)
+export type ThreadSuggestionStatus = "pending" | "promoted" | "dismissed";
+
+export interface ThreadSuggestion {
+  /** Unique identifier: "ts-" + 8 hex chars */
+  id: string;
+  /** Suggested thread description (derived from session title) */
+  text: string;
+  /** Embedding vector for dedup against future suggestions */
+  embedding: number[] | null;
+  /** Session IDs that contributed to this suggestion (3+ required) */
+  evidence_sessions: string[];
+  /** Average cosine similarity across evidence sessions */
+  similarity_score: number;
+  /** Current status */
+  status: ThreadSuggestionStatus;
+  /** Thread ID if promoted to open thread */
+  promoted_thread_id?: string;
+  /** Number of times dismissed */
+  dismissed_count: number;
+  /** ISO timestamp when suggestion was first created */
+  created_at: string;
+  /** ISO timestamp of last update */
+  updated_at: string;
+}
+
 // Detected environment from agent detection
 export interface DetectedEnvironment {
   entrypoint: string | null;
@@ -156,6 +182,8 @@ export interface SessionStartResult {
   open_threads?: ThreadObject[];
   /** Threads resolved since last session (informational) */
   recently_resolved?: ThreadObject[];
+  /** Phase 5: Suggested threads inferred from recurring session topics */
+  suggested_threads?: ThreadSuggestion[];
   relevant_scars?: RelevantScar[];
   recent_decisions?: RecentDecision[];
   recent_wins?: RecentWin[];

@@ -196,7 +196,7 @@ async function connectedTo(
   params: GraphTraverseParams,
   timer: Timer
 ): Promise<GraphTraverseResult> {
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
   const limit = params.limit || 50;
   const { pattern, type } = normalizeNode(params.node!);
 
@@ -238,7 +238,7 @@ async function producedBy(
   params: GraphTraverseParams,
   timer: Timer
 ): Promise<GraphTraverseResult> {
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
   const limit = params.limit || 100;
   const { pattern } = normalizeNode(params.node!);
 
@@ -302,7 +302,7 @@ async function provenance(
   params: GraphTraverseParams,
   timer: Timer
 ): Promise<GraphTraverseResult> {
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
   const maxDepth = params.depth || 3;
 
   // Fetch all triples and traverse in memory
@@ -389,7 +389,7 @@ async function stats(
   params: GraphTraverseParams,
   timer: Timer
 ): Promise<GraphTraverseResult> {
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
 
   const allTriples = await fetchAllTriples(project);
   const latencyMs = timer.stop();

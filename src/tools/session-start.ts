@@ -229,7 +229,7 @@ async function queryRelevantScars(
   latency_ms: number;
   network_call: boolean;
 }> {
-  const proj = project || "orchestra_dev";
+  const proj = project || "default";
   const timer = new Timer();
 
   try {
@@ -960,7 +960,7 @@ export async function sessionStart(
   // 1. Detect agent (or use provided)
   const env = detectAgent();
   const agent = params.agent_identity || env.agent;
-  const project: Project = params.project || "orchestra_dev";
+  const project: Project = params.project || "default";
 
   // OD-558: Check for existing active session — reuse session_id but still load full context
   const existingSession = checkExistingSession(agent, params.force);
@@ -1209,7 +1209,7 @@ export async function sessionRefresh(
   if (currentSession) {
     sessionId = currentSession.sessionId;
     agent = (currentSession.agent as AgentIdentity) || "CLI";
-    project = params.project || "orchestra_dev";
+    project = params.project || "default";
   } else {
     // GIT-20: Fallback — check registry for this process, then legacy file
     const mySession = findSessionByHostPid(os.hostname(), process.pid);
@@ -1229,7 +1229,7 @@ export async function sessionRefresh(
     }
     sessionId = raw.session_id as string;
     agent = (raw.agent as AgentIdentity) || "CLI";
-    project = params.project || (raw.project as Project) || "orchestra_dev";
+    project = params.project || (raw.project as Project) || "default";
   }
 
   // Free tier: all-local path (reuse session_start free path)

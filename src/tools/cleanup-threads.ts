@@ -67,7 +67,7 @@ export async function cleanupThreads(
 ): Promise<CleanupThreadsResult> {
   const timer = new Timer();
   const metricsId = uuidv4();
-  const project = (params.project || "orchestra_dev") as Project;
+  const project = (params.project || "default") as Project;
 
   if (!hasSupabase() || !supabase.isConfigured()) {
     const latencyMs = timer.stop();

@@ -50,8 +50,8 @@ describe("SessionStartParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project", () => {
-      const result = SessionStartParamsSchema.safeParse({ project: "invalid_project" });
+    it("rejects non-string project", () => {
+      const result = SessionStartParamsSchema.safeParse({ project: 123 });
       expect(result.success).toBe(false);
     });
 
@@ -74,7 +74,7 @@ describe("SessionStartParamsSchema", () => {
     });
 
     it("returns error for invalid params", () => {
-      const result = validateSessionStartParams({ project: "invalid" });
+      const result = validateSessionStartParams({ project: 123 as any });
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
     });

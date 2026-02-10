@@ -610,7 +610,7 @@ export async function sessionClose(
     sessionData = {
       id: sessionId,
       agent: agentIdentity,
-      project: "orchestra_dev", // Default for retroactive
+      project: "default", // Default for retroactive
       session_title: "Retroactive Session", // Will be updated below if we have content
       session_date: now,
       created_at: now,
@@ -673,7 +673,7 @@ export async function sessionClose(
   // This runs async — does not block session close on failure.
   const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
   if (closeThreads.length > 0) {
-    const closeProject = isRetroactive ? "orchestra_dev" : (existingSession?.project as "orchestra_dev" | "weekend_warrior" | undefined) || "orchestra_dev";
+    const closeProject = isRetroactive ? "default" : (existingSession?.project as string | undefined) || "default";
     syncThreadsToSupabase(closeThreads, closeProject, sessionId).catch((err) => {
       console.error("[session_close] Thread Supabase sync failed (non-fatal):", err);
     });
@@ -765,7 +765,7 @@ export async function sessionClose(
           session_id: sessionId,
           transcript: transcriptContent,
           format: "json",
-          project: isRetroactive ? "orchestra_dev" : (existingSession?.project as "orchestra_dev" | "weekend_warrior" | undefined),
+          project: isRetroactive ? "default" : (existingSession?.project as string | undefined),
         });
 
         if (saveResult.success && saveResult.transcript_path) {
@@ -776,7 +776,7 @@ export async function sessionClose(
           processTranscript(
             sessionId,
             transcriptContent,
-            isRetroactive ? "orchestra_dev" : (existingSession?.project as "orchestra_dev" | "weekend_warrior" | undefined)
+            isRetroactive ? "default" : (existingSession?.project as string | undefined)
           ).then(result => {
             if (result.success) {
               console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
@@ -908,7 +908,7 @@ export async function sessionClose(
       (async () => {
         try {
           const sessionEmb = JSON.parse(sessionData.embedding as string);
-          const suggestProject = (existingSession?.project as string) || "orchestra_dev";
+          const suggestProject = (existingSession?.project as string) || "default";
           const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
           const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
           if (recentSessions && threadEmbs) {
@@ -932,8 +932,8 @@ export async function sessionClose(
     let scarRecordingResults;
     if (params.scars_to_record && params.scars_to_record.length > 0) {
       const project = isRetroactive
-        ? "orchestra_dev"
-        : (existingSession!.project as "orchestra_dev" | "weekend_warrior" | undefined);
+        ? "default"
+        : (existingSession!.project as string | undefined);
       scarRecordingResults = await recordScarUsageBatch({
         scars: params.scars_to_record,
         project,

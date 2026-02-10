@@ -91,9 +91,9 @@ describe("recall", () => {
 
     const result = await recall({ plan: "test plan" });
 
-    expect(result.project).toBe("orchestra_dev");
+    expect(result.project).toBe("default");
     expect(result.match_count).toBe(3);
-    expect(supabase.cachedScarSearch).toHaveBeenCalledWith("test plan", 3, "orchestra_dev");
+    expect(supabase.cachedScarSearch).toHaveBeenCalledWith("test plan", 3, "default");
   });
 
   it("respects custom project and match_count", async () => {

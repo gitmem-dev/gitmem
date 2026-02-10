@@ -100,7 +100,7 @@ export class LocalVectorSearch {
   private latestUpdatedAt: string | null = null;
   private staleTtlMinutes: number = 15;
 
-  constructor(project: Project = "orchestra_dev") {
+  constructor(project: Project = "default") {
     this.project = project;
   }
 
@@ -320,7 +320,7 @@ const instances: Map<Project, LocalVectorSearch> = new Map();
 /**
  * Get the LocalVectorSearch instance for a project
  */
-export function getLocalVectorSearch(project: Project = "orchestra_dev"): LocalVectorSearch {
+export function getLocalVectorSearch(project: Project = "default"): LocalVectorSearch {
   let instance = instances.get(project);
   if (!instance) {
     instance = new LocalVectorSearch(project);
@@ -336,7 +336,7 @@ export function getLocalVectorSearch(project: Project = "orchestra_dev"): LocalV
  */
 export async function initializeLocalSearch(
   scars: ScarRecord[],
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   latestUpdatedAt?: string
 ): Promise<void> {
   const instance = getLocalVectorSearch(project);
@@ -348,7 +348,7 @@ export async function initializeLocalSearch(
  */
 export async function reinitializeLocalSearch(
   scars: ScarRecord[],
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   latestUpdatedAt?: string
 ): Promise<void> {
   const instance = getLocalVectorSearch(project);
@@ -363,7 +363,7 @@ export async function reinitializeLocalSearch(
 export async function localScarSearch(
   query: string,
   k: number = 5,
-  project: Project = "orchestra_dev"
+  project: Project = "default"
 ): Promise<RelevantScar[]> {
   const instance = getLocalVectorSearch(project);
   return instance.search(query, k);
@@ -372,7 +372,7 @@ export async function localScarSearch(
 /**
  * Check if local search is ready
  */
-export function isLocalSearchReady(project: Project = "orchestra_dev"): boolean {
+export function isLocalSearchReady(project: Project = "default"): boolean {
   const instance = instances.get(project);
   return instance?.isReady() ?? false;
 }
@@ -380,7 +380,7 @@ export function isLocalSearchReady(project: Project = "orchestra_dev"): boolean 
 /**
  * Get cache metadata for a project
  */
-export function getCacheMetadata(project: Project = "orchestra_dev"): CacheMetadata | null {
+export function getCacheMetadata(project: Project = "default"): CacheMetadata | null {
   const instance = instances.get(project);
   return instance?.getCacheMetadata() ?? null;
 }
@@ -388,7 +388,7 @@ export function getCacheMetadata(project: Project = "orchestra_dev"): CacheMetad
 /**
  * Set cache TTL for a project
  */
-export function setCacheTtl(minutes: number, project: Project = "orchestra_dev"): void {
+export function setCacheTtl(minutes: number, project: Project = "default"): void {
   const instance = getLocalVectorSearch(project);
   instance.setTtlMinutes(minutes);
 }
@@ -396,7 +396,7 @@ export function setCacheTtl(minutes: number, project: Project = "orchestra_dev")
 /**
  * Clear the local search index
  */
-export function clearLocalSearch(project: Project = "orchestra_dev"): void {
+export function clearLocalSearch(project: Project = "default"): void {
   const instance = instances.get(project);
   instance?.clear();
 }

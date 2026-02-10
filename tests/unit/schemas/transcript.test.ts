@@ -90,11 +90,11 @@ describe("SaveTranscriptParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project", () => {
+    it("rejects non-string project", () => {
       const result = SaveTranscriptParamsSchema.safeParse({
         session_id: "test",
         transcript: "Content",
-        project: "invalid",
+        project: 123,
       });
       expect(result.success).toBe(false);
     });

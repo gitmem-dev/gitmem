@@ -244,7 +244,7 @@ function parseEmbedding(raw: string | number[] | null | undefined): number[] | n
  * Returns null if Supabase is unavailable.
  */
 export async function loadRecentSessionEmbeddings(
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   days: number = 30,
   limit: number = 20
 ): Promise<SessionEmbeddingRecord[] | null> {

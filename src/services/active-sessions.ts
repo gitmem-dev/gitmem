@@ -323,7 +323,7 @@ export function migrateFromLegacy(): boolean {
       started_at: old.started_at || new Date().toISOString(),
       hostname: old.hostname || os.hostname(),
       pid: old.pid || process.pid,
-      project: old.project || "orchestra_dev",
+      project: old.project || "default",
     };
     writeRegistry({ sessions: [entry] });
 

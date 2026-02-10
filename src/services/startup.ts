@@ -121,7 +121,7 @@ async function getRemoteScarStats(project: Project): Promise<{
  * Call this at server startup to pre-load the scar index.
  * Subsequent session_start calls will use the in-memory index.
  */
-export async function initializeGitMem(project: Project = "orchestra_dev"): Promise<{
+export async function initializeGitMem(project: Project = "default"): Promise<{
   success: boolean;
   scar_count: number;
   elapsed_ms: number;
@@ -195,7 +195,7 @@ export async function initializeGitMem(project: Project = "orchestra_dev"): Prom
  *
  * Safe to call multiple times - only initializes once.
  */
-export async function ensureInitialized(project: Project = "orchestra_dev"): Promise<void> {
+export async function ensureInitialized(project: Project = "default"): Promise<void> {
   if (!shouldUseLocalSearch()) {
     return; // Remote mode, nothing to initialize
   }
@@ -222,7 +222,7 @@ export async function ensureInitialized(project: Project = "orchestra_dev"): Pro
 /**
  * Check if local search is available
  */
-export function isLocalSearchAvailable(project: Project = "orchestra_dev"): boolean {
+export function isLocalSearchAvailable(project: Project = "default"): boolean {
   if (!shouldUseLocalSearch()) {
     return false; // Remote mode
   }
@@ -235,15 +235,13 @@ export function isLocalSearchAvailable(project: Project = "orchestra_dev"): bool
 export function getInitStatus(): {
   complete: boolean;
   search_mode: "local" | "remote";
-  orchestra_dev_ready: boolean;
-  weekend_warrior_ready: boolean;
+  default_ready: boolean;
 } {
   const config = getConfig();
   return {
     complete: startupComplete,
     search_mode: config.resolvedSearchMode,
-    orchestra_dev_ready: isLocalSearchReady("orchestra_dev"),
-    weekend_warrior_ready: isLocalSearchReady("weekend_warrior"),
+    default_ready: isLocalSearchReady("default"),
   };
 }
 
@@ -283,7 +281,7 @@ export interface CacheFlushResult {
 /**
  * Get cache status for a project
  */
-export function getCacheStatus(project: Project = "orchestra_dev"): CacheStatus {
+export function getCacheStatus(project: Project = "default"): CacheStatus {
   const config = getConfig();
   const metadata = getCacheMetadata(project);
 
@@ -328,7 +326,7 @@ export function getCacheStatus(project: Project = "orchestra_dev"): CacheStatus 
 /**
  * Check cache health against remote Supabase
  */
-export async function checkCacheHealth(project: Project = "orchestra_dev"): Promise<CacheHealth> {
+export async function checkCacheHealth(project: Project = "default"): Promise<CacheHealth> {
   const config = getConfig();
 
   if (config.resolvedSearchMode === "remote") {
@@ -397,7 +395,7 @@ export async function checkCacheHealth(project: Project = "orchestra_dev"): Prom
 /**
  * Flush and reload the cache
  */
-export async function flushCache(project: Project = "orchestra_dev"): Promise<CacheFlushResult> {
+export async function flushCache(project: Project = "default"): Promise<CacheFlushResult> {
   const startTime = Date.now();
   const config = getConfig();
 
@@ -450,7 +448,7 @@ export async function flushCache(project: Project = "orchestra_dev"): Promise<Ca
  * Check if cache needs refresh based on TTL or staleness
  * Returns true if a refresh is recommended
  */
-export async function shouldRefreshCache(project: Project = "orchestra_dev"): Promise<boolean> {
+export async function shouldRefreshCache(project: Project = "default"): Promise<boolean> {
   const config = getConfig();
 
   if (!config.staleCheckEnabled) {
@@ -472,7 +470,7 @@ export async function shouldRefreshCache(project: Project = "orchestra_dev"): Pr
 /**
  * Auto-refresh cache if stale (call periodically or before critical operations)
  */
-export async function autoRefreshIfStale(project: Project = "orchestra_dev"): Promise<boolean> {
+export async function autoRefreshIfStale(project: Project = "default"): Promise<boolean> {
   const needsRefresh = await shouldRefreshCache(project);
 
   if (needsRefresh) {
@@ -494,7 +492,7 @@ export async function autoRefreshIfStale(project: Project = "orchestra_dev"): Pr
  * This allows the server to start immediately while scars load in the background.
  * First few queries will use Supabase fallback until cache is ready.
  */
-export function startBackgroundInit(project: Project = "orchestra_dev"): void {
+export function startBackgroundInit(project: Project = "default"): void {
   const config = getConfig();
 
   if (!shouldUseLocalSearch()) {

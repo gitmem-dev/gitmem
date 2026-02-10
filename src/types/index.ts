@@ -64,7 +64,7 @@ export type AgentIdentity =
   | "Brain_Cloud"
   | "Unknown";
 
-export type Project = "orchestra_dev" | "weekend_warrior";
+export type Project = string;
 
 // Thread lifecycle types (OD-thread-lifecycle)
 export type ThreadStatus = "open" | "resolved";

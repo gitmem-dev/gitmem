@@ -422,7 +422,7 @@ describe("prepare_context: local vector search path", () => {
       format: "compact",
     });
 
-    expect(localScarSearch).toHaveBeenCalledWith("test local search", 5, "orchestra_dev");
+    expect(localScarSearch).toHaveBeenCalledWith("test local search", 5, "default");
     expect(supabase.cachedScarSearch).not.toHaveBeenCalled();
     expect(result.scars_included).toBe(1);
     expect(result.performance.search_mode).toBe("local");
@@ -555,7 +555,7 @@ describe("prepare_context: search error handling", () => {
 });
 
 describe("prepare_context: project parameter", () => {
-  it("defaults to orchestra_dev", async () => {
+  it("defaults to 'default' project", async () => {
     setupLocalSearch([]);
 
     await prepareContext({
@@ -563,7 +563,7 @@ describe("prepare_context: project parameter", () => {
       format: "compact",
     });
 
-    expect(isLocalSearchReady).toHaveBeenCalledWith("orchestra_dev");
+    expect(isLocalSearchReady).toHaveBeenCalledWith("default");
   });
 
   it("passes weekend_warrior project through", async () => {

@@ -299,17 +299,17 @@ export function createServer(): Server {
         // Cache management tools (OD-473)
         case "gitmem-cache-status":
         case "gm-cache-s":
-          result = getCacheStatus((toolArgs.project as Project) || "orchestra_dev");
+          result = getCacheStatus((toolArgs.project as Project) || "default");
           break;
 
         case "gitmem-cache-health":
         case "gm-cache-h":
-          result = await checkCacheHealth((toolArgs.project as Project) || "orchestra_dev");
+          result = await checkCacheHealth((toolArgs.project as Project) || "default");
           break;
 
         case "gitmem-cache-flush":
         case "gm-cache-f":
-          result = await flushCache((toolArgs.project as Project) || "orchestra_dev");
+          result = await flushCache((toolArgs.project as Project) || "default");
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);
@@ -369,10 +369,7 @@ export async function runServer(): Promise<void> {
     // Pro/Dev: Initialize local vector search in background (non-blocking)
     // This loads scars with embeddings directly from Supabase REST API
     console.error("[gitmem] Starting background cache initialization...");
-    startBackgroundInit("orchestra_dev");
-
-    // Also init weekend_warrior if needed (non-blocking)
-    startBackgroundInit("weekend_warrior");
+    startBackgroundInit("default");
 
     console.error("[gitmem] Server ready | Cache loading in background");
   } else {

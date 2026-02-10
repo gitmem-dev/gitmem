@@ -529,7 +529,7 @@ export async function scarSearch<T = unknown>(
 export async function cachedScarSearch<T = unknown>(
   query: string,
   matchCount = 5,
-  project: Project = "orchestra_dev"
+  project: Project = "default"
 ): Promise<{ results: T[]; cache_hit: boolean; cache_age_ms?: number }> {
   const cache = getCache();
 
@@ -547,7 +547,7 @@ export async function cachedScarSearch<T = unknown>(
  * List records with caching for decisions (OD-473)
  */
 export async function cachedListDecisions<T = unknown>(
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   limit = 5
 ): Promise<{ data: T[]; cache_hit: boolean; cache_age_ms?: number }> {
   const cache = getCache();
@@ -570,7 +570,7 @@ export async function cachedListDecisions<T = unknown>(
  * List records with caching for wins
  */
 export async function cachedListWins<T = unknown>(
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   limit = 8,
   columns?: string
 ): Promise<{ data: T[]; cache_hit: boolean; cache_age_ms?: number }> {
@@ -673,7 +673,7 @@ export async function saveTranscript(
     format?: "json" | "markdown";
   } = {}
 ): Promise<{ transcript_path: string; size_bytes: number }> {
-  const { project = "orchestra_dev", agent = "unknown", format = "json" } = metadata;
+  const { project = "default", agent = "unknown", format = "json" } = metadata;
   const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
   const extension = format === "markdown" ? "md" : "json";
   const path = `${project}/${agent}/${date}/${sessionId}.${extension}`;

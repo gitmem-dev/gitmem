@@ -41,7 +41,7 @@ export async function listThreads(
 
   const statusFilter = params.status || "open";
   const includeResolved = params.include_resolved ?? false;
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
 
   let allThreads: ThreadObject[] | null = null;
   let source: "supabase" | "aggregation" | "memory" | "file" = "file";

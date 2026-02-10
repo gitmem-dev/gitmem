@@ -74,7 +74,7 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
   const metricsId = uuidv4();
   const lens = params.lens || "summary";
   const days = params.days || 30;
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
 
   if (!hasSupabase()) {
     return {

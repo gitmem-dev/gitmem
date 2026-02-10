@@ -48,7 +48,7 @@ export async function createDecision(
     docs_affected: params.docs_affected || [],
     linear_issue: params.linear_issue || null,
     session_id: params.session_id || null,
-    project: params.project || "orchestra_dev",
+    project: params.project || "default",
     created_at: new Date().toISOString(),
   };
 
@@ -98,7 +98,7 @@ export async function createDecision(
         docs_affected: params.docs_affected,
         linear_issue: params.linear_issue,
         session_id: params.session_id,
-        project: (params.project || "orchestra_dev"),
+        project: (params.project || "default"),
         agent: getAgentIdentity(),
       }).catch((err) => {
         console.warn("[create_decision] Triple generation failed (non-fatal):", err);
@@ -131,7 +131,7 @@ export async function createDecision(
       phase_tag: "decision_capture",
       linear_issue: params.linear_issue,
       metadata: {
-        project: params.project || "orchestra_dev",
+        project: params.project || "default",
         alternatives_count: (params.alternatives_considered || []).length,
         write_path: "directUpsert",
       },

@@ -379,7 +379,7 @@ export async function prepareContext(
 
   const plan = params.plan;
   const format = params.format;
-  const project: Project = params.project || "orchestra_dev";
+  const project: Project = params.project || "default";
   const maxTokens = params.max_tokens || (format === "compact" ? 500 : format === "gate" ? 100 : 10000);
   const matchCount = 5;
 

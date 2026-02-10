@@ -122,12 +122,12 @@ describe("CreateDecisionParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project", () => {
+    it("rejects non-string project", () => {
       const result = CreateDecisionParamsSchema.safeParse({
         title: "Title",
         decision: "Decision",
         rationale: "Rationale",
-        project: "invalid_project",
+        project: 123,
       });
       expect(result.success).toBe(false);
     });

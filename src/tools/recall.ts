@@ -264,7 +264,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     return {
       activated: false,
       plan: plan || "",
-      project: params.project || "orchestra_dev",
+      project: params.project || "default",
       match_count: params.match_count || 3,
       scars: [],
       performance_ms: latencyMs,
@@ -272,7 +272,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       performance: buildPerformanceData("recall", latencyMs, 0),
     };
   }
-  const project: Project = params.project || "orchestra_dev";
+  const project: Project = params.project || "default";
   const matchCount = params.match_count || 3;
   const issueId = params.issue_id; // OD-525: For variant assignment
 

@@ -48,8 +48,8 @@ describe("LogParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project", () => {
-      const result = LogParamsSchema.safeParse({ project: "invalid" });
+    it("rejects non-string project", () => {
+      const result = LogParamsSchema.safeParse({ project: 123 });
       expect(result.success).toBe(false);
     });
   });

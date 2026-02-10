@@ -91,10 +91,10 @@ describe("RecallParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project enum", () => {
+    it("rejects non-string project", () => {
       const result = RecallParamsSchema.safeParse({
         plan: "test",
-        project: "invalid_project",
+        project: 123,
       });
       expect(result.success).toBe(false);
     });

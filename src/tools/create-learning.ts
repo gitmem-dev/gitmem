@@ -100,7 +100,7 @@ export async function createLearning(
     learning_type: params.learning_type,
     title: params.title,
     description: params.description,
-    project: params.project || "orchestra_dev",
+    project: params.project || "default",
     source_linear_issue: params.source_linear_issue || null,
     keywords: params.keywords || [],
     domain: params.domain || [],
@@ -164,7 +164,7 @@ export async function createLearning(
       }
 
       console.error(`[create_learning] Attempting directUpsert for learning ${learningId}`);
-      console.error(`[create_learning] Learning type: ${params.learning_type}, Project: ${params.project || "orchestra_dev"}`);
+      console.error(`[create_learning] Learning type: ${params.learning_type}, Project: ${params.project || "default"}`);
 
       // Write directly to Supabase REST API (bypasses ww-mcp)
       const upsertStart = Date.now();
@@ -198,13 +198,13 @@ export async function createLearning(
         source_linear_issue: params.source_linear_issue,
         persona_name: agentIdentity,
         domain: params.domain,
-        project: (params.project || "orchestra_dev"),
+        project: (params.project || "default"),
       }).catch((err) => {
         console.warn("[create_learning] Triple generation failed (non-fatal):", err);
       });
 
       // Invalidate local cache so next recall picks up the new learning
-      const project = (params.project || "orchestra_dev") as Project;
+      const project = (params.project || "default") as Project;
       flushCache(project).catch((err) => {
         console.warn("[create_learning] Cache invalidation failed (non-fatal):", err);
       });
@@ -236,7 +236,7 @@ export async function createLearning(
       phase_tag: "learning_capture",
       metadata: {
         learning_type: params.learning_type,
-        project: params.project || "orchestra_dev",
+        project: params.project || "default",
         embedding_generated: embeddingGenerated,
         write_path: "directUpsert",
       },

@@ -26,8 +26,13 @@ describe("ProjectSchema", () => {
     expect(ProjectSchema.safeParse("weekend_warrior").success).toBe(true);
   });
 
-  it("rejects invalid project", () => {
-    expect(ProjectSchema.safeParse("invalid_project").success).toBe(false);
+  it("accepts any string as project", () => {
+    expect(ProjectSchema.safeParse("invalid_project").success).toBe(true);
+    expect(ProjectSchema.safeParse("custom_project").success).toBe(true);
+  });
+
+  it("rejects non-string project", () => {
+    expect(ProjectSchema.safeParse(123).success).toBe(false);
   });
 });
 

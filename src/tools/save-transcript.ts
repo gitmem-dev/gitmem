@@ -59,7 +59,7 @@ export async function saveTranscript(
   // Get agent identity for path organization
   const env = detectAgent();
   const agent = env.agent;
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
   const format = params.format || "json";
 
   try {

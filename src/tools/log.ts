@@ -64,7 +64,7 @@ export async function log(params: LogParams): Promise<LogResult> {
   const metricsId = uuidv4();
 
   const limit = params.limit || 10;
-  const project: Project = params.project || "orchestra_dev";
+  const project: Project = params.project || "default";
   const typeFilter = params.learning_type;
   const severityFilter = params.severity;
   const sinceDays = params.since;

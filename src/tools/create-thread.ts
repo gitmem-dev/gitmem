@@ -46,7 +46,7 @@ export interface CreateThreadParams {
   text: string;
   /** Associated Linear issue (optional) */
   linear_issue?: string;
-  /** Project namespace (default: orchestra_dev) */
+  /** Project namespace (default: default) */
   project?: Project;
 }
 
@@ -88,7 +88,7 @@ export async function createThread(
 
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
-  const project = params.project || "orchestra_dev";
+  const project = params.project || "default";
   const trimmedText = params.text.trim();
 
   // Phase 3: Generate embedding for new text (best-effort)

@@ -79,7 +79,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
   const metricsId = uuidv4();
 
   const query = params.query;
-  const project: Project = params.project || "orchestra_dev";
+  const project: Project = params.project || "default";
   const matchCount = params.match_count || 5;
   const severityFilter = params.severity;
   const typeFilter = params.learning_type;

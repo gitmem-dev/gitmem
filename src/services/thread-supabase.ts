@@ -56,7 +56,7 @@ export interface ThreadDisplayInfo {
  */
 export function threadObjectToRow(
   thread: ThreadObject,
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   embedding?: string | null
 ): Record<string, unknown> {
   const now = new Date();
@@ -135,7 +135,7 @@ function mapStatusFromSupabase(status: string): "open" | "resolved" {
  */
 export async function createThreadInSupabase(
   thread: ThreadObject,
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   embedding?: string | null
 ): Promise<ThreadRow | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
@@ -214,7 +214,7 @@ export async function resolveThreadInSupabase(
  * Returns null if Supabase is unavailable (caller should fall back to local).
  */
 export async function listThreadsFromSupabase(
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   options: {
     statusFilter?: string;
     includeResolved?: boolean;
@@ -266,7 +266,7 @@ export async function listThreadsFromSupabase(
  * Returns null if Supabase is unavailable.
  */
 export async function loadActiveThreadsFromSupabase(
-  project: Project = "orchestra_dev"
+  project: Project = "default"
 ): Promise<{ open: ThreadObject[]; recentlyResolved: ThreadObject[]; displayInfo: ThreadDisplayInfo[] } | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
@@ -418,7 +418,7 @@ export async function touchThreadsInSupabase(
  */
 export async function syncThreadsToSupabase(
   threads: ThreadObject[],
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   sessionId?: string
 ): Promise<void> {
   if (!hasSupabase() || !supabase.isConfigured() || threads.length === 0) {
@@ -463,7 +463,7 @@ export async function syncThreadsToSupabase(
  * Called at session_start as fire-and-forget.
  */
 export async function archiveDormantThreads(
-  project: Project = "orchestra_dev",
+  project: Project = "default",
   dormantDays: number = 30
 ): Promise<{ archived_count: number; archived_ids: string[] }> {
   if (!hasSupabase() || !supabase.isConfigured()) {
@@ -536,7 +536,7 @@ function parseEmbedding(raw: string | number[] | null | undefined): number[] | n
  * Returns null if Supabase is unavailable.
  */
 export async function loadOpenThreadEmbeddings(
-  project: Project = "orchestra_dev"
+  project: Project = "default"
 ): Promise<ThreadWithEmbedding[] | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;

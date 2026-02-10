@@ -111,11 +111,11 @@ describe("PrepareContextParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project enum", () => {
+    it("rejects non-string project", () => {
       const result = PrepareContextParamsSchema.safeParse({
         plan: "test",
         format: "compact",
-        project: "invalid_project",
+        project: 123,
       });
       expect(result.success).toBe(false);
     });

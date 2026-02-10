@@ -50,38 +50,38 @@ describe("CacheService", () => {
 
   describe("cache key generation", () => {
     it("generates consistent scar search keys", () => {
-      const key1 = cache.scarSearchKey("test query", "orchestra_dev", 5);
-      const key2 = cache.scarSearchKey("test query", "orchestra_dev", 5);
+      const key1 = cache.scarSearchKey("test query", "default", 5);
+      const key2 = cache.scarSearchKey("test query", "default", 5);
       expect(key1).toBe(key2);
     });
 
     it("generates different keys for different queries", () => {
-      const key1 = cache.scarSearchKey("query one", "orchestra_dev", 5);
-      const key2 = cache.scarSearchKey("query two", "orchestra_dev", 5);
+      const key1 = cache.scarSearchKey("query one", "default", 5);
+      const key2 = cache.scarSearchKey("query two", "default", 5);
       expect(key1).not.toBe(key2);
     });
 
     it("generates different keys for different projects", () => {
-      const key1 = cache.scarSearchKey("test", "orchestra_dev", 5);
+      const key1 = cache.scarSearchKey("test", "default", 5);
       const key2 = cache.scarSearchKey("test", "weekend_warrior", 5);
       expect(key1).not.toBe(key2);
     });
 
     it("generates different keys for different match counts", () => {
-      const key1 = cache.scarSearchKey("test", "orchestra_dev", 3);
-      const key2 = cache.scarSearchKey("test", "orchestra_dev", 5);
+      const key1 = cache.scarSearchKey("test", "default", 3);
+      const key2 = cache.scarSearchKey("test", "default", 5);
       expect(key1).not.toBe(key2);
     });
 
     it("normalizes query text (lowercase, trim)", () => {
-      const key1 = cache.scarSearchKey("  Test Query  ", "orchestra_dev", 5);
-      const key2 = cache.scarSearchKey("test query", "orchestra_dev", 5);
+      const key1 = cache.scarSearchKey("  Test Query  ", "default", 5);
+      const key2 = cache.scarSearchKey("test query", "default", 5);
       expect(key1).toBe(key2);
     });
 
     it("generates decisions keys", () => {
-      const key = cache.decisionsKey("orchestra_dev", 5);
-      expect(key).toBe("decisions:orchestra_dev:5");
+      const key = cache.decisionsKey("default", 5);
+      expect(key).toBe("decisions:default:5");
     });
   });
 
@@ -146,7 +146,7 @@ describe("CacheService", () => {
       // First call - should fetch
       const result1 = await cache.getOrFetchScarSearch(
         "test query",
-        "orchestra_dev",
+        "default",
         5,
         fetcher
       );
@@ -157,7 +157,7 @@ describe("CacheService", () => {
       // Second call - should use cache
       const result2 = await cache.getOrFetchScarSearch(
         "test query",
-        "orchestra_dev",
+        "default",
         5,
         fetcher
       );
@@ -173,7 +173,7 @@ describe("CacheService", () => {
 
       const result = await cache.getOrFetchScarSearch(
         "new query",
-        "orchestra_dev",
+        "default",
         5,
         fetcher
       );
@@ -194,7 +194,7 @@ describe("CacheService", () => {
 
       // First call - should fetch
       const result1 = await cache.getOrFetchDecisions(
-        "orchestra_dev",
+        "default",
         5,
         fetcher
       );
@@ -203,7 +203,7 @@ describe("CacheService", () => {
 
       // Second call - should use cache
       const result2 = await cache.getOrFetchDecisions(
-        "orchestra_dev",
+        "default",
         5,
         fetcher
       );

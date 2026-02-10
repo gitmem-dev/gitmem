@@ -113,7 +113,7 @@ export async function resolveThread(
     text: resolved.text,
     resolution_note: params.resolution_note,
     session_id: sessionId,
-    project: "orchestra_dev",
+    project: "default",
     agent: getAgentIdentity(),
   }).catch(() => {});
 

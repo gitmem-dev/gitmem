@@ -217,7 +217,7 @@ function parseTranscript(jsonlContent: string): Array<{ text: string; type: stri
 export async function processTranscript(
   sessionId: string,
   transcriptContent: string,
-  project: Project = "orchestra_dev"
+  project: Project = "default"
 ): Promise<{ success: boolean; chunksCreated: number; error?: string }> {
   try {
     console.error(`[transcript-chunker] Processing transcript for session ${sessionId}`);

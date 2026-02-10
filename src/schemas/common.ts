@@ -7,8 +7,8 @@ import { z } from "zod";
 /**
  * Project namespace enum
  */
-export const ProjectSchema = z.enum(["orchestra_dev", "weekend_warrior"]);
-export type Project = z.infer<typeof ProjectSchema>;
+export const ProjectSchema = z.string().default("default");
+export type Project = string;
 
 /**
  * Agent identity enum

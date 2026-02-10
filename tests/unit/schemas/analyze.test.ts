@@ -62,8 +62,8 @@ describe("AnalyzeParamsSchema", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects invalid project", () => {
-      const result = AnalyzeParamsSchema.safeParse({ project: "invalid" });
+    it("rejects non-string project", () => {
+      const result = AnalyzeParamsSchema.safeParse({ project: 123 });
       expect(result.success).toBe(false);
     });
   });

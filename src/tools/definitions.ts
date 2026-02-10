@@ -29,8 +29,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         match_count: {
           type: "number",
@@ -107,8 +107,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         force: {
           type: "boolean",
@@ -125,8 +125,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: from active session)",
+
+          description: "Project namespace (default: from active session)",
         },
       },
     },
@@ -221,8 +221,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -272,8 +272,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -389,7 +389,7 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
+
           description: "Project scope for scar resolution",
         },
       },
@@ -417,8 +417,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["session_id", "transcript"],
@@ -458,8 +458,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         severity: {
           type: "string",
@@ -487,8 +487,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         learning_type: {
           type: "string",
@@ -536,8 +536,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["plan", "format"],
@@ -596,8 +596,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -660,8 +660,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["suggestion_id"],
@@ -694,8 +694,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         auto_archive: {
           type: "boolean",
@@ -721,8 +721,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         match_count: {
           type: "number",
@@ -785,8 +785,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         force: {
           type: "boolean",
@@ -803,8 +803,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: from active session)",
+
+          description: "Project namespace (default: from active session)",
         },
       },
     },
@@ -899,8 +899,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -950,8 +950,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -1067,7 +1067,7 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
+
           description: "Project scope for scar resolution",
         },
       },
@@ -1095,8 +1095,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["session_id", "transcript"],
@@ -1133,8 +1133,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         severity: {
           type: "string",
@@ -1163,8 +1163,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         learning_type: {
           type: "string",
@@ -1209,8 +1209,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["plan", "format"],
@@ -1251,7 +1251,7 @@ export const TOOLS = [
       properties: {
         status: { type: "string", enum: ["open", "resolved"], description: "Filter by status (default: open)" },
         include_resolved: { type: "boolean", description: "Include recently resolved threads (default: false)" },
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+        project: { type: "string", description: "Project namespace for organizing memories" },
       },
     },
   },
@@ -1289,7 +1289,7 @@ export const TOOLS = [
       type: "object" as const,
       properties: {
         suggestion_id: { type: "string", description: "Suggestion ID (e.g., ts-a1b2c3d4)" },
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+        project: { type: "string", description: "Project namespace for organizing memories" },
       },
       required: ["suggestion_id"],
     },
@@ -1313,7 +1313,7 @@ export const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"] },
+        project: { type: "string" },
         auto_archive: { type: "boolean", description: "Auto-archive dormant threads (30+ days)" },
       },
     },
@@ -1352,8 +1352,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         force: {
           type: "boolean",
@@ -1393,8 +1393,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: from active session)",
+
+          description: "Project namespace (default: from active session)",
         },
       },
     },
@@ -1489,8 +1489,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -1513,8 +1513,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         severity: {
           type: "string",
@@ -1543,8 +1543,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         learning_type: {
           type: "string",
@@ -1589,8 +1589,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
       },
       required: ["plan", "format"],
@@ -1631,7 +1631,7 @@ export const TOOLS = [
       properties: {
         status: { type: "string", enum: ["open", "resolved"], description: "Filter by status (default: open)" },
         include_resolved: { type: "boolean", description: "Include resolved threads" },
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+        project: { type: "string", description: "Project namespace for organizing memories" },
       },
     },
   },
@@ -1669,7 +1669,7 @@ export const TOOLS = [
       type: "object" as const,
       properties: {
         suggestion_id: { type: "string", description: "Suggestion ID" },
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"], description: "Project scope" },
+        project: { type: "string", description: "Project namespace for organizing memories" },
       },
       required: ["suggestion_id"],
     },
@@ -1693,7 +1693,7 @@ export const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        project: { type: "string", enum: ["orchestra_dev", "weekend_warrior"] },
+        project: { type: "string" },
         auto_archive: { type: "boolean", description: "Auto-archive dormant threads" },
       },
     },
@@ -1718,8 +1718,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         agent: {
           type: "string",
@@ -1751,8 +1751,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         agent: {
           type: "string",
@@ -1784,8 +1784,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         agent: {
           type: "string",
@@ -1819,8 +1819,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1833,8 +1833,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1847,8 +1847,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1861,8 +1861,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1875,8 +1875,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1889,8 +1889,8 @@ export const TOOLS = [
       properties: {
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
       },
     },
@@ -1924,8 +1924,8 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope (default: orchestra_dev)",
+
+          description: "Project namespace for organizing memories",
         },
         limit: {
           type: "number",
@@ -1958,8 +1958,8 @@ export const TOOLS = [
         depth: { type: "number", description: "Max depth for provenance (default: 3)" },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         limit: { type: "number", description: "Max triples (default: 50)" },
       },
@@ -1986,8 +1986,8 @@ export const TOOLS = [
         depth: { type: "number", description: "Max depth for provenance" },
         project: {
           type: "string",
-          enum: ["orchestra_dev", "weekend_warrior"],
-          description: "Project scope",
+
+          description: "Project namespace for organizing memories",
         },
         limit: { type: "number", description: "Max triples" },
       },

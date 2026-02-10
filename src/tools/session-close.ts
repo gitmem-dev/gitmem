@@ -14,7 +14,7 @@ import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
-import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js"; // OD-624
 import {
@@ -678,6 +678,16 @@ export async function sessionClose(
     syncThreadsToSupabase(closeThreads, closeProject, sessionId).catch((err) => {
       console.error("[session_close] Thread Supabase sync failed (non-fatal):", err);
     });
+  }
+
+  // Prune threads.json: only keep open threads to prevent accumulation of resolved/archived
+  // threads that inflate session_start's thread count on the next session.
+  try {
+    const openThreadsOnly = closeThreads.filter(t => t.status === "open" || !t.status);
+    saveThreadsFile(openThreadsOnly);
+    console.error(`[session_close] Pruned threads.json: ${openThreadsOnly.length} open threads (removed ${closeThreads.length - openThreadsOnly.length} resolved/archived)`);
+  } catch (err) {
+    console.error("[session_close] Failed to prune threads.json (non-fatal):", err);
   }
 
   // v2 Phase 2: Persist observations and children from multi-agent work

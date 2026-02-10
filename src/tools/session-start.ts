@@ -123,6 +123,7 @@ async function loadLastSession(
   displayInfo: ThreadDisplayInfo[];
   latency_ms: number;
   network_call: boolean;
+  threadsFromSupabase: boolean;
 }> {
   const timer = new Timer();
 
@@ -140,6 +141,7 @@ async function loadLastSession(
     let aggregated_open_threads: ThreadObject[];
     let recently_resolved_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];
+    let threadsFromSupabase = false;
     const supabaseThreads = await loadActiveThreadsFromSupabase(project);
 
     if (supabaseThreads !== null) {
@@ -147,6 +149,7 @@ async function loadLastSession(
       aggregated_open_threads = supabaseThreads.open;
       recently_resolved_threads = supabaseThreads.recentlyResolved;
       displayInfo = supabaseThreads.displayInfo;
+      threadsFromSupabase = true;
       console.error(`[session_start] Loaded threads from Supabase: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved`);
 
       // Phase 6: Auto-archive dormant threads (fire-and-forget)
@@ -162,7 +165,7 @@ async function loadLastSession(
     const latency_ms = timer.stop();
 
     if (sessions.length === 0) {
-      return { session: null, aggregated_open_threads, recently_resolved_threads, displayInfo, latency_ms, network_call: true };
+      return { session: null, aggregated_open_threads, recently_resolved_threads, displayInfo, latency_ms, network_call: true, threadsFromSupabase };
     }
 
     // Find the most recent session that was properly closed
@@ -185,6 +188,7 @@ async function loadLastSession(
         displayInfo,
         latency_ms,
         network_call: true,
+        threadsFromSupabase,
       };
     }
 
@@ -200,11 +204,12 @@ async function loadLastSession(
       recently_resolved_threads,
       displayInfo,
       latency_ms,
-      network_call: true, // Always hits Supabase (no caching for sessions yet)
+      network_call: true,
+      threadsFromSupabase,
     };
   } catch (error) {
     console.error("[session_start] Failed to load last session:", error);
-    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], displayInfo: [], latency_ms: timer.stop(), network_call: true };
+    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], displayInfo: [], latency_ms: timer.stop(), network_call: true, threadsFromSupabase: false };
   }
 }
 
@@ -790,6 +795,7 @@ function writeSessionFiles(
   threads: ThreadObject[],
   recordingPath?: string | null,
   isRefresh?: boolean,
+  supabaseAuthoritative?: boolean,
 ): ThreadObject[] {
   const gitmemDir = path.join(process.cwd(), ".gitmem");
   if (!fs.existsSync(gitmemDir)) {
@@ -833,17 +839,31 @@ function writeSessionFiles(
     });
   }
 
-  // 4. Threads file — merge with existing to preserve mid-session creations AND resolutions.
-  // mergeThreadStates prefers resolved over open (so local resolve_thread calls survive
-  // even if Supabase still has the thread as "open" from an older/unclosed session).
-  // It also preserves local-only threads (created mid-session via create_thread).
+  // 4. Threads file — when Supabase is authoritative, REPLACE file contents with Supabase
+  // data, preserving only local-only threads (created mid-session but not yet synced).
+  // This prevents the feedback loop where resolved threads accumulate in threads.json
+  // and inflate the count on each session_start.
   const existingFileThreads = loadThreadsFile();
-  const merged = existingFileThreads.length > 0
-    ? deduplicateThreadList(mergeThreadStates(threads, existingFileThreads))
-    : deduplicateThreadList(threads);
-  if (merged.length > 0) {
-    saveThreadsFile(merged);
+  let merged: ThreadObject[];
+
+  if (supabaseAuthoritative) {
+    // Supabase is source of truth — use its threads, but preserve any local-only threads
+    // (threads in the file that don't exist in the Supabase set, e.g. created via create_thread
+    // mid-session but not yet synced to Supabase by session_close).
+    const supabaseIds = new Set(threads.map(t => t.id));
+    const localOnlyThreads = existingFileThreads.filter(t => !supabaseIds.has(t.id));
+    if (localOnlyThreads.length > 0) {
+      console.error(`[session_start] Preserving ${localOnlyThreads.length} local-only threads not yet in Supabase`);
+    }
+    merged = deduplicateThreadList([...threads, ...localOnlyThreads]);
+  } else {
+    // Fallback (free tier / Supabase offline): merge with existing file
+    merged = existingFileThreads.length > 0
+      ? deduplicateThreadList(mergeThreadStates(threads, existingFileThreads))
+      : deduplicateThreadList(threads);
   }
+
+  saveThreadsFile(merged);
   return merged;
 }
 
@@ -1085,11 +1105,11 @@ export async function sessionStart(
   const threadDisplayInfo = lastSessionResult.displayInfo;
 
   // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
-  // writeSessionFiles merges aggregated threads with existing file threads to preserve
-  // mid-session creations (e.g. create_thread calls that haven't been session_closed yet)
+  // When Supabase was the thread source, replace file contents (not merge) to prevent
+  // feedback loop accumulation of resolved threads.
   let mergedThreads = aggregatedThreads;
   try {
-    mergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath);
+    mergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath, false, lastSessionResult.threadsFromSupabase);
   } catch (error) {
     console.warn("[session_start] Failed to persist session files:", error);
   }
@@ -1102,6 +1122,7 @@ export async function sessionStart(
     sessionId,
     linearIssue: params.linear_issue,
     agent,
+    project,
     startedAt: (isResuming && existingSession?.startedAt) || new Date(),
     surfacedScars,
     threads: mergedThreads,
@@ -1114,9 +1135,10 @@ export async function sessionStart(
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }), // OD-534
-    ...(mergedThreads.length > 0 && {
-      open_threads: mergedThreads,
-    }),
+    ...(() => {
+      const openOnly = mergedThreads.filter(t => t.status === "open" || !t.status);
+      return openOnly.length > 0 ? { open_threads: openOnly } : {};
+    })(),
     ...(recentlyResolvedThreads.length > 0 && {
       recently_resolved: recentlyResolvedThreads,
     }),
@@ -1336,19 +1358,20 @@ export async function sessionRefresh(
   };
 
   // GIT-20: Update per-session dir and legacy file with refreshed context
-  // writeSessionFiles merges with existing file threads to preserve mid-session creations
+  // When Supabase was the thread source, replace file (not merge) to prevent accumulation
   let refreshMergedThreads = refreshAggregatedThreads;
   try {
     const allSurfacedScars = [...(Array.isArray(getSurfacedScars()) ? getSurfacedScars() : []), ...newSurfacedScars];
-    refreshMergedThreads = writeSessionFiles(sessionId, agent, project, allSurfacedScars, refreshAggregatedThreads, recordingPath, true);
+    refreshMergedThreads = writeSessionFiles(sessionId, agent, project, allSurfacedScars, refreshAggregatedThreads, recordingPath, true, lastSessionResult.threadsFromSupabase);
     console.error(`[session_refresh] Context refreshed for session ${sessionId}`);
   } catch (error) {
     console.warn("[session_refresh] Failed to update session files:", error);
   }
 
-  // Add merged threads to result
-  if (refreshMergedThreads.length > 0) {
-    result.open_threads = refreshMergedThreads;
+  // Add merged threads to result (only open threads in open_threads field)
+  const refreshOpenOnly = refreshMergedThreads.filter(t => t.status === "open" || !t.status);
+  if (refreshOpenOnly.length > 0) {
+    result.open_threads = refreshOpenOnly;
   }
   if (recentlyResolvedThreads.length > 0) {
     result.recently_resolved = recentlyResolvedThreads;
@@ -1358,6 +1381,7 @@ export async function sessionRefresh(
   setCurrentSession({
     sessionId,
     agent,
+    project,
     startedAt: currentSession?.startedAt || new Date(),
     surfacedScars: [...(currentSession?.surfacedScars || []), ...newSurfacedScars],
     threads: refreshMergedThreads,

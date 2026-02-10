@@ -12,7 +12,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { getThreads } from "../services/session-state.js";
+import { getThreads, getProject } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { listThreadsFromSupabase } from "../services/thread-supabase.js";
@@ -42,7 +42,7 @@ export async function listThreads(
 
   const statusFilter = params.status || "open";
   const includeResolved = params.include_resolved ?? false;
-  const project = params.project || "default";
+  const project = params.project || getProject() || "default";
 
   let allThreads: ThreadObject[] | null = null;
   let source: "supabase" | "aggregation" | "memory" | "file" = "file";

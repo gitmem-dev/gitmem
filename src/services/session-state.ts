@@ -18,6 +18,7 @@ interface SessionContext {
   sessionId: string;
   linearIssue?: string;
   agent?: string;
+  project?: string;              // Thread fix: track active project for list_threads default
   startedAt: Date;
   surfacedScars: SurfacedScar[]; // OD-552: Track all scars surfaced during session
   confirmations: ScarConfirmation[]; // Refute-or-obey confirmations for recall-surfaced scars
@@ -62,6 +63,14 @@ export function clearCurrentSession(): void {
     console.error(`[session-state] Clearing session: ${currentSession.sessionId}`);
   }
   currentSession = null;
+}
+
+/**
+ * Get the active session's project, or null if no session.
+ * Used by list_threads to inherit the correct project default.
+ */
+export function getProject(): string | null {
+  return currentSession?.project || null;
 }
 
 /**

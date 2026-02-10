@@ -25,16 +25,6 @@
         ]
       },
       {
-        "matcher": "mcp__linear__update_issue",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/recall-check.sh",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
         "matcher": "Write",
         "hooks": [
           {
@@ -77,37 +67,7 @@
         ]
       },
       {
-        "matcher": "mcp__supabase__semantic_search",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.sh",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__supabase__scar_search",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.sh",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.sh",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__linear__update_issue",
         "hooks": [
           {
             "type": "command",

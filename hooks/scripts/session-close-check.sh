@@ -101,7 +101,7 @@ if [ "$SESSION_STARTED" = "true" ]; then
     cat <<'HOOKJSON'
 {
   "decision": "block",
-  "reason": "GITMEM SESSION STILL OPEN: You have an active GitMem session that hasn't been closed. Please run `session_close` (or `gm-close`) before ending the session. This persists your session data, captures learnings, and records scar usage.\n\nIf this is a trivial session (< 30min, purely exploratory), use close_type: 'quick'. Otherwise use 'standard' for full closing reflection."
+  "reason": "GITMEM SESSION STILL OPEN — Run the standard closing ceremony:\n\n1. ASK the human these 7 reflection questions and record their answers:\n   - what_broke: What broke that you didn't expect?\n   - what_took_longer: What took longer than it should have?\n   - do_differently: What would you do differently next time?\n   - what_worked: What pattern or approach worked well?\n   - wrong_assumption: What assumption was wrong?\n   - scars_applied: Which scars or institutional knowledge did you apply?\n   - institutional_memory: What from this session should be captured?\n\n2. ASK: Any corrections or additions?\n\n3. WRITE structured payload to .gitmem/closing-payload.json with closing_reflection (7 fields above), task_completion (timestamps), and human_corrections.\n\n4. CALL session_close with session_id and close_type: 'standard'.\n\nFor trivial sessions (< 30min, exploratory only), use close_type: 'quick' instead — no questions needed."
 }
 HOOKJSON
     exit 0

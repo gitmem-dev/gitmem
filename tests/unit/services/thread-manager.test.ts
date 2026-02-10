@@ -343,4 +343,41 @@ describe("mergeThreadStates", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].status).toBe("resolved");
   });
+
+  it("deduplicates by normalized text across different IDs (OD-641)", () => {
+    const current: ThreadObject[] = [
+      { id: "t-aaa", text: "Fix auth timeout", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const incoming: ThreadObject[] = [
+      { id: "t-bbb", text: "Fix auth timeout", status: "open", created_at: "2026-01-02T00:00:00Z" },
+    ];
+    const merged = mergeThreadStates(incoming, current);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe("t-aaa"); // Current wins
+  });
+
+  it("propagates resolved status across text-matched threads with different IDs (OD-641)", () => {
+    const current: ThreadObject[] = [
+      { id: "t-aaa", text: "Fix auth timeout", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const incoming: ThreadObject[] = [
+      { id: "t-bbb", text: "Fix auth timeout", status: "resolved", created_at: "2026-01-01T00:00:00Z", resolved_at: "2026-01-02T00:00:00Z" },
+    ];
+    const merged = mergeThreadStates(incoming, current);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe("t-aaa"); // Current ID preserved
+    expect(merged[0].status).toBe("resolved"); // Resolved status propagated
+    expect(merged[0].resolved_at).toBe("2026-01-02T00:00:00Z");
+  });
+
+  it("handles text normalization differences (trailing punctuation, whitespace) (OD-641)", () => {
+    const current: ThreadObject[] = [
+      { id: "t-aaa", text: "Fix the auth timeout.", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const incoming: ThreadObject[] = [
+      { id: "t-bbb", text: "fix the auth timeout", status: "open", created_at: "2026-01-02T00:00:00Z" },
+    ];
+    const merged = mergeThreadStates(incoming, current);
+    expect(merged).toHaveLength(1);
+  });
 });

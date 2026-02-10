@@ -12,6 +12,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import type { ThreadObject, ThreadStatus } from "../types/index.js";
+import { normalizeText } from "./thread-dedup.js";
 
 // ---------- ID Generation ----------
 
@@ -160,8 +161,8 @@ export function aggregateThreads(
       // Skip PROJECT STATE threads (handled separately via OD-534)
       if (thread.text.startsWith("PROJECT STATE:")) continue;
 
-      // Deduplicate by both thread ID and text content
-      const key = thread.text.toLowerCase().trim();
+      // Deduplicate by both thread ID and normalized text content
+      const key = normalizeText(thread.text);
       if (!key || seenText.has(key) || seenIds.has(thread.id)) continue;
       seenText.add(key);
       seenIds.add(thread.id);
@@ -276,30 +277,51 @@ export function mergeThreadStates(
   current: ThreadObject[]
 ): ThreadObject[] {
   const byId = new Map<string, ThreadObject>();
+  const textToId = new Map<string, string>(); // normalized text -> first ID
 
   // Start with current state (may have mid-session resolutions)
   for (const t of current) {
     byId.set(t.id, t);
+    const key = normalizeText(t.text);
+    if (key && !textToId.has(key)) {
+      textToId.set(key, t.id);
+    }
   }
 
   // Merge incoming — new threads get added, existing threads prefer resolved state
   for (const t of incoming) {
     const existing = byId.get(t.id);
-    if (!existing) {
-      byId.set(t.id, t);
-    } else if (t.status === "resolved" && existing.status === "open") {
-      // Incoming says resolved — update
-      byId.set(t.id, t);
+    if (existing) {
+      // Same ID: prefer resolved state
+      if (t.status === "resolved" && existing.status === "open") {
+        byId.set(t.id, t);
+      }
+      continue;
     }
-    // If existing is resolved and incoming is open, keep resolved
-  }
 
-  // Also merge by text for threads that have different IDs (migration scenario)
-  const textIndex = new Map<string, string>(); // text -> id
-  for (const [id, t] of byId) {
-    const key = t.text.toLowerCase().trim();
-    if (!textIndex.has(key)) {
-      textIndex.set(key, id);
+    // Different ID — check for text-based duplicate (migration scenario)
+    const key = normalizeText(t.text);
+    if (key) {
+      const existingId = textToId.get(key);
+      if (existingId) {
+        // Same text, different ID: propagate resolved status if incoming is resolved
+        if (t.status === "resolved") {
+          const existingThread = byId.get(existingId);
+          if (existingThread && existingThread.status === "open") {
+            existingThread.status = "resolved";
+            existingThread.resolved_at = t.resolved_at;
+            existingThread.resolved_by_session = t.resolved_by_session;
+            existingThread.resolution_note = t.resolution_note;
+          }
+        }
+        continue; // Skip the duplicate
+      }
+    }
+
+    // Genuinely new thread
+    byId.set(t.id, t);
+    if (key) {
+      textToId.set(key, t.id);
     }
   }
 

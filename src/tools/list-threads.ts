@@ -14,6 +14,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getThreads } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
+import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { listThreadsFromSupabase } from "../services/thread-supabase.js";
 import * as supabase from "../services/supabase-client.js";
 import {
@@ -76,8 +77,8 @@ export async function listThreads(
         // so local resolve_thread calls survive even if sessions still show "open"
         const fileThreads = loadThreadsFile();
         const merged = fileThreads.length > 0
-          ? mergeThreadStates(aggregated, fileThreads)
-          : aggregated;
+          ? deduplicateThreadList(mergeThreadStates(aggregated, fileThreads))
+          : deduplicateThreadList(aggregated);
 
         allThreads = merged;
         source = "aggregation";
@@ -89,7 +90,7 @@ export async function listThreads(
 
   // Fallback: local file only (if aggregation failed entirely)
   if (allThreads === null) {
-    allThreads = loadThreadsFile();
+    allThreads = deduplicateThreadList(loadThreadsFile());
     source = "file";
   }
 

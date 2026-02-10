@@ -10,9 +10,11 @@ import {
   checkDuplicate,
   normalizeText,
   cosineSimilarity,
+  deduplicateThreadList,
   DEDUP_SIMILARITY_THRESHOLD,
 } from "../../../src/services/thread-dedup.js";
 import type { ThreadWithEmbedding } from "../../../src/services/thread-dedup.js";
+import type { ThreadObject } from "../../../src/types/index.js";
 
 // ---------- Helpers ----------
 
@@ -195,5 +197,87 @@ describe("checkDuplicate — text fallback", () => {
 
     expect(result.is_duplicate).toBe(false);
     expect(result.method).toBe("text_normalization");
+  });
+});
+
+// ===========================================================================
+// 5. deduplicateThreadList (OD-641)
+// ===========================================================================
+
+function makeThreadObject(
+  id: string,
+  text: string,
+  status: "open" | "resolved" = "open"
+): ThreadObject {
+  return { id, text, status, created_at: "2026-02-10T00:00:00Z" };
+}
+
+describe("deduplicateThreadList", () => {
+  it("removes threads with identical normalized text but different IDs", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "Fix auth timeout"),
+      makeThreadObject("t-bbb", "fix auth timeout"),   // same text, different ID
+      makeThreadObject("t-ccc", "  Fix  Auth  Timeout. "), // same text after normalization
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t-aaa"); // First seen wins
+  });
+
+  it("removes threads with duplicate IDs", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "First version"),
+      makeThreadObject("t-aaa", "Second version"),
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe("First version");
+  });
+
+  it("keeps genuinely different threads", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "Fix auth timeout"),
+      makeThreadObject("t-bbb", "Add logging to API"),
+      makeThreadObject("t-ccc", "Deploy to production"),
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(3);
+  });
+
+  it("skips empty-text threads", () => {
+    const threads = [
+      makeThreadObject("t-aaa", ""),
+      makeThreadObject("t-bbb", "   "),
+      makeThreadObject("t-ccc", "Real thread"),
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t-ccc");
+  });
+
+  it("does not mutate input", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "Fix auth timeout"),
+      makeThreadObject("t-bbb", "Fix auth timeout"),
+    ];
+    const original = [...threads];
+    deduplicateThreadList(threads);
+    expect(threads).toEqual(original);
+    expect(threads).toHaveLength(2); // Original unchanged
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(deduplicateThreadList([])).toEqual([]);
+  });
+
+  it("handles trailing punctuation differences via normalizeText", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "Fix the bug"),
+      makeThreadObject("t-bbb", "Fix the bug."),
+      makeThreadObject("t-ccc", "Fix the bug!!!"),
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t-aaa");
   });
 });

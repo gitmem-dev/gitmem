@@ -11,6 +11,8 @@
  *   3. If no existing threads: skip check
  */
 
+import type { ThreadObject } from "../types/index.js";
+
 // ---------- Types ----------
 
 export interface ThreadWithEmbedding {
@@ -144,4 +146,36 @@ export function normalizeText(text: string): string {
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+// ---------- List Deduplication ----------
+
+/**
+ * Deduplicate a thread list by both ID and normalized text.
+ * First-seen wins. Skips empty-text threads. Does not mutate input.
+ *
+ * Applied at every thread loading/merging exit point to guarantee
+ * no duplicates escape regardless of upstream logic.
+ */
+export function deduplicateThreadList(threads: ThreadObject[]): ThreadObject[] {
+  const seenIds = new Set<string>();
+  const seenText = new Set<string>();
+  const result: ThreadObject[] = [];
+
+  for (const thread of threads) {
+    const text = thread.text || "";
+    const key = normalizeText(text);
+
+    // Skip empty-text threads
+    if (!key) continue;
+
+    // Skip if we've seen this ID or this normalized text
+    if (seenIds.has(thread.id) || seenText.has(key)) continue;
+
+    seenIds.add(thread.id);
+    seenText.add(key);
+    result.push(thread);
+  }
+
+  return result;
 }

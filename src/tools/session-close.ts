@@ -15,6 +15,7 @@ import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import { normalizeThreads, mergeThreadStates, migrateStringThread } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js"; // OD-624
 import {
   validateSessionClose,
@@ -184,8 +185,8 @@ async function sessionCloseFree(
     if (params.open_threads && params.open_threads.length > 0) {
       const normalized = normalizeThreads(params.open_threads, params.session_id);
       const merged = freeSessionThreads.length > 0
-        ? mergeThreadStates(normalized, freeSessionThreads)
-        : normalized;
+        ? deduplicateThreadList(mergeThreadStates(normalized, freeSessionThreads))
+        : deduplicateThreadList(normalized);
       sessionData.open_threads = merged;
     } else if (freeSessionThreads.length > 0) {
       sessionData.open_threads = freeSessionThreads;
@@ -648,8 +649,8 @@ export async function sessionClose(
     const normalized = normalizeThreads(params.open_threads, params.session_id);
     // Merge incoming with mid-session state (preserves resolutions from resolve_thread calls)
     const merged = sessionThreads.length > 0
-      ? mergeThreadStates(normalized, sessionThreads)
-      : normalized;
+      ? deduplicateThreadList(mergeThreadStates(normalized, sessionThreads))
+      : deduplicateThreadList(normalized);
     sessionData.open_threads = merged;
   } else if (sessionThreads.length > 0) {
     // No new threads from close payload, but we have mid-session state (e.g., resolutions)

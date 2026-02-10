@@ -29,6 +29,7 @@ import {
 } from "../services/metrics.js";
 import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
+import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js"; // OD-623, Phase 6
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
@@ -838,8 +839,8 @@ function writeSessionFiles(
   // It also preserves local-only threads (created mid-session via create_thread).
   const existingFileThreads = loadThreadsFile();
   const merged = existingFileThreads.length > 0
-    ? mergeThreadStates(threads, existingFileThreads)
-    : threads;
+    ? deduplicateThreadList(mergeThreadStates(threads, existingFileThreads))
+    : deduplicateThreadList(threads);
   if (merged.length > 0) {
     saveThreadsFile(merged);
   }

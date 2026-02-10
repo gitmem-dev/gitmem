@@ -13,6 +13,7 @@ import * as supabase from "./supabase-client.js";
 import { hasSupabase } from "./tier.js";
 import { computeVitality, computeLifecycleStatus, detectThreadClass } from "./thread-vitality.js";
 import type { ThreadClass, LifecycleStatus } from "./thread-vitality.js";
+import { normalizeText, deduplicateThreadList } from "./thread-dedup.js";
 import type { ThreadWithEmbedding } from "./thread-dedup.js";
 import type { ThreadObject, Project } from "../types/index.js";
 
@@ -252,8 +253,9 @@ export async function listThreadsFromSupabase(
       limit: 100,
     });
 
-    console.error(`[thread-supabase] Listed ${rows.length} threads from Supabase`);
-    return rows.map(rowToThreadObject);
+    const threads = deduplicateThreadList(rows.map(rowToThreadObject));
+    console.error(`[thread-supabase] Listed ${threads.length} threads from Supabase (${rows.length - threads.length} duplicates removed)`);
+    return threads;
   } catch (error) {
     console.error("[thread-supabase] Failed to list threads:", error instanceof Error ? error.message : error);
     return null;
@@ -300,7 +302,7 @@ export async function loadActiveThreadsFromSupabase(
 
     for (const row of rows) {
       // Deduplicate by both thread ID and normalized text
-      const key = (row.text || "").toLowerCase().trim();
+      const key = normalizeText(row.text || "");
       if (seenIds.has(row.id) || (key && seenText.has(key))) continue;
       seenIds.add(row.id);
       if (key) seenText.add(key);

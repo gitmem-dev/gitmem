@@ -28,7 +28,7 @@ import {
   EXPECTED_TOOL_COUNTS,
   type McpTestClient,
 } from "./helpers.js";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -89,16 +89,10 @@ describe("Smoke: Free Tier", () => {
 
     expect(isToolError(result)).toBe(false);
 
-    const data = parseToolResult<{
-      session_id: string;
-      agent: string;
-    }>(result);
-
-    // session_id must be a valid UUID
-    expect(data.session_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    );
-    expect(data.agent).toBe("CLI");
+    // session_start returns pre-formatted markdown display string
+    const text = getToolResultText(result);
+    expect(text).toContain("SESSION START");
+    expect(text).toContain("CLI");
   });
 
   it("recall works", async () => {
@@ -128,16 +122,24 @@ describe("Smoke: Free Tier", () => {
       agent_identity: "CLI",
       force: true,
     });
-    const startData = parseToolResult<{ session_id: string }>(startResult);
+    expect(isToolError(startResult)).toBe(false);
+
+    // session_start returns markdown display — read active-sessions.json for full UUID
+    // Server walks up from CWD to find .gitmem/, so registry is at CWD/.gitmem/
+    const registryPath = join(process.cwd(), ".gitmem", "active-sessions.json");
+    expect(existsSync(registryPath), "active-sessions.json should exist after session_start").toBe(true);
+    const registry = JSON.parse(readFileSync(registryPath, "utf-8"));
+    const sessionId = registry.sessions[registry.sessions.length - 1].session_id;
 
     const { result } = await timedStep("session_close", async () => {
       return callTool(mcp.client, "session_close", {
-        session_id: startData.session_id,
+        session_id: sessionId,
         close_type: "quick",
       });
     });
 
     expect(isToolError(result)).toBe(false);
-    expect(getToolResultText(result).length).toBeGreaterThan(0);
+    const closeText = getToolResultText(result);
+    expect(closeText).toContain("CLOSE");
   });
 });

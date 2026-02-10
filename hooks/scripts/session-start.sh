@@ -159,7 +159,7 @@ IMPORTANT:
 
 Run the standard closing ceremony:
 
-1. ASK the human these 7 reflection questions and record their answers:
+1. YOU (the agent) ANSWER these 7 reflection questions based on the session. Display your answers to the human:
    - what_broke: What broke that you didn't expect?
    - what_took_longer: What took longer than it should have?
    - do_differently: What would you do differently next time?
@@ -168,9 +168,10 @@ Run the standard closing ceremony:
    - scars_applied: Which scars or institutional knowledge did you apply?
    - institutional_memory: What from this session should be captured?
 
-2. ASK: Any corrections or additions?
+2. ASK the human: "Any corrections or additions to my answers?"
+   WAIT for their response before proceeding.
 
-3. WRITE structured payload to .gitmem/closing-payload.json:
+3. WRITE structured payload to .gitmem/closing-payload.json (incorporating human corrections):
    {
      "closing_reflection": { "what_broke": "...", "what_took_longer": "...", "do_differently": "...", "what_worked": "...", "wrong_assumption": "...", "scars_applied": "...", "institutional_memory": "..." },
      "task_completion": { "started_at": "ISO", "completed_at": "ISO", "questions_displayed_at": "ISO", "reflection_completed_at": "ISO", "human_asked_at": "ISO", "human_response_at": "ISO", "human_response": "" },

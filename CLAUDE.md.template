@@ -33,7 +33,7 @@ When working on this project, follow these memory protocols:
 
 On "closing", "done for now", or "wrapping up", run the **standard closing ceremony**:
 
-1. **Ask the human these 7 reflection questions** (display them, wait for answers):
+1. **You (the agent) answer these 7 reflection questions** based on the session. Display your answers to the human:
    - Q1 `what_broke`: What broke that you didn't expect?
    - Q2 `what_took_longer`: What took longer than it should have?
    - Q3 `do_differently`: What would you do differently next time?
@@ -42,7 +42,7 @@ On "closing", "done for now", or "wrapping up", run the **standard closing cerem
    - Q6 `scars_applied`: Which scars or institutional knowledge did you apply?
    - Q7 `institutional_memory`: What from this session should be captured as institutional memory?
 
-2. **Ask for corrections**: "Any corrections or additions to my answers?"
+2. **Ask the human for corrections**: "Any corrections or additions to my answers?" **Wait for their response before proceeding.**
 
 3. **Write structured payload** to `.gitmem/closing-payload.json`:
    ```json

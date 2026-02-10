@@ -33,11 +33,16 @@ COPY --chown=developer:developer gitmem-mcp-*.tgz /tmp/
 RUN npm init -y && npm install /tmp/gitmem-mcp-*.tgz
 
 # Run the fresh-install flow
+# 1. gitmem init — creates .gitmem/ with starter scars + .claude/settings.json with permissions
+# 2. gitmem check — verifies health
+# 3. Copy CLAUDE.md.template as optional reference
+# 4. Create .mcp.json for MCP server
+# 5. gitmem install-hooks — writes hooks into .claude/settings.json (merges with permissions)
+# 6. Commit everything
 RUN npx gitmem init \
  && npx gitmem check \
  && cp node_modules/gitmem-mcp/CLAUDE.md.template CLAUDE.md \
  && echo '{"mcpServers":{"gitmem":{"command":"npx","args":["-y","gitmem-mcp"]}}}' > .mcp.json \
- && mkdir -p .claude && echo '{"permissions":{"allow":["mcp__gitmem__*"]}}' > .claude/settings.json \
  && npx gitmem install-hooks \
  && git add -A && git commit -m "initial setup with gitmem"
 

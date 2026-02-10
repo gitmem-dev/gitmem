@@ -412,78 +412,109 @@ async function cmdSessionRefresh() {
 }
 
 /**
- * Install the bundled hooks plugin to ~/.claude/plugins/gitmem-hooks/
+ * Install gitmem hooks as project-level hooks in .claude/settings.json
  *
- * Copies the hooks/ directory from this package into the Claude Code
- * plugins directory. Use --force to overwrite an existing installation.
+ * Writes hook entries pointing to scripts in node_modules/gitmem-mcp/hooks/scripts/.
+ * No plugin registration needed — Claude Code reads hooks directly from settings.
+ * Use --force to overwrite existing hook entries.
  */
 function cmdInstallHooks() {
   const force = process.argv.includes("--force");
-  const hooksSource = join(__dirname, "..", "hooks");
-  const pluginsDir = join(homedir(), ".claude", "plugins");
-  const targetDir = join(pluginsDir, "gitmem-hooks");
+  const scriptsDir = join(__dirname, "..", "hooks", "scripts");
+  const claudeDir = join(process.cwd(), ".claude");
+  const settingsPath = join(claudeDir, "settings.json");
 
-  console.log("GitMem Hooks Plugin — Install");
-  console.log("=============================");
+  console.log("GitMem Hooks — Install");
+  console.log("======================");
   console.log("");
 
-  // Check that bundled hooks exist
-  if (!existsSync(hooksSource) || !existsSync(join(hooksSource, ".claude-plugin", "plugin.json"))) {
-    console.error("Error: Bundled hooks directory not found.");
-    console.error("Expected at:", hooksSource);
-    console.error("Ensure the package is installed correctly.");
+  // Verify bundled scripts exist
+  if (!existsSync(scriptsDir) || !existsSync(join(scriptsDir, "session-start.sh"))) {
+    console.error("Error: Hook scripts not found at:", scriptsDir);
+    console.error("Ensure gitmem-mcp is installed correctly.");
     process.exit(1);
   }
 
-  // Check if already installed
-  if (existsSync(targetDir) && !force) {
-    console.log("Hooks plugin is already installed at:");
-    console.log(`  ${targetDir}`);
-    console.log("");
-    console.log("To reinstall (overwrite), run:");
-    console.log("  npx gitmem install-hooks --force");
-    return;
-  }
-
-  // Create plugins directory if needed
-  if (!existsSync(pluginsDir)) {
-    mkdirSync(pluginsDir, { recursive: true });
-  }
-
-  // Copy hooks to target
-  console.log(`Source:  ${hooksSource}`);
-  console.log(`Target:  ${targetDir}`);
-  console.log("");
-
-  try {
-    cpSync(hooksSource, targetDir, { recursive: true });
-  } catch (err) {
-    console.error("Error copying hooks plugin:", err.message);
-    process.exit(1);
-  }
-
-  // Make shell scripts executable
-  const scriptsDir = join(targetDir, "scripts");
-  if (existsSync(scriptsDir)) {
-    for (const file of readdirSync(scriptsDir)) {
-      if (file.endsWith(".sh")) {
-        chmodSync(join(scriptsDir, file), 0o755);
-      }
-    }
-  }
-  const testsDir = join(targetDir, "tests");
-  if (existsSync(testsDir)) {
-    for (const file of readdirSync(testsDir)) {
-      if (file.endsWith(".sh")) {
-        chmodSync(join(testsDir, file), 0o755);
-      }
+  // Make scripts executable
+  for (const file of readdirSync(scriptsDir)) {
+    if (file.endsWith(".sh")) {
+      chmodSync(join(scriptsDir, file), 0o755);
     }
   }
 
-  console.log("Installed successfully!");
+  // Build hook entries using node_modules path (resolved from CWD)
+  const relScripts = "node_modules/gitmem-mcp/hooks/scripts";
+  const gitmemHooks = {
+    SessionStart: [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${relScripts}/session-start.sh`,
+            statusMessage: "Initializing GitMem session...",
+            timeout: 5000,
+          },
+        ],
+      },
+    ],
+    PreToolUse: [
+      { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+      { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+      { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+    ],
+    PostToolUse: [
+      { matcher: "mcp__gitmem__recall", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "mcp__gitmem__search", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+    ],
+    Stop: [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${relScripts}/session-close-check.sh`,
+            timeout: 5000,
+          },
+        ],
+      },
+    ],
+  };
+
+  // Read existing settings or create new
+  let settings = {};
+  if (existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    } catch {
+      console.warn("  Warning: Could not parse existing .claude/settings.json, creating fresh");
+    }
+  } else {
+    mkdirSync(claudeDir, { recursive: true });
+  }
+
+  // Check if hooks already exist
+  if (settings.hooks && !force) {
+    const hasGitmem = JSON.stringify(settings.hooks).includes("gitmem");
+    if (hasGitmem) {
+      console.log("GitMem hooks already installed in .claude/settings.json");
+      console.log("");
+      console.log("To reinstall (overwrite), run:");
+      console.log("  npx gitmem install-hooks --force");
+      return;
+    }
+  }
+
+  // Merge hooks into settings (replace hooks section entirely)
+  settings.hooks = gitmemHooks;
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+  console.log("Hooks written to .claude/settings.json");
+  console.log(`Scripts at: ${relScripts}/`);
   console.log("");
 
-  // Verify gitmem MCP is configured (non-blocking warning)
+  // Verify gitmem MCP is configured
   let mcpFound = false;
   const mcpPaths = [
     join(process.cwd(), ".mcp.json"),
@@ -512,63 +543,55 @@ function cmdInstallHooks() {
     console.log("");
   }
 
-  console.log("Next steps:");
-  console.log("  1. Restart Claude Code (exit and re-open)");
-  console.log("  2. The plugin hooks will activate on next session");
+  console.log("Installed! Hooks will activate on next Claude Code session.");
   console.log("");
   console.log("To update after a gitmem version bump:");
   console.log("  npx gitmem install-hooks --force");
 }
 
 /**
- * Uninstall the hooks plugin from ~/.claude/plugins/gitmem-hooks/
+ * Uninstall gitmem hooks from .claude/settings.json
  *
- * Removes the plugin directory, cleans up enabledPlugins from settings,
+ * Removes the hooks section, cleans up legacy plugin directories,
  * and removes temp state directories.
  */
 function cmdUninstallHooks() {
-  const pluginDir = join(homedir(), ".claude", "plugins", "gitmem-hooks");
-
-  console.log("GitMem Hooks Plugin — Uninstall");
-  console.log("===============================");
+  console.log("GitMem Hooks — Uninstall");
+  console.log("========================");
   console.log("");
 
-  // Remove plugin directory
-  if (existsSync(pluginDir)) {
-    rmSync(pluginDir, { recursive: true, force: true });
-    console.log("[uninstall] Removed plugin directory:", pluginDir);
-  } else {
-    console.log("[uninstall] Plugin directory not found (already removed)");
-  }
-
-  // Clean enabledPlugins from .claude/settings.json
-  // (Key scar: claude plugin uninstall doesn't always clean this up)
-  const settingsFiles = [
-    join(process.cwd(), ".claude", "settings.json"),
-    join(process.cwd(), ".claude", "settings.local.json"),
-  ];
-
-  for (const settingsPath of settingsFiles) {
-    if (existsSync(settingsPath)) {
-      try {
-        const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
-        if (cfg.enabledPlugins) {
-          let cleaned = false;
-          for (const key of Object.keys(cfg.enabledPlugins)) {
-            if (key.startsWith("gitmem-hooks")) {
-              delete cfg.enabledPlugins[key];
-              cleaned = true;
-            }
-          }
-          if (cleaned) {
-            writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
-            console.log(`[cleanup] Removed enabledPlugins entry from ${settingsPath}`);
+  // Remove hooks from .claude/settings.json
+  const settingsPath = join(process.cwd(), ".claude", "settings.json");
+  if (existsSync(settingsPath)) {
+    try {
+      const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      if (cfg.hooks) {
+        delete cfg.hooks;
+        writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
+        console.log("[uninstall] Removed hooks from .claude/settings.json");
+      } else {
+        console.log("[uninstall] No hooks found in .claude/settings.json");
+      }
+      // Also clean legacy enabledPlugins
+      if (cfg.enabledPlugins) {
+        for (const key of Object.keys(cfg.enabledPlugins)) {
+          if (key.startsWith("gitmem-hooks")) {
+            delete cfg.enabledPlugins[key];
+            writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
+            console.log("[cleanup] Removed legacy enabledPlugins entry");
           }
         }
-      } catch {
-        // ignore parse errors
       }
+    } catch {
+      // ignore parse errors
     }
+  }
+
+  // Clean legacy plugin directory (from old install-hooks)
+  const pluginDir = join(homedir(), ".claude", "plugins", "gitmem-hooks");
+  if (existsSync(pluginDir)) {
+    rmSync(pluginDir, { recursive: true, force: true });
+    console.log("[cleanup] Removed legacy plugin directory:", pluginDir);
   }
 
   // Clean temp state directories

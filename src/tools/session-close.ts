@@ -270,32 +270,33 @@ function formatCloseDisplay(
   const lines: string[] = [];
 
   if (!success) {
-    lines.push("Session close FAILED.");
+    lines.push("**Session close FAILED.**");
     if (errors?.length) {
-      for (const e of errors) lines.push(`  Error: ${e}`);
+      for (const e of errors) lines.push(`- Error: ${e}`);
     }
     lines.push("");
   }
 
   // Header
   const closeLabel = compliance.close_type.toUpperCase();
-  lines.push(`${closeLabel} CLOSE — ${success ? "COMPLETE" : "FAILED"}`);
-  lines.push(`Session: ${sessionId.slice(0, 8)} | Agent: ${compliance.agent}`);
-  lines.push("");
+  lines.push(`## ${closeLabel} CLOSE — ${success ? "COMPLETE" : "FAILED"}`);
+  lines.push(`**Session:** \`${sessionId.slice(0, 8)}\` | **Agent:** ${compliance.agent}`);
 
   // Checklist
   const check = (ok: boolean) => ok ? "done" : "missing";
 
+  lines.push("");
+  lines.push(`### Checklist`);
   if (compliance.close_type === "standard") {
-    lines.push(`  [${check(compliance.checklist_displayed)}] Read active-session.json`);
-    lines.push(`  [${check(compliance.questions_answered_by_agent)}] Agent answered 7 questions`);
-    lines.push(`  [${check(compliance.human_asked_for_corrections)}] Human asked for corrections`);
-    lines.push(`  [${check(learningsCount > 0)}] Created learning entries (${learningsCount})`);
-    lines.push(`  [${check(compliance.scars_applied > 0)}] Recorded scar usage (${compliance.scars_applied})`);
-    lines.push(`  [${check(success)}] Session persisted`);
+    lines.push(`- [${check(compliance.checklist_displayed)}] Read active-session.json`);
+    lines.push(`- [${check(compliance.questions_answered_by_agent)}] Agent answered 7 questions`);
+    lines.push(`- [${check(compliance.human_asked_for_corrections)}] Human asked for corrections`);
+    lines.push(`- [${check(learningsCount > 0)}] Created learning entries (${learningsCount})`);
+    lines.push(`- [${check(compliance.scars_applied > 0)}] Recorded scar usage (${compliance.scars_applied})`);
+    lines.push(`- [${check(success)}] Session persisted`);
   } else {
-    lines.push(`  [${check(success)}] Session persisted`);
-    lines.push(`  Agent: ${compliance.agent} | Close type: ${compliance.close_type}`);
+    lines.push(`- [${check(success)}] Session persisted`);
+    lines.push(`- Agent: ${compliance.agent} | Close type: ${compliance.close_type}`);
   }
 
   // Threads summary
@@ -307,17 +308,22 @@ function formatCloseDisplay(
     }).length;
     const resolvedCount = threads.length - openCount;
     lines.push("");
-    lines.push(`  Threads: ${openCount} open, ${resolvedCount} resolved, ${threads.length} total`);
+    lines.push(`### Threads`);
+    lines.push(`${openCount} open, ${resolvedCount} resolved, ${threads.length} total`);
   }
 
   // Decisions
   if (params.decisions?.length) {
-    lines.push(`  Decisions: ${params.decisions.length} captured`);
+    lines.push("");
+    lines.push(`### Decisions`);
+    lines.push(`${params.decisions.length} captured`);
   }
 
   // Learnings
   if (learningsCount > 0) {
-    lines.push(`  Learnings: ${learningsCount} created`);
+    lines.push("");
+    lines.push(`### Learnings`);
+    lines.push(`${learningsCount} created`);
   }
 
   return lines.join("\n");
@@ -421,7 +427,7 @@ export async function sessionClose(
           `Re-call with close_type: "quick" for short exploratory sessions.`,
         ],
         performance: perfData,
-        display: `CLOSE TYPE MISMATCH\n\nSession is ${Math.round(activity.duration_min)} min with no substantive activity.\nUse close_type: "quick" instead of "standard".`,
+        display: `## CLOSE TYPE MISMATCH\n\nSession is ${Math.round(activity.duration_min)} min with no substantive activity.\nUse \`close_type: "quick"\` instead of \`"standard"\`.`,
       };
     }
 

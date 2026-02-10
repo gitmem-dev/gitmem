@@ -228,6 +228,7 @@ Create a new open thread. Runs semantic dedup check and writes knowledge graph t
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `text` | `string` | yes | Thread description |
+| `linear_issue` | `string` | no | Associated Linear issue (e.g., OD-XXX) |
 
 Returns: `{ thread, deduplicated?, dedup_details?, performance }`
 

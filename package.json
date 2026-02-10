@@ -1,6 +1,6 @@
 {
   "name": "gitmem-mcp",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Institutional memory for AI coding agents. Never repeat the same mistake.",
   "type": "module",
   "main": "dist/index.js",

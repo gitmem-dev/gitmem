@@ -899,25 +899,70 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
     }
   }
 
-  // Open threads (Phase 6: enriched with vitality info when available)
+  // Open threads — grouped by class, no IDs, vitality scores
   if (result.open_threads?.length) {
     lines.push("");
     lines.push(`### Open Threads (${result.open_threads.length})`);
-    for (const t of result.open_threads.slice(0, 7)) {
-      const text = t.text.length > 55 ? t.text.slice(0, 52) + "..." : t.text;
-      const info = displayInfoMap?.get(t.id);
-      if (info) {
-        const status = info.lifecycle_status.toUpperCase();
-        const score = info.vitality_score.toFixed(2);
-        const age = info.days_since_touch === 0 ? "today" : `${info.days_since_touch}d ago`;
-        lines.push(`- \`${t.id}\`: ${text} **[${status} ${score}]** (${info.thread_class}, ${age})`);
-      } else {
-        lines.push(`- \`${t.id}\`: ${text}`);
+
+    // Build enriched list with display info
+    const enriched = result.open_threads.map(t => ({
+      thread: t,
+      info: displayInfoMap?.get(t.id),
+    }));
+
+    // Sort by vitality desc
+    const sortByVitality = (a: typeof enriched[0], b: typeof enriched[0]) =>
+      (b.info?.vitality_score ?? 0) - (a.info?.vitality_score ?? 0);
+
+    // Group by thread_class
+    const operational = enriched.filter(e => e.info?.thread_class === "operational");
+    const backlog = enriched.filter(e => e.info?.thread_class !== "operational");
+    operational.sort(sortByVitality);
+    backlog.sort(sortByVitality);
+
+    const maxShow = 10;
+    let shown = 0;
+
+    const renderThread = (e: typeof enriched[0]): string => {
+      const text = e.thread.text.length > 70 ? e.thread.text.slice(0, 67) + "..." : e.thread.text;
+      if (e.info) {
+        const score = e.info.vitality_score.toFixed(2);
+        const age = e.info.days_since_touch === 0 ? "today" : `${e.info.days_since_touch}d`;
+        const status = e.info.lifecycle_status;
+        // Only show lifecycle label for cooling/dormant
+        const vLabel = (status === "cooling" || status === "dormant")
+          ? `${status.toUpperCase()} ${score}`
+          : score;
+        return `- ${text} \`${vLabel}\` \`${age}\``;
+      }
+      return `- ${text}`;
+    };
+
+    if (operational.length > 0) {
+      lines.push("**Operational**");
+      for (const e of operational) {
+        if (shown >= maxShow) break;
+        lines.push(renderThread(e));
+        shown++;
       }
     }
-    if (result.open_threads.length > 7) {
-      lines.push(`- *... and ${result.open_threads.length - 7} more*`);
+
+    if (backlog.length > 0 && shown < maxShow) {
+      lines.push("**Backlog**");
+      for (const e of backlog) {
+        if (shown >= maxShow) break;
+        lines.push(renderThread(e));
+        shown++;
+      }
     }
+
+    const remaining = result.open_threads.length - shown;
+    if (remaining > 0) {
+      lines.push(`*...and ${remaining} more*`);
+    }
+
+    lines.push("");
+    lines.push(`${result.open_threads.length} threads | EMERGING <24h | ACTIVE >0.5 | COOLING 0.2–0.5 | DORMANT <0.2`);
   }
 
   // Suggested threads (Phase 5: Implicit Thread Detection)
@@ -927,10 +972,10 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
     lines.push(`*Recurring topics not yet tracked:*`);
     for (const s of result.suggested_threads.slice(0, 3)) {
       const text = s.text.length > 60 ? s.text.slice(0, 57) + "..." : s.text;
-      lines.push(`- \`${s.id}\`: ${text} (${s.evidence_sessions.length} sessions)`);
+      lines.push(`- ${text} (${s.evidence_sessions.length} sessions)`);
     }
     if (result.suggested_threads.length > 3) {
-      lines.push(`- *... and ${result.suggested_threads.length - 3} more*`);
+      lines.push(`*...and ${result.suggested_threads.length - 3} more*`);
     }
     lines.push(`\nUse \`promote_suggestion\` or \`dismiss_suggestion\` to manage.`);
   }

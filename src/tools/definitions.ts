@@ -79,7 +79,7 @@ export const TOOLS = [
   },
   {
     name: "session_start",
-    description: "Initialize session, detect agent, load institutional context (last session, relevant scars, recent decisions). DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
+    description: "Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -119,7 +119,7 @@ export const TOOLS = [
   },
   {
     name: "session_refresh",
-    description: "Re-surface institutional context (scars, threads, decisions, wins) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
+    description: "Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
     inputSchema: {
       type: "object" as const,
       properties: {

@@ -92,12 +92,7 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
       session_id: string;
       agent: string;
       last_session: { id: string; title: string; date: string } | null;
-      relevant_scars: Array<{
-        id: string;
-        title: string;
-        severity: string;
-        similarity: number;
-      }>;
+      recent_decisions?: Array<{ id: string; title: string }>;
       performance: {
         latency_ms: number;
         total_latency_ms: number;
@@ -120,17 +115,9 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
     // last_session field present (null is fine for first-ever session)
     expect("last_session" in data).toBe(true);
 
-    // relevant_scars is an array
-    expect(Array.isArray(data.relevant_scars)).toBe(true);
-
-    // Validate scar structure if any returned
-    if (data.relevant_scars.length > 0) {
-      const scar = data.relevant_scars[0];
-      expect(scar.id).toBeDefined();
-      expect(scar.title).toBeDefined();
-      expect(typeof scar.severity).toBe("string");
-      expect(typeof scar.similarity).toBe("number");
-    }
+    // OD-645: relevant_scars no longer in session_start result
+    // Scars load on-demand via recall()
+    expect(data).not.toHaveProperty("relevant_scars");
 
     // session_start should complete under 5s with Supabase
     expect(latencyMs).toBeLessThan(5000);

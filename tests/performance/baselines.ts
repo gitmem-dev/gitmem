@@ -22,7 +22,7 @@ export const BASELINES = {
   scar_search_local: 100,
   scar_search_remote: 2000,
   session_create: 500,
-  session_start_total: 1500,
+  session_start_total: 750,  // OD-645: Lean start (was 1500)
 
   // Recall components
   recall_with_scars: 2000,

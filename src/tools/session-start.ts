@@ -2,12 +2,14 @@
  * session_start Tool
  *
  * Initialize session, detect agent, load institutional context.
- * Returns last session, relevant scars, and recent decisions.
+ * Returns threads and recent decisions. Scars surface via recall on demand.
  *
- * Performance target: <1500ms (OD-429, revised Feb 2026)
+ * Performance target: <750ms (OD-645: Lean Start)
  *
- * OD-473: Uses local vector search for consistent scar results.
- * No file-based caching = no race conditions = deterministic results.
+ * OD-645: Removed scar/wins queries from start pipeline.
+ * Scars load on-demand via recall(). Wins available via search/log.
+ * loadLastSession and loadRecentDecisions run in parallel.
+ * createSessionRecord is fire-and-forget.
  */
 
 import * as fs from "fs";
@@ -15,8 +17,7 @@ import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
-import { ensureInitialized, isLocalSearchAvailable } from "../services/startup.js";
-import { localScarSearch } from "../services/local-vector-search.js";
+// OD-645: Scar search removed from start pipeline (loads on-demand via recall)
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -27,7 +28,7 @@ import {
   buildPerformanceData,
   buildComponentPerformance,
 } from "../services/metrics.js";
-import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars, setThreads } from "../services/session-state.js"; // OD-547, OD-552
+import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars } from "../services/session-state.js"; // OD-547, OD-552
 import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js"; // OD-623, Phase 6
@@ -36,15 +37,13 @@ import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-d
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
-import { loadSuggestions, getPendingSuggestions } from "../services/thread-suggestions.js";
+// OD-645: Suggested threads removed from start display
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
 import type {
   SessionStartParams,
   SessionStartResult,
   LastSession,
-  RelevantScar,
   RecentDecision,
-  RecentWin,
   AgentIdentity,
   Project,
   ThreadObject,
@@ -74,14 +73,7 @@ function normalizeDecisions(decisions: (string | { title: string; decision?: str
   );
 }
 
-interface ScarRecord {
-  id: string;
-  title: string;
-  description: string;
-  severity: string;
-  counter_arguments?: string[];
-  similarity?: number;
-}
+// OD-645: ScarRecord removed (scars load via recall, not session_start)
 
 interface DecisionRecord {
   id: string;
@@ -91,13 +83,7 @@ interface DecisionRecord {
   project?: string;
 }
 
-interface WinRecord {
-  id: string;
-  title: string;
-  description: string;
-  created_at: string;
-  source_linear_issue?: string;
-}
+// OD-645: WinRecord removed (wins available via search/log)
 
 /**
  * Aggregate open threads across multiple recent sessions.
@@ -213,109 +199,7 @@ async function loadLastSession(
   }
 }
 
-/**
- * Query relevant scars based on issue or session context
- *
- * OD-473: Uses local vector search for deterministic results.
- * - No file-based cache = no race conditions
- * - Same query = same results every time
- * - No Supabase hit = fast & scalable
- *
- * OD-489: Returns timing and network call info for instrumentation.
- */
-async function queryRelevantScars(
-  issueTitle?: string,
-  issueDescription?: string,
-  issueLabels?: string[],
-  project?: Project,
-  lastSession?: LastSession | null
-): Promise<{
-  scars: RelevantScar[];
-  local_search: boolean;
-  latency_ms: number;
-  network_call: boolean;
-}> {
-  const proj = project || "default";
-  const timer = new Timer();
-
-  try {
-    // Build query from available context
-    const queryParts: string[] = [];
-    if (issueTitle) queryParts.push(issueTitle);
-    if (issueDescription) queryParts.push(issueDescription.slice(0, 200));
-    if (issueLabels?.length) queryParts.push(issueLabels.join(" "));
-
-    // Use last session context if no issue context provided
-    // Include title, decisions, and open threads for richer scar matching
-    if (queryParts.length === 0 && lastSession) {
-      if (lastSession.title && lastSession.title !== "Interactive Session") {
-        queryParts.push(lastSession.title);
-      }
-      if (lastSession.key_decisions?.length) {
-        // Include up to 3 decisions to avoid query bloat
-        queryParts.push(lastSession.key_decisions.slice(0, 3).join(" "));
-      }
-      if (lastSession.open_threads?.length) {
-        // Include up to 3 open threads
-        queryParts.push(lastSession.open_threads.slice(0, 3).map(t => typeof t === "string" ? t : t.text).join(" "));
-      }
-    }
-
-    // Default query only if nothing else available
-    const query = queryParts.length > 0
-      ? queryParts.join(" ")
-      : "deployment verification testing integration";
-
-    // Ensure local search is initialized
-    await ensureInitialized(proj);
-
-    // Use local vector search if available (OD-473)
-    if (isLocalSearchAvailable(proj)) {
-      console.error("[session_start] Using local vector search");
-      const scars = await localScarSearch(query, 5, proj);
-      const latency_ms = timer.stop();
-      return {
-        scars,
-        local_search: true,
-        latency_ms,
-        network_call: false, // LOCAL - no network call!
-      };
-    }
-
-    // Fallback to Supabase if local search not available
-    console.error("[session_start] Falling back to Supabase scar search");
-    const { results } = await supabase.cachedScarSearch<ScarRecord>(
-      query,
-      5,
-      proj
-    );
-
-    const scars = results.map((scar) => ({
-      id: scar.id,
-      title: scar.title,
-      severity: scar.severity || "medium",
-      description: scar.description || "",
-      counter_arguments: scar.counter_arguments || [],
-      similarity: scar.similarity || 0,
-    }));
-
-    const latency_ms = timer.stop();
-    return {
-      scars,
-      local_search: false,
-      latency_ms,
-      network_call: true, // REMOTE - hit Supabase
-    };
-  } catch (error) {
-    console.error("[session_start] Failed to query scars:", error);
-    return {
-      scars: [],
-      local_search: false,
-      latency_ms: timer.stop(),
-      network_call: true, // Assume network was attempted
-    };
-  }
-}
+// OD-645: queryRelevantScars removed — scars load on-demand via recall()
 
 /**
  * Load recent decisions with caching (OD-473)
@@ -381,70 +265,7 @@ async function loadRecentDecisions(
   }
 }
 
-/**
- * Load recent wins from institutional memory.
- * Queries orchestra_learnings_lite for learning_type="win".
- * Runs in parallel with scars/decisions — hidden by scar search bottleneck.
- */
-async function loadRecentWins(
-  project: Project,
-  limit = 3,
-  maxAgeDays = 7
-): Promise<{
-  wins: RecentWin[];
-  cache_hit: boolean;
-  cache_age_ms?: number;
-  latency_ms: number;
-  network_call: boolean;
-}> {
-  const timer = new Timer();
-
-  try {
-    // Use cached wins query (same pattern as cachedListDecisions)
-    const { data: records, cache_hit, cache_age_ms } = await supabase.cachedListWins<WinRecord>(
-      project,
-      limit + 5, // Fetch extra for date filtering
-      "id,title,description,created_at,source_linear_issue"
-    );
-
-    const latency_ms = timer.stop();
-
-    // Filter to last N days in-memory
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - maxAgeDays);
-    const cutoffStr = cutoff.toISOString();
-
-    const filtered = records
-      .filter((r) => r.created_at >= cutoffStr)
-      .slice(0, limit);
-
-    const wins = filtered.map((r) => ({
-      id: r.id,
-      title: r.title,
-      description: (r.description || "").slice(0, 200),
-      date: formatDate(r.created_at.split("T")[0]),
-      source_issue: r.source_linear_issue,
-    }));
-
-    console.error(`[session_start] Loaded ${records.length} wins, ${wins.length} after date filter, cache_hit=${cache_hit}`);
-
-    return {
-      wins,
-      cache_hit,
-      cache_age_ms,
-      latency_ms,
-      network_call: !cache_hit,
-    };
-  } catch (error) {
-    console.error("[session_start] Failed to load wins:", error);
-    return {
-      wins: [],
-      cache_hit: false,
-      latency_ms: timer.stop(),
-      network_call: true,
-    };
-  }
-}
+// OD-645: loadRecentWins removed — wins available via search/log on-demand
 
 /**
  * Create a new session record
@@ -454,9 +275,10 @@ async function loadRecentWins(
 async function createSessionRecord(
   agent: AgentIdentity,
   project: Project,
-  linearIssue?: string
+  linearIssue?: string,
+  preGeneratedId?: string  // OD-645: Accept pre-generated UUID for fire-and-forget pattern
 ): Promise<{ session_id: string; latency_ms: number; network_call: boolean }> {
-  const sessionId = uuidv4();
+  const sessionId = preGeneratedId || uuidv4();
   const today = new Date().toISOString().split("T")[0];
   const timer = new Timer();
 
@@ -540,23 +362,7 @@ async function sessionStartFree(
     console.error("[session_start] Failed to load last session:", error);
   }
 
-  // Query scars using keyword search
-  let scars: RelevantScar[] = [];
-  try {
-    const queryParts: string[] = [];
-    if (params.issue_title) queryParts.push(params.issue_title);
-    if (params.issue_description) queryParts.push(params.issue_description.slice(0, 200));
-    if (params.issue_labels?.length) queryParts.push(params.issue_labels.join(" "));
-    if (queryParts.length === 0 && lastSession) {
-      if (lastSession.title && lastSession.title !== "Untitled Session") {
-        queryParts.push(lastSession.title);
-      }
-    }
-    const query = queryParts.length > 0 ? queryParts.join(" ") : "deployment verification testing";
-    scars = await storage.search(query, 5);
-  } catch (error) {
-    console.error("[session_start] Failed to query scars:", error);
-  }
+  // OD-645: Scars removed from start pipeline — load on-demand via recall
 
   // Load recent decisions from local storage (time-scoped to 5 days)
   let decisions: RecentDecision[] = [];
@@ -581,29 +387,7 @@ async function sessionStartFree(
     console.error("[session_start] Failed to load decisions:", error);
   }
 
-  // Load recent wins from local storage (last 7 days)
-  let freeWins: RecentWin[] = [];
-  try {
-    const winRecords = await storage.query<WinRecord & Record<string, unknown>>("learnings", {
-      order: "created_at.desc",
-      limit: 8,
-    });
-    const winCutoff = new Date();
-    winCutoff.setDate(winCutoff.getDate() - 7);
-    const winCutoffStr = winCutoff.toISOString();
-    freeWins = winRecords
-      .filter((w) => (w as Record<string, unknown>).learning_type === "win" && w.created_at >= winCutoffStr)
-      .slice(0, 3)
-      .map((w) => ({
-        id: w.id,
-        title: w.title,
-        description: (w.description || "").slice(0, 200),
-        date: formatDate(w.created_at.split("T")[0]),
-        source_issue: w.source_linear_issue,
-      }));
-  } catch (error) {
-    console.error("[session_start] Failed to load wins:", error);
-  }
+  // OD-645: Wins removed from start pipeline — available via search/log
 
   // Create session record locally (skip if resuming existing session)
   if (!isResuming) {
@@ -633,20 +417,11 @@ async function sessionStartFree(
     .find((t) => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  const performance = buildPerformanceData("session_start", latencyMs, scars.length + decisions.length + (lastSession ? 1 : 0), {
-    memoriesSurfaced: scars.map((s) => s.id),
-    similarityScores: scars.map((s) => s.similarity),
-    search_mode: "local",
-  });
+  // OD-645: Simplified performance data (no scars/wins)
+  const performance = buildPerformanceData("session_start", latencyMs, decisions.length + (lastSession ? 1 : 0));
 
-  const surfacedAt = new Date().toISOString();
-  const surfacedScars: SurfacedScar[] = scars.map((scar) => ({
-    scar_id: scar.id,
-    scar_title: scar.title,
-    scar_severity: scar.severity || "medium",
-    surfaced_at: surfacedAt,
-    source: "session_start" as const,
-  }));
+  // OD-645: surfacedScars initialized empty — populated by recall during session
+  const surfacedScars: SurfacedScar[] = [];
 
   // GIT-20: Persist to per-session dir, legacy file, and registry
   // writeSessionFiles merges with existing file threads to preserve mid-session creations
@@ -667,6 +442,7 @@ async function sessionStartFree(
     threads: freeMergedThreads,
   });
 
+  // OD-645: No scars/wins in start result
   const freeResult: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -676,9 +452,7 @@ async function sessionStartFree(
     ...(projectState && { project_state: projectState }),
     ...(freeMergedThreads.length > 0 && { open_threads: freeMergedThreads }),
     ...(freeRecentlyResolved.length > 0 && { recently_resolved: freeRecentlyResolved }),
-    relevant_scars: scars,
     recent_decisions: decisions,
-    ...(freeWins.length > 0 && { recent_wins: freeWins }),
     gitmem_dir: getGitmemDir(),
     performance,
   };
@@ -873,141 +647,53 @@ function writeSessionFiles(
  * Format pre-formatted display string for session_start/session_refresh results.
  * Agents echo this verbatim for consistent CLI output.
  */
+/**
+ * OD-645: Compact display format (~500-800 bytes)
+ * Drops: scars, wins, suggested threads, verbose thread metadata, payload path
+ * Keeps: header, threads (top 5 plain text), decisions (top 3)
+ */
 function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>): string {
   const lines: string[] = [];
 
-  // Header
+  // Header — one line
   const label = result.refreshed ? "SESSION REFRESH" : (result.resumed ? "SESSION RESUMED" : "SESSION START");
   lines.push(`## ${label} — ACTIVE`);
   lines.push(`**Session:** \`${result.session_id.slice(0, 8)}\` | **Agent:** ${result.agent}`);
-  if (result.gitmem_dir) {
-    lines.push(`**Payload path:** \`${result.gitmem_dir}/closing-payload.json\``);
-  }
 
-  // Last session
-  if (result.last_session) {
-    const title = result.last_session.title.length > 70
-      ? result.last_session.title.slice(0, 67) + "..."
-      : result.last_session.title;
-    lines.push("");
-    lines.push(`### Last Session`);
-    lines.push(`"${title}" (${result.last_session.date})`);
-    if (result.last_session.key_decisions?.length) {
-      for (const d of result.last_session.key_decisions.slice(0, 3)) {
-        lines.push(`- Decision: ${d}`);
-      }
-    }
-  }
-
-  // Open threads — grouped by class, no IDs, vitality scores
+  // Open threads — plain text, top 5, sorted by vitality
   if (result.open_threads?.length) {
     lines.push("");
-    lines.push(`### Open Threads (${result.open_threads.length})`);
+    lines.push(`### Threads (${result.open_threads.length})`);
 
-    // Build enriched list with display info
     const enriched = result.open_threads.map(t => ({
       thread: t,
       info: displayInfoMap?.get(t.id),
     }));
+    enriched.sort((a, b) => (b.info?.vitality_score ?? 0) - (a.info?.vitality_score ?? 0));
 
-    // Sort by vitality desc
-    const sortByVitality = (a: typeof enriched[0], b: typeof enriched[0]) =>
-      (b.info?.vitality_score ?? 0) - (a.info?.vitality_score ?? 0);
-
-    // Group by thread_class
-    const operational = enriched.filter(e => e.info?.thread_class === "operational");
-    const backlog = enriched.filter(e => e.info?.thread_class !== "operational");
-    operational.sort(sortByVitality);
-    backlog.sort(sortByVitality);
-
-    const maxShow = 10;
-    let shown = 0;
-
-    const renderThread = (e: typeof enriched[0]): string => {
+    const maxShow = 5;
+    for (let i = 0; i < Math.min(enriched.length, maxShow); i++) {
+      const e = enriched[i];
       const text = e.thread.text.length > 70 ? e.thread.text.slice(0, 67) + "..." : e.thread.text;
-      if (e.info) {
-        const score = e.info.vitality_score.toFixed(2);
-        const age = e.info.days_since_touch === 0 ? "today" : `${e.info.days_since_touch}d`;
-        const status = e.info.lifecycle_status;
-        // Only show lifecycle label for cooling/dormant
-        const vLabel = (status === "cooling" || status === "dormant")
-          ? `${status.toUpperCase()} ${score}`
-          : score;
-        return `- ${text} \`${vLabel}\` \`${age}\``;
-      }
-      return `- ${text}`;
-    };
-
-    if (operational.length > 0) {
-      lines.push("**Operational**");
-      for (const e of operational) {
-        if (shown >= maxShow) break;
-        lines.push(renderThread(e));
-        shown++;
-      }
+      lines.push(`- ${text}`);
     }
-
-    if (backlog.length > 0 && shown < maxShow) {
-      lines.push("**Backlog**");
-      for (const e of backlog) {
-        if (shown >= maxShow) break;
-        lines.push(renderThread(e));
-        shown++;
-      }
-    }
-
-    const remaining = result.open_threads.length - shown;
-    if (remaining > 0) {
-      lines.push(`*...and ${remaining} more*`);
-    }
-
-    lines.push("");
-    lines.push(`${result.open_threads.length} threads | EMERGING <24h | ACTIVE >0.5 | COOLING 0.2–0.5 | DORMANT <0.2`);
-  }
-
-  // Suggested threads (Phase 5: Implicit Thread Detection)
-  if (result.suggested_threads?.length) {
-    lines.push("");
-    lines.push(`### Suggested Threads (${result.suggested_threads.length})`);
-    lines.push(`*Recurring topics not yet tracked:*`);
-    for (const s of result.suggested_threads.slice(0, 3)) {
-      const text = s.text.length > 60 ? s.text.slice(0, 57) + "..." : s.text;
-      lines.push(`- ${text} (${s.evidence_sessions.length} sessions)`);
-    }
-    if (result.suggested_threads.length > 3) {
-      lines.push(`*...and ${result.suggested_threads.length - 3} more*`);
-    }
-    lines.push(`\nUse \`promote_suggestion\` or \`dismiss_suggestion\` to manage.`);
-  }
-
-  // Relevant scars
-  if (result.relevant_scars?.length) {
-    lines.push("");
-    lines.push(`### Relevant Scars (${result.relevant_scars.length})`);
-    for (const s of result.relevant_scars.slice(0, 5)) {
-      const severity = (s.severity || "medium").toUpperCase();
-      const title = s.title.length > 60 ? s.title.slice(0, 57) + "..." : s.title;
-      lines.push(`- **[${severity}]** ${title}`);
+    if (result.open_threads.length > maxShow) {
+      lines.push(`*+${result.open_threads.length - maxShow} more*`);
     }
   }
 
-  // Recent decisions
+  // Recent decisions — top 3
   if (result.recent_decisions?.length) {
     lines.push("");
-    lines.push(`### Recent Decisions (${result.recent_decisions.length})`);
+    lines.push(`### Decisions (${result.recent_decisions.length})`);
     for (const d of result.recent_decisions.slice(0, 3)) {
       lines.push(`- ${d.title} *(${d.date})*`);
     }
   }
 
-  // Recent wins
-  if (result.recent_wins?.length) {
-    lines.push("");
-    lines.push(`### Recent Wins (${result.recent_wins.length})`);
-    for (const w of result.recent_wins.slice(0, 3)) {
-      lines.push(`- ${w.title} *(${w.date})*`);
-    }
-  }
+  // Hint about recall
+  lines.push("");
+  lines.push(`*Use \`recall\` to surface relevant scars before consequential actions.*`);
 
   return lines.join("\n");
 }
@@ -1042,57 +728,32 @@ export async function sessionStart(
     return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt);
   }
 
-  // 2. Load last session first (needed for scar context)
-  // OD-489: Track timing and network calls
-  const lastSessionResult = await loadLastSession(agent, project);
-  const lastSession = lastSessionResult.session;
-
-  // 3. Load scars, decisions, and wins in parallel
-  // OD-473: Scars use local vector search (deterministic, no race conditions)
-  // Pass full lastSession for richer context (title + decisions + open_threads)
-  // Wins query runs parallel — hidden by scar search bottleneck (~611ms > ~300ms)
-  const [scarsResult, decisionsResult, winsResult] = await Promise.all([
-    queryRelevantScars(
-      params.issue_title,
-      params.issue_description,
-      params.issue_labels,
-      project,
-      lastSession
-    ),
+  // 2. OD-645: Load last session + decisions in parallel (was sequential)
+  // Scars and wins removed from pipeline — load on-demand via recall/search
+  const [lastSessionResult, decisionsResult] = await Promise.all([
+    loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
-    loadRecentWins(project, 3, 7),
   ]);
 
-  const scars = scarsResult.scars;
+  const lastSession = lastSessionResult.session;
   const decisions = decisionsResult.decisions;
-  const wins = winsResult.wins;
-  const usedLocalSearch = scarsResult.local_search;
 
-  // OD-552: Build surfaced scar list for tracking
-  const surfacedAt = new Date().toISOString();
-  const surfacedScars: SurfacedScar[] = scars.map((scar) => ({
-    scar_id: scar.id,
-    scar_title: scar.title,
-    scar_severity: scar.severity || "medium",
-    surfaced_at: surfacedAt,
-    source: "session_start" as const,
-  }));
+  // OD-645: surfacedScars initialized empty — populated by recall/confirm_scars during session
+  const surfacedScars: SurfacedScar[] = [];
 
-  // 4. Create session record (skip if resuming existing session — OD-558)
+  // 3. Create session record — fire-and-forget (OD-645)
+  // UUID generated locally, Supabase write runs in background
   let sessionId: string;
-  let sessionCreateResult: { session_id: string; latency_ms: number; network_call: boolean };
   if (isResuming) {
     sessionId = existingSession!.sessionId;
-    sessionCreateResult = { session_id: sessionId, latency_ms: 0, network_call: false };
     console.error(`[session_start] Resuming session ${sessionId} — skipping record creation`);
   } else {
-    sessionCreateResult = await createSessionRecord(agent, project, params.linear_issue);
-    sessionId = sessionCreateResult.session_id;
+    sessionId = uuidv4();
+    // Fire-and-forget: don't await the Supabase write
+    createSessionRecord(agent, project, params.linear_issue, sessionId).catch(() => {});
   }
 
   const latencyMs = timer.stop();
-  const memoriesSurfaced = scars.map((s) => s.id);
-  const similarityScores = scars.map((s) => s.similarity);
 
   // OD-534: Extract PROJECT STATE from last session if present
   const projectState = lastSession?.open_threads
@@ -1100,19 +761,13 @@ export async function sessionStart(
     .find(t => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  // OD-489: Build detailed performance breakdown for test harness
+  // OD-645: Simplified performance breakdown (no scar_search, wins, session_create)
   const breakdown: PerformanceBreakdown = {
     last_session: buildComponentPerformance(
       lastSessionResult.latency_ms,
-      "supabase", // Last session always from Supabase (no caching yet)
+      "supabase",
       lastSessionResult.network_call,
       lastSessionResult.network_call ? "miss" : "hit"
-    ),
-    scar_search: buildComponentPerformance(
-      scarsResult.latency_ms,
-      usedLocalSearch ? "local_cache" : "supabase",
-      scarsResult.network_call,
-      usedLocalSearch ? "hit" : "miss"
     ),
     decisions: buildComponentPerformance(
       decisionsResult.latency_ms,
@@ -1120,29 +775,14 @@ export async function sessionStart(
       decisionsResult.network_call,
       decisionsResult.cache_hit ? "hit" : "miss"
     ),
-    wins: buildComponentPerformance(
-      winsResult.latency_ms,
-      winsResult.cache_hit ? "local_cache" : "supabase",
-      winsResult.network_call,
-      winsResult.cache_hit ? "hit" : "miss"
-    ),
-    session_create: buildComponentPerformance(
-      sessionCreateResult.latency_ms,
-      "supabase", // Session create always writes to Supabase
-      sessionCreateResult.network_call,
-      "not_applicable" // Write operation, not a cache lookup
-    ),
   };
 
   // Build performance data with detailed breakdown
   const performance = buildPerformanceData(
     "session_start",
     latencyMs,
-    scars.length + decisions.length + wins.length + (lastSession ? 1 : 0),
+    decisions.length + (lastSession ? 1 : 0),
     {
-      memoriesSurfaced,
-      similarityScores,
-      search_mode: usedLocalSearch ? "local" : "remote",
       breakdown,
     }
   );
@@ -1178,6 +818,8 @@ export async function sessionStart(
     threads: mergedThreads,
   });
 
+  // OD-645: Build result — no scars/wins (load on-demand via recall/search)
+  const openOnly = mergedThreads.filter(t => t.status === "open" || !t.status);
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -1185,52 +827,36 @@ export async function sessionStart(
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }), // OD-534
-    ...(() => {
-      const openOnly = mergedThreads.filter(t => t.status === "open" || !t.status);
-      return openOnly.length > 0 ? { open_threads: openOnly } : {};
-    })(),
+    ...(openOnly.length > 0 && { open_threads: openOnly }),
     ...(recentlyResolvedThreads.length > 0 && {
       recently_resolved: recentlyResolvedThreads,
     }),
-    ...(() => {
-      const pending = getPendingSuggestions(loadSuggestions());
-      return pending.length > 0 ? { suggested_threads: pending } : {};
-    })(),
-    relevant_scars: scars,
+    // OD-645: scars, wins, suggested_threads removed from start result
     recent_decisions: decisions,
-    ...(wins.length > 0 && { recent_wins: wins }),
     ...(recordingPath && { recording_path: recordingPath }),
     gitmem_dir: getGitmemDir(),
     performance,
   };
 
-  // Record metrics
+  // Record metrics (OD-645: simplified — no scar-related fields)
   recordMetrics({
     id: metricsId,
     session_id: sessionId,
     agent: agent as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
     tool_name: "session_start",
     query_text: [params.issue_title, params.issue_description].filter(Boolean).join(" ").slice(0, 500),
-    tables_searched: usedLocalSearch
-      ? ["orchestra_sessions_lite", "orchestra_decisions_lite", "orchestra_learnings_lite"]
-      : ["orchestra_sessions_lite", "orchestra_learnings", "orchestra_decisions_lite", "orchestra_learnings_lite"],
+    tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],
     latency_ms: latencyMs,
-    result_count: scars.length,
-    similarity_scores: similarityScores,
+    result_count: decisions.length + (lastSession ? 1 : 0),
     context_bytes: calculateContextBytes(result),
     phase_tag: "session_start",
     linear_issue: params.linear_issue,
-    memories_surfaced: memoriesSurfaced,
     metadata: {
       project,
       has_last_session: !!lastSession,
-      scars_count: scars.length,
       decisions_count: decisions.length,
-      wins_count: wins.length,
-      open_threads_count: lastSessionResult.aggregated_open_threads.length,
-      used_local_search: usedLocalSearch, // OD-473: deterministic local search
+      open_threads_count: aggregatedThreads.length,
       decisions_cache_hit: decisionsResult.cache_hit,
-      // OD-489: Detailed instrumentation
       network_calls_made: performance.network_calls_made,
       fully_local: performance.fully_local,
     },
@@ -1258,8 +884,10 @@ export async function sessionStart(
  * session_refresh Tool
  *
  * Re-surfaces institutional context for the current active session
- * without creating a new session ID. Same context pipeline as session_start
- * (last session, scars, decisions, wins, threads) but skips session creation.
+ * without creating a new session ID. Same lean pipeline as session_start
+ * (last session, decisions, threads) but skips session creation.
+ *
+ * OD-645: Scars/wins removed — load on-demand via recall/search.
  *
  * Use when: mid-session context refresh after compaction, long gaps, or
  * when you need to remember where you left off.
@@ -1317,45 +945,28 @@ export async function sessionRefresh(
     };
   }
 
-  // 2. Run context pipeline in parallel (same as session_start lines 735-752)
-  const lastSessionResult = await loadLastSession(agent, project);
-  const lastSession = lastSessionResult.session;
-
-  const [scarsResult, decisionsResult, winsResult] = await Promise.all([
-    queryRelevantScars(undefined, undefined, undefined, project, lastSession),
+  // 2. OD-645: Load last session + decisions in parallel (same as session_start)
+  // Scars and wins removed — load on-demand via recall/search
+  const [lastSessionResult, decisionsResult] = await Promise.all([
+    loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
-    loadRecentWins(project, 3, 7),
   ]);
 
-  const scars = scarsResult.scars;
+  const lastSession = lastSessionResult.session;
   const decisions = decisionsResult.decisions;
-  const wins = winsResult.wins;
-  const usedLocalSearch = scarsResult.local_search;
 
-  // 3. Build surfaced scars and merge with existing
-  const surfacedAt = new Date().toISOString();
-  const newSurfacedScars: SurfacedScar[] = scars.map((scar) => ({
-    scar_id: scar.id,
-    scar_title: scar.title,
-    scar_severity: scar.severity || "medium",
-    surfaced_at: surfacedAt,
-    source: "session_start" as const, // Same source — this is a refresh of start context
-  }));
-
-  // Merge: add new scars to existing (addSurfacedScars deduplicates by scar_id)
-  addSurfacedScars(newSurfacedScars);
-
+  // OD-645: surfacedScars not re-queried on refresh — existing ones preserved in session state
   const refreshAggregatedThreads = lastSessionResult.aggregated_open_threads;
   const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
   const refreshDisplayInfo = lastSessionResult.displayInfo;
 
-  // 4. Extract PROJECT STATE (OD-534)
+  // 3. Extract PROJECT STATE (OD-534)
   const projectState = lastSession?.open_threads
     ?.map((t) => typeof t === "string" ? t : t.text)
     .find(t => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  // 5. Build performance breakdown
+  // 4. OD-645: Simplified performance breakdown (no scar_search, wins)
   const latencyMs = timer.stop();
   const breakdown: PerformanceBreakdown = {
     last_session: buildComponentPerformance(
@@ -1363,36 +974,23 @@ export async function sessionRefresh(
       lastSessionResult.network_call,
       lastSessionResult.network_call ? "miss" : "hit"
     ),
-    scar_search: buildComponentPerformance(
-      scarsResult.latency_ms,
-      usedLocalSearch ? "local_cache" : "supabase",
-      scarsResult.network_call,
-      usedLocalSearch ? "hit" : "miss"
-    ),
     decisions: buildComponentPerformance(
       decisionsResult.latency_ms,
       decisionsResult.cache_hit ? "local_cache" : "supabase",
       decisionsResult.network_call,
       decisionsResult.cache_hit ? "hit" : "miss"
     ),
-    wins: buildComponentPerformance(
-      winsResult.latency_ms,
-      winsResult.cache_hit ? "local_cache" : "supabase",
-      winsResult.network_call,
-      winsResult.cache_hit ? "hit" : "miss"
-    ),
   };
 
-  const memoriesSurfaced = scars.map((s) => s.id);
-  const similarityScores = scars.map((s) => s.similarity);
   const performance = buildPerformanceData(
     "session_refresh", latencyMs,
-    scars.length + decisions.length + wins.length + (lastSession ? 1 : 0),
-    { memoriesSurfaced, similarityScores, search_mode: usedLocalSearch ? "local" : "remote", breakdown }
+    decisions.length + (lastSession ? 1 : 0),
+    { breakdown }
   );
 
   const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
 
+  // OD-645: Build result — no scars/wins
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -1400,26 +998,23 @@ export async function sessionRefresh(
     detected_environment: detectAgent(),
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
-    // open_threads and setCurrentSession filled after merge below
-    relevant_scars: scars,
+    // open_threads filled after merge below
     recent_decisions: decisions,
-    ...(wins.length > 0 && { recent_wins: wins }),
     ...(recordingPath && { recording_path: recordingPath }),
     performance,
   };
 
   // GIT-20: Update per-session dir and legacy file with refreshed context
-  // When Supabase was the thread source, replace file (not merge) to prevent accumulation
+  const existingSurfacedScars = Array.isArray(getSurfacedScars()) ? getSurfacedScars() : [];
   let refreshMergedThreads = refreshAggregatedThreads;
   try {
-    const allSurfacedScars = [...(Array.isArray(getSurfacedScars()) ? getSurfacedScars() : []), ...newSurfacedScars];
-    refreshMergedThreads = writeSessionFiles(sessionId, agent, project, allSurfacedScars, refreshAggregatedThreads, recordingPath, true, lastSessionResult.threadsFromSupabase);
+    refreshMergedThreads = writeSessionFiles(sessionId, agent, project, existingSurfacedScars, refreshAggregatedThreads, recordingPath, true, lastSessionResult.threadsFromSupabase);
     console.error(`[session_refresh] Context refreshed for session ${sessionId}`);
   } catch (error) {
     console.warn("[session_refresh] Failed to update session files:", error);
   }
 
-  // Add merged threads to result (only open threads in open_threads field)
+  // Add merged threads to result (only open threads)
   const refreshOpenOnly = refreshMergedThreads.filter(t => t.status === "open" || !t.status);
   if (refreshOpenOnly.length > 0) {
     result.open_threads = refreshOpenOnly;
@@ -1428,41 +1023,34 @@ export async function sessionRefresh(
     result.recently_resolved = recentlyResolvedThreads;
   }
 
-  // 7. Update in-memory session state with merged threads
+  // 5. Update in-memory session state with merged threads
   setCurrentSession({
     sessionId,
     agent,
     project,
     startedAt: currentSession?.startedAt || new Date(),
-    surfacedScars: [...(currentSession?.surfacedScars || []), ...newSurfacedScars],
+    surfacedScars: currentSession?.surfacedScars || [],
     threads: refreshMergedThreads,
     linearIssue: currentSession?.linearIssue,
   });
 
-  // Record metrics
+  // Record metrics (OD-645: simplified — no scar-related fields)
   recordMetrics({
     id: metricsId,
     session_id: sessionId,
     agent: agent as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
     tool_name: "session_refresh",
     query_text: "mid-session context refresh",
-    tables_searched: usedLocalSearch
-      ? ["orchestra_sessions_lite", "orchestra_decisions_lite", "orchestra_learnings_lite"]
-      : ["orchestra_sessions_lite", "orchestra_learnings", "orchestra_decisions_lite", "orchestra_learnings_lite"],
+    tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],
     latency_ms: latencyMs,
-    result_count: scars.length,
-    similarity_scores: similarityScores,
+    result_count: decisions.length + (lastSession ? 1 : 0),
     context_bytes: calculateContextBytes(result),
     phase_tag: "session_refresh",
-    memories_surfaced: memoriesSurfaced,
     metadata: {
       project,
       has_last_session: !!lastSession,
-      scars_count: scars.length,
       decisions_count: decisions.length,
-      wins_count: wins.length,
       open_threads_count: refreshMergedThreads.length,
-      used_local_search: usedLocalSearch,
       network_calls_made: performance.network_calls_made,
       fully_local: performance.fully_local,
     },

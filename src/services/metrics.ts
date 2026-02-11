@@ -84,9 +84,9 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   recall: 2000,
   search: 500,
   log: 500,
-  session_start: 1500,
-  session_refresh: 1500,  // Same pipeline as session_start minus session creation
-  session_close: 3000,
+  session_start: 750,     // OD-645: Lean start (was 1500)
+  session_refresh: 750,   // OD-645: Lean refresh (was 1500)
+  session_close: 1500,    // OD-645: Tightened (was 3000)
   create_learning: 3000,
   create_decision: 3000,
   record_scar_usage: 1000,

@@ -15,6 +15,7 @@ import { getAgentIdentity } from "../services/agent-detection.js";
 import { writeTriplesForDecision } from "../services/triple-writer.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
+import { getProject } from "../services/session-state.js";
 import {
   Timer,
   recordMetrics,
@@ -48,7 +49,7 @@ export async function createDecision(
     docs_affected: params.docs_affected || [],
     linear_issue: params.linear_issue || null,
     session_id: params.session_id || null,
-    project: params.project || "default",
+    project: params.project || getProject() || "default",
     created_at: new Date().toISOString(),
   };
 
@@ -98,7 +99,7 @@ export async function createDecision(
         docs_affected: params.docs_affected,
         linear_issue: params.linear_issue,
         session_id: params.session_id,
-        project: (params.project || "default"),
+        project: (params.project || getProject() || "default"),
         agent: getAgentIdentity(),
       }).catch((err) => {
         console.warn("[create_decision] Triple generation failed (non-fatal):", err);
@@ -131,7 +132,7 @@ export async function createDecision(
       phase_tag: "decision_capture",
       linear_issue: params.linear_issue,
       metadata: {
-        project: params.project || "default",
+        project: params.project || getProject() || "default",
         alternatives_count: (params.alternatives_considered || []).length,
         write_path: "directUpsert",
       },

@@ -10,6 +10,7 @@
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
+import { getProject } from "../services/session-state.js";
 import type { Project, PerformanceData, PerformanceBreakdown } from "../types/index.js";
 
 export interface SaveTranscriptParams {
@@ -59,7 +60,7 @@ export async function saveTranscript(
   // Get agent identity for path organization
   const env = detectAgent();
   const agent = env.agent;
-  const project = params.project || "default";
+  const project = params.project || getProject() || "default";
   const format = params.format || "json";
 
   try {

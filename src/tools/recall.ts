@@ -17,6 +17,7 @@ import * as supabase from "../services/supabase-client.js";
 import type { KnowledgeTriple } from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
 import { hasSupabase, hasVariants, hasMetrics } from "../services/tier.js";
+import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -264,7 +265,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     return {
       activated: false,
       plan: plan || "",
-      project: params.project || "default",
+      project: params.project || getProject() as Project || "default",
       match_count: params.match_count || 3,
       scars: [],
       performance_ms: latencyMs,
@@ -272,7 +273,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       performance: buildPerformanceData("recall", latencyMs, 0),
     };
   }
-  const project: Project = params.project || "default";
+  const project: Project = params.project || getProject() as Project || "default";
   const matchCount = params.match_count || 3;
   const issueId = params.issue_id; // OD-525: For variant assignment
 

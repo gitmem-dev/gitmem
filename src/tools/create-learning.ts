@@ -16,6 +16,7 @@ import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
+import { getProject } from "../services/session-state.js";
 import {
   Timer,
   recordMetrics,
@@ -100,7 +101,7 @@ export async function createLearning(
     learning_type: params.learning_type,
     title: params.title,
     description: params.description,
-    project: params.project || "default",
+    project: params.project || getProject() || "default",
     source_linear_issue: params.source_linear_issue || null,
     keywords: params.keywords || [],
     domain: params.domain || [],
@@ -164,7 +165,7 @@ export async function createLearning(
       }
 
       console.error(`[create_learning] Attempting directUpsert for learning ${learningId}`);
-      console.error(`[create_learning] Learning type: ${params.learning_type}, Project: ${params.project || "default"}`);
+      console.error(`[create_learning] Learning type: ${params.learning_type}, Project: ${params.project || getProject() || "default"}`);
 
       // Write directly to Supabase REST API (bypasses ww-mcp)
       const upsertStart = Date.now();
@@ -198,13 +199,13 @@ export async function createLearning(
         source_linear_issue: params.source_linear_issue,
         persona_name: agentIdentity,
         domain: params.domain,
-        project: (params.project || "default"),
+        project: (params.project || getProject() || "default"),
       }).catch((err) => {
         console.warn("[create_learning] Triple generation failed (non-fatal):", err);
       });
 
       // Invalidate local cache so next recall picks up the new learning
-      const project = (params.project || "default") as Project;
+      const project = (params.project || getProject() || "default") as Project;
       flushCache(project).catch((err) => {
         console.warn("[create_learning] Cache invalidation failed (non-fatal):", err);
       });
@@ -236,7 +237,7 @@ export async function createLearning(
       phase_tag: "learning_capture",
       metadata: {
         learning_type: params.learning_type,
-        project: params.project || "default",
+        project: params.project || getProject() || "default",
         embedding_generated: embeddingGenerated,
         write_path: "directUpsert",
       },

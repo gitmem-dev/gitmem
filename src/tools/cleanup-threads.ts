@@ -10,6 +10,7 @@
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
 import { hasSupabase } from "../services/tier.js";
+import { getProject } from "../services/session-state.js";
 import { computeLifecycleStatus } from "../services/thread-vitality.js";
 import { archiveDormantThreads } from "../services/thread-supabase.js";
 import type { ThreadRow } from "../services/thread-supabase.js";
@@ -67,7 +68,7 @@ export async function cleanupThreads(
 ): Promise<CleanupThreadsResult> {
   const timer = new Timer();
   const metricsId = uuidv4();
-  const project = (params.project || "default") as Project;
+  const project = (params.project || getProject() || "default") as Project;
 
   if (!hasSupabase() || !supabase.isConfigured()) {
     const latencyMs = timer.stop();

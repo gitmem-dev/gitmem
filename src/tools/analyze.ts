@@ -23,6 +23,7 @@ import {
   formatBlindspots,
 } from "../services/analytics.js";
 import { hasSupabase } from "../services/tier.js";
+import { getProject } from "../services/session-state.js";
 import {
   Timer,
   recordMetrics,
@@ -74,7 +75,7 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
   const metricsId = uuidv4();
   const lens = params.lens || "summary";
   const days = params.days || 30;
-  const project = params.project || "default";
+  const project = params.project || getProject() || "default";
 
   if (!hasSupabase()) {
     return {

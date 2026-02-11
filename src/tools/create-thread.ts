@@ -15,7 +15,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { getThreads, setThreads, getCurrentSession } from "../services/session-state.js";
+import { getThreads, setThreads, getCurrentSession, getProject } from "../services/session-state.js";
 import {
   generateThreadId,
   loadThreadsFile,
@@ -88,7 +88,7 @@ export async function createThread(
 
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
-  const project = params.project || "default";
+  const project = params.project || getProject() || "default";
   const trimmedText = params.text.trim();
 
   // Phase 3: Generate embedding for new text (best-effort)

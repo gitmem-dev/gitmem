@@ -14,6 +14,7 @@
 import * as supabase from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
 import { hasSupabase } from "../services/tier.js";
+import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -79,7 +80,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
   const metricsId = uuidv4();
 
   const query = params.query;
-  const project: Project = params.project || "default";
+  const project: Project = params.project || getProject() as Project || "default";
   const matchCount = params.match_count || 5;
   const severityFilter = params.severity;
   const typeFilter = params.learning_type;

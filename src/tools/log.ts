@@ -12,6 +12,7 @@
 
 import * as supabase from "../services/supabase-client.js";
 import { hasSupabase } from "../services/tier.js";
+import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -64,7 +65,7 @@ export async function log(params: LogParams): Promise<LogResult> {
   const metricsId = uuidv4();
 
   const limit = params.limit || 10;
-  const project: Project = params.project || "default";
+  const project: Project = params.project || getProject() as Project || "default";
   const typeFilter = params.learning_type;
   const severityFilter = params.severity;
   const sinceDays = params.since;

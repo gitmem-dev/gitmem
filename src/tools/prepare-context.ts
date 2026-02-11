@@ -18,6 +18,7 @@
 
 import * as supabase from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
+import { getProject } from "../services/session-state.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -379,7 +380,7 @@ export async function prepareContext(
 
   const plan = params.plan;
   const format = params.format;
-  const project: Project = params.project || "default";
+  const project: Project = params.project || getProject() as Project || "default";
   const maxTokens = params.max_tokens || (format === "compact" ? 500 : format === "gate" ? 100 : 10000);
   const matchCount = 5;
 

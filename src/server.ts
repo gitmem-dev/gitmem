@@ -49,6 +49,7 @@ import {
   flushCache,
   startBackgroundInit,
 } from "./services/startup.js";
+import { getProject } from "./services/session-state.js";
 import {
   getTier,
   hasSupabase,
@@ -299,17 +300,17 @@ export function createServer(): Server {
         // Cache management tools (OD-473)
         case "gitmem-cache-status":
         case "gm-cache-s":
-          result = getCacheStatus((toolArgs.project as Project) || "default");
+          result = getCacheStatus((toolArgs.project as Project) || getProject() as Project || "default");
           break;
 
         case "gitmem-cache-health":
         case "gm-cache-h":
-          result = await checkCacheHealth((toolArgs.project as Project) || "default");
+          result = await checkCacheHealth((toolArgs.project as Project) || getProject() as Project || "default");
           break;
 
         case "gitmem-cache-flush":
         case "gm-cache-f":
-          result = await flushCache((toolArgs.project as Project) || "default");
+          result = await flushCache((toolArgs.project as Project) || getProject() as Project || "default");
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);

@@ -267,20 +267,8 @@ export function createServer(): Server {
           const cmdLines = commands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
 
           const display = [
-            "╔═══════════════════════════════════════════════════════════╗",
-            "║                                                           ║",
-            "║    ██████  ██ ████████ ███    ███ ███████ ███    ███      ║",
-            "║   ██       ██    ██    ████  ████ ██      ████  ████      ║",
-            "║   ██   ███ ██    ██    ██ ████ ██ █████   ██ ████ ██      ║",
-            "║   ██    ██ ██    ██    ██  ██  ██ ██      ██  ██  ██      ║",
-            "║    ██████  ██    ██    ██      ██ ███████ ██      ██      ║",
-            "║                                                           ║",
-            "║         Institutional Memory & Learning System            ║",
-            "║              Never repeat the same mistake                ║",
-            "║                                                           ║",
-            "╚═══════════════════════════════════════════════════════════╝",
-            "",
-            `v0.1.0 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            `gitmem v0.1.0 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            "Never repeat the same mistake.",
             "",
             cmdLines,
             "",
@@ -382,7 +370,8 @@ export async function runServer(): Promise<void> {
     // Pro/Dev: Initialize local vector search in background (non-blocking)
     // This loads scars with embeddings directly from Supabase REST API
     console.error("[gitmem] Starting background cache initialization...");
-    startBackgroundInit("default");
+    const warmupProject = process.env.GITMEM_DEFAULT_PROJECT || "default";
+    startBackgroundInit(warmupProject);
 
     console.error("[gitmem] Server ready | Cache loading in background");
   } else {

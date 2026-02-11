@@ -26,9 +26,9 @@ import {
 import { getConfig, shouldUseLocalSearch } from "./config.js";
 import type { Project } from "../types/index.js";
 
-// Track startup state
-let startupComplete = false;
-let startupPromise: Promise<void> | null = null;
+// Track startup state per-project (avoids cross-project blocking)
+const startupCompleted: Map<string, boolean> = new Map();
+const startupPromises: Map<string, Promise<void>> = new Map();
 let backgroundRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
 // Scar record from database (with embedding)
@@ -200,23 +200,25 @@ export async function ensureInitialized(project: Project = "default"): Promise<v
     return; // Remote mode, nothing to initialize
   }
 
-  if (startupComplete && isLocalSearchReady(project)) {
+  if (startupCompleted.get(project) && isLocalSearchReady(project)) {
     return;
   }
 
-  if (startupPromise) {
-    return startupPromise;
+  const existing = startupPromises.get(project);
+  if (existing) {
+    return existing;
   }
 
-  startupPromise = (async () => {
+  const promise = (async () => {
     const result = await initializeGitMem(project);
-    startupComplete = result.success;
+    startupCompleted.set(project, result.success);
     if (!result.success) {
-      console.warn(`[startup] GitMem not fully initialized: ${result.error}`);
+      console.warn(`[startup] GitMem not fully initialized for ${project}: ${result.error}`);
     }
   })();
 
-  return startupPromise;
+  startupPromises.set(project, promise);
+  return promise;
 }
 
 /**
@@ -239,7 +241,7 @@ export function getInitStatus(): {
 } {
   const config = getConfig();
   return {
-    complete: startupComplete,
+    complete: startupCompleted.get("default") ?? false,
     search_mode: config.resolvedSearchMode,
     default_ready: isLocalSearchReady("default"),
   };

@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from "uuid";
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 // OD-645: Scar search removed from start pipeline (loads on-demand via recall)
+import { ensureInitialized } from "../services/startup.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -785,6 +786,12 @@ export async function sessionStart(
     // Fire-and-forget: don't await the Supabase write
     createSessionRecord(agent, project, params.linear_issue, sessionId).catch(() => {});
   }
+
+  // Warm local scar cache for this project (fire-and-forget, non-blocking)
+  // By the time user calls recall(), cache should be hot (~1s background load)
+  ensureInitialized(project).catch((err) => {
+    console.error(`[session_start] Cache warmup failed for ${project}: ${err}`);
+  });
 
   const latencyMs = timer.stop();
 

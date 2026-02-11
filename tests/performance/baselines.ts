@@ -38,6 +38,9 @@ export const BASELINES = {
   cold_start_session: 3000,
   cold_start_cache_rebuild: 2000,
 
+  // Session close
+  session_close_total: 1500,  // OD-646: Blocking path only (was ~3400ms with embed+transcript)
+
   // Write operations
   create_learning: 3000,
   create_decision: 3000,

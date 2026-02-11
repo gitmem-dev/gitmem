@@ -764,42 +764,42 @@ export async function sessionClose(
       if (transcriptFilePath) {
         const transcriptContent = fs.readFileSync(transcriptFilePath, "utf-8");
 
-        // Extract Claude Code session ID for traceability
+        // Extract Claude Code session ID for traceability (sync, fast)
         const claudeSessionId = extractClaudeSessionId(transcriptContent, transcriptFilePath);
         if (claudeSessionId) {
           sessionData.claude_code_session_id = claudeSessionId;
           console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
         }
 
-        // Call save_transcript tool
-        const saveResult = await saveTranscript({
+        // OD-646: Fire-and-forget transcript save + chunking (was blocking ~1-2s)
+        // saveTranscript does its own directUpsert to set transcript_path on the session
+        const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
+        saveTranscript({
           session_id: sessionId,
           transcript: transcriptContent,
           format: "json",
-          project: isRetroactive ? "default" : (existingSession?.project as string | undefined),
+          project: transcriptProject,
+        }).then(saveResult => {
+          if (saveResult.success && saveResult.transcript_path) {
+            console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
+
+            // OD-540: Process transcript for semantic search
+            processTranscript(sessionId, transcriptContent, transcriptProject)
+              .then(result => {
+                if (result.success) {
+                  console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
+                } else {
+                  console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
+                }
+              }).catch(err => {
+                console.error("[session_close] Transcript chunking error:", err);
+              });
+          } else {
+            console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
+          }
+        }).catch(err => {
+          console.error("[session_close] Transcript save error:", err);
         });
-
-        if (saveResult.success && saveResult.transcript_path) {
-          sessionData.transcript_path = saveResult.transcript_path;
-          console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
-
-          // OD-540: Process transcript for semantic search (async, don't block session close)
-          processTranscript(
-            sessionId,
-            transcriptContent,
-            isRetroactive ? "default" : (existingSession?.project as string | undefined)
-          ).then(result => {
-            if (result.success) {
-              console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
-            } else {
-              console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
-            }
-          }).catch(err => {
-            console.error("[session_close] Transcript chunking error:", err);
-          });
-        } else {
-          console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
-        }
       }
     } catch (error) {
       // Don't fail session close if transcript capture fails
@@ -891,63 +891,65 @@ export async function sessionClose(
 
   // 6. Persist to Supabase (direct REST API, bypasses ww-mcp)
   try {
-    // Generate embedding for session data
-    if (isEmbeddingAvailable()) {
-      try {
-        const embeddingParts = [
-          sessionData.session_title as string || "",
-          params.closing_reflection?.what_worked || "",
-          params.closing_reflection?.what_broke || "",
-          ...(params.open_threads || []).map(t => typeof t === "string" ? t : t.text),
-        ].filter(Boolean);
-        const embeddingText = embeddingParts.join(" | ");
-        if (embeddingText.length > 10) {
-          const embeddingVector = await embed(embeddingText);
-          if (embeddingVector) {
-            sessionData.embedding = JSON.stringify(embeddingVector);
-          }
-        }
-      } catch (embError) {
-        console.warn("[session_close] Embedding generation failed (non-fatal):", embError);
-      }
-    }
-
+    // OD-646: Upsert session WITHOUT embedding (fast path)
+    // Embedding + thread detection run fire-and-forget after
     await supabase.directUpsert("orchestra_sessions", sessionData);
 
-    // Phase 5: Implicit thread detection (fire-and-forget)
-    if (sessionData.embedding) {
+    // OD-646: Fire-and-forget embedding generation + session update + thread detection
+    if (isEmbeddingAvailable()) {
       (async () => {
         try {
-          const sessionEmb = JSON.parse(sessionData.embedding as string);
-          const suggestProject = (existingSession?.project as string) || "default";
-          const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
-          const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
-          if (recentSessions && threadEmbs) {
-            const existing = loadSuggestions();
-            const updated = detectSuggestedThreads(
-              { session_id: sessionId, title: sessionData.session_title as string, embedding: sessionEmb },
-              recentSessions,
-              threadEmbs,
-              existing
-            );
-            saveSuggestions(updated);
+          const embeddingParts = [
+            sessionData.session_title as string || "",
+            params.closing_reflection?.what_worked || "",
+            params.closing_reflection?.what_broke || "",
+            ...(params.open_threads || []).map(t => typeof t === "string" ? t : t.text),
+          ].filter(Boolean);
+          const embeddingText = embeddingParts.join(" | ");
+          if (embeddingText.length > 10) {
+            const embeddingVector = await embed(embeddingText);
+            if (embeddingVector) {
+              const embeddingJson = JSON.stringify(embeddingVector);
+              // Update session with embedding
+              await supabase.directUpsert("orchestra_sessions", {
+                id: sessionId,
+                embedding: embeddingJson,
+              });
+              console.error("[session_close] Embedding saved to session");
+
+              // Phase 5: Implicit thread detection (chained after embedding)
+              const suggestProject = (existingSession?.project as string) || "default";
+              const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
+              const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
+              if (recentSessions && threadEmbs) {
+                const existing = loadSuggestions();
+                const updated = detectSuggestedThreads(
+                  { session_id: sessionId, title: sessionData.session_title as string, embedding: embeddingVector },
+                  recentSessions,
+                  threadEmbs,
+                  existing
+                );
+                saveSuggestions(updated);
+              }
+            }
           }
         } catch (err) {
-          console.error("[session_close] Thread suggestion detection failed (non-fatal):", err);
+          console.error("[session_close] Embedding/thread detection failed (non-fatal):", err);
         }
       })();
     }
 
-    // 7. Record scar usage if provided (parallel with metrics)
+    // OD-646: Fire-and-forget scar usage recording (was blocking ~200-500ms)
     // OD-552: scars_to_record may now come from auto-bridge above
-    let scarRecordingResults;
     if (params.scars_to_record && params.scars_to_record.length > 0) {
       const project = isRetroactive
         ? "default"
         : (existingSession!.project as string | undefined);
-      scarRecordingResults = await recordScarUsageBatch({
+      recordScarUsageBatch({
         scars: params.scars_to_record,
         project,
+      }).catch(err => {
+        console.error("[session_close] Scar usage recording failed (non-fatal):", err);
       });
     }
 
@@ -977,8 +979,6 @@ export async function sessionClose(
         decisions_count: params.decisions?.length || 0,
         open_threads_count: params.open_threads?.length || 0,
         ceremony_duration_ms: params.ceremony_duration_ms,
-        scars_recorded_batch: scarRecordingResults?.resolved_count || 0,
-        scars_failed_batch: scarRecordingResults?.failed_count || 0,
         retroactive: isRetroactive,
       },
     }).catch(() => {});

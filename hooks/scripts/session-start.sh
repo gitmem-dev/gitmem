@@ -136,7 +136,7 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     cat <<'HOOK_MSG'
 SESSION START — ACTIVE
 
-Call mcp__gitmem__session_start(project: "orchestra_dev") as your FIRST tool call.
+Call mcp__gitmem__session_start() as your FIRST tool call.
 
 IMPORTANT:
 - Do NOT respond to the user until session_start completes.

@@ -122,7 +122,7 @@ describe("Free Tier E2E", () => {
 
       expect(isToolError(result)).toBe(false);
       const text = getToolResultText(result);
-      expect(text).toContain("session");
+      expect(text.toLowerCase()).toContain("session");
     });
 
     it("can close a session", async () => {

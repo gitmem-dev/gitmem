@@ -2,25 +2,28 @@
 
 ## Test Tiers
 
-GitMem uses a 5-tier testing pyramid. Each tier adds cost/time but tests closer to the real user experience.
+GitMem uses a 6-tier testing pyramid. Each tier adds cost/time but tests closer to the real user experience.
 
 | Tier | Command | Speed | Cost | What it tests |
 |------|---------|-------|------|---------------|
 | **1 - Unit** | `npm run test:unit` | ~3s | Free | Schema validation, pure functions, golden regressions |
 | **2 - Smoke** | `npm run test:smoke` | ~5s | Free | MCP server boot, tool registration, basic tool calls via stdio |
 | **3 - Integration** | `npm run test:integration` | ~30s | Free (needs Docker) | Supabase PostgreSQL, session lifecycle, cache behavior, query plans |
-| **4 - E2E** | `npm run test:e2e` | ~75s | API calls | Full install flow, hooks, Agent SDK user journey |
-| **5 - Performance** | `npm run test:perf` | ~30s | Free | Cold start, recall latency, cache hit rate benchmarks |
+| **4 - E2E** | `npm run test:e2e` | ~15s | Free | CLI install flow, hooks, free/pro tier MCP via stdio |
+| **5 - User Journey** | `npm run test:e2e -- tests/e2e/user-journey.test.ts` | ~60s | API calls | **Real Claude session via Agent SDK — the closest test to actual user experience** |
+| **6 - Performance** | `npm run test:perf` | ~30s | Free | Cold start, recall latency, cache hit rate benchmarks |
 
 Run all: `npm run test:all`
 
 **Before pushing:** Always run `npm run test:unit` at minimum.
 
+**Before shipping to npm:** Run tiers 1-5. Tier 5 (User Journey) is the most important gate — it spawns a real Claude session and verifies the full hook + MCP + agent behavior chain.
+
 ---
 
 ## Tier 4 — E2E Tests (Detail)
 
-The E2E tier (`tests/e2e/`) tests the full user experience from consumer perspective. It has 5 test suites:
+The E2E tier (`tests/e2e/`) tests install flow and MCP functionality. It has 4 suites (user-journey is now Tier 5):
 
 ### `cli-fresh-install.test.ts` — 27 tests, ~1s, free
 
@@ -31,6 +34,24 @@ Tests the CLI commands a new user runs when installing gitmem:
 - **Hooks CLI**: `gitmem install-hooks` writes project-level hooks to `.claude/settings.json`, preserves existing permissions, `--force` overwrites, `gitmem uninstall-hooks` removes hooks cleanly
 - **Hook Script Output**: Direct execution of `session-start.sh` and `session-close-check.sh` verifying protocol wording ("YOU (the agent) ANSWER"), no `orchestra_dev` leaks
 - **Output Sanitization**: All CLI commands (`init`, `check`, `configure`, `help`) checked for internal reference leaks; `CLAUDE.md.template` and `starter-scars.json` verified clean
+
+### `free-tier.test.ts` — 15 tests, ~1s, free
+
+Tests free tier MCP functionality via stdio transport: session lifecycle, recall, create_learning, create_decision, record_scar_usage, parameter validation (golden regression for 2026-02-03 crash).
+
+### `pro-fresh.test.ts` — 11 tests, requires Docker
+
+Tests pro tier with Supabase PostgreSQL (Testcontainers + pgvector). Skips gracefully when Docker is unavailable.
+
+### `pro-mature.test.ts` — 7 tests, requires Docker
+
+Tests pro tier at scale (1000 scars). Skips gracefully when Docker is unavailable.
+
+---
+
+## Tier 5 — User Journey (Detail)
+
+**This is the most important pre-ship gate.** It spawns a real Claude session and verifies the full user experience end-to-end.
 
 ### `user-journey.test.ts` — 6 tests, ~60s, costs API calls
 
@@ -60,20 +81,6 @@ Test setup creates a temp directory with:
   .claude/settings.json # from `gitmem install-hooks` (hooks + permissions)
   node_modules/gitmem-mcp/hooks -> /workspace/gitmem/hooks  # symlink
 ```
-
-### `free-tier.test.ts` — 15 tests, ~1s, free
-
-Tests free tier MCP functionality via stdio transport: session lifecycle, recall, create_learning, create_decision, record_scar_usage.
-
-### `pro-fresh.test.ts` — 11 tests, requires Docker
-
-Tests pro tier with Supabase PostgreSQL (Testcontainers + pgvector). Skips gracefully when Docker is unavailable.
-
-### `pro-mature.test.ts` — 7 tests, requires Docker
-
-Tests pro tier at scale (1000 scars). Skips gracefully when Docker is unavailable.
-
----
 
 ## Agent SDK Testing Pattern
 
@@ -174,13 +181,13 @@ Tests skip gracefully when dependencies are missing:
 
 ---
 
-## Adding New E2E Tests
+## Adding New Tests
 
-When adding new E2E tests:
+When adding new tests:
 
-1. **Free tier / hooks / CLI**: Add to `cli-fresh-install.test.ts` — fast, deterministic, no API cost
-2. **User experience / agent behavior**: Add to `user-journey.test.ts` — uses Agent SDK, costs API calls
-3. **Pro tier / Supabase**: Add to `pro-fresh.test.ts` or `pro-mature.test.ts` — needs Docker
+1. **Free tier / hooks / CLI** (Tier 4): Add to `cli-fresh-install.test.ts` or `free-tier.test.ts` — fast, deterministic, no API cost
+2. **User experience / agent behavior** (Tier 5): Add to `user-journey.test.ts` — uses Agent SDK, costs API calls
+3. **Pro tier / Supabase** (Tier 4): Add to `pro-fresh.test.ts` or `pro-mature.test.ts` — needs Docker
 4. **Hook scripts**: Add to `hooks/tests/test-hooks.sh` — bash, no dependencies
 
 For user-journey tests, keep prompts simple and use `appendSystemPrompt` to constrain agent behavior. The agent is non-deterministic — test that tools are _called_, not that the agent says specific words.

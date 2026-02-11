@@ -198,6 +198,8 @@ export interface SessionStartResult {
   recording_path?: string;
   /** Resolved .gitmem directory path — use for closing-payload.json writes */
   gitmem_dir?: string;
+  /** Project namespace for this session */
+  project?: string;
   /** Pre-formatted display string for consistent CLI output */
   display?: string;
 }

@@ -17,8 +17,10 @@ import * as os from "os";
 import { getGitmemDir, getSessionPath } from "./gitmem-dir.js";
 import { ActiveSessionsRegistrySchema } from "../schemas/active-sessions.js";
 import type { ActiveSessionEntry, ActiveSessionsRegistry } from "../types/index.js";
+import { withLockSync } from "./file-lock.js";
 
 const REGISTRY_FILENAME = "active-sessions.json";
+const LOCK_FILENAME = "active-sessions.lock";
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // --- Atomic write utility ---
@@ -49,6 +51,10 @@ function atomicWriteFileSync(filePath: string, data: string): void {
 
 function getRegistryPath(): string {
   return path.join(getGitmemDir(), REGISTRY_FILENAME);
+}
+
+function getLockPath(): string {
+  return path.join(getGitmemDir(), LOCK_FILENAME);
 }
 
 /**
@@ -94,10 +100,12 @@ function writeRegistry(registry: ActiveSessionsRegistry): void {
  * Idempotent: re-registering the same session_id replaces the entry.
  */
 export function registerSession(entry: ActiveSessionEntry): void {
-  const registry = readRegistry();
-  registry.sessions = registry.sessions.filter((s) => s.session_id !== entry.session_id);
-  registry.sessions.push(entry);
-  writeRegistry(registry);
+  withLockSync(getLockPath(), () => {
+    const registry = readRegistry();
+    registry.sessions = registry.sessions.filter((s) => s.session_id !== entry.session_id);
+    registry.sessions.push(entry);
+    writeRegistry(registry);
+  });
   console.error(
     `[active-sessions] Registered session ${entry.session_id.slice(0, 8)} (agent: ${entry.agent}, pid: ${entry.pid})`
   );
@@ -108,13 +116,19 @@ export function registerSession(entry: ActiveSessionEntry): void {
  * Returns true if the session was found and removed.
  */
 export function unregisterSession(sessionId: string): boolean {
-  const registry = readRegistry();
-  const before = registry.sessions.length;
-  registry.sessions = registry.sessions.filter((s) => s.session_id !== sessionId);
-  const removed = registry.sessions.length < before;
+  const removed = withLockSync(getLockPath(), () => {
+    const registry = readRegistry();
+    const before = registry.sessions.length;
+    registry.sessions = registry.sessions.filter((s) => s.session_id !== sessionId);
+    const wasRemoved = registry.sessions.length < before;
+
+    if (wasRemoved) {
+      writeRegistry(registry);
+    }
+    return wasRemoved;
+  });
 
   if (removed) {
-    writeRegistry(registry);
     console.error(`[active-sessions] Unregistered session ${sessionId.slice(0, 8)}`);
   } else {
     console.warn(`[active-sessions] Session ${sessionId.slice(0, 8)} not found in registry`);
@@ -160,64 +174,66 @@ export function findSessionById(sessionId: string): ActiveSessionEntry | null {
  * Returns the number of sessions pruned.
  */
 export function pruneStale(): number {
-  const registry = readRegistry();
-  const now = Date.now();
-  const currentHostname = os.hostname();
-  const before = registry.sessions.length;
-  const gitmemDir = getGitmemDir();
+  return withLockSync(getLockPath(), () => {
+    const registry = readRegistry();
+    const now = Date.now();
+    const currentHostname = os.hostname();
+    const before = registry.sessions.length;
+    const gitmemDir = getGitmemDir();
 
-  registry.sessions = registry.sessions.filter((entry) => {
-    // GIT-22: Check for orphaned registry entry (session file missing)
-    const sessionFile = path.join(gitmemDir, "sessions", entry.session_id, "session.json");
-    if (!fs.existsSync(sessionFile)) {
-      // Only prune if session is old enough that session_start should have written the file.
-      // Brand-new sessions may not have the file yet (race window during session_start).
+    registry.sessions = registry.sessions.filter((entry) => {
+      // GIT-22: Check for orphaned registry entry (session file missing)
+      const sessionFile = path.join(gitmemDir, "sessions", entry.session_id, "session.json");
+      if (!fs.existsSync(sessionFile)) {
+        // Only prune if session is old enough that session_start should have written the file.
+        // Brand-new sessions may not have the file yet (race window during session_start).
+        const age = now - new Date(entry.started_at).getTime();
+        if (age > 60_000) { // 1 minute grace period
+          console.error(
+            `[active-sessions] Pruning orphaned registry entry ${entry.session_id.slice(0, 8)} (session file missing)`
+          );
+          cleanupSessionDir(gitmemDir, entry.session_id);
+          return false;
+        }
+      }
+
+      // Check age
       const age = now - new Date(entry.started_at).getTime();
-      if (age > 60_000) { // 1 minute grace period
+      if (age > STALE_THRESHOLD_MS) {
         console.error(
-          `[active-sessions] Pruning orphaned registry entry ${entry.session_id.slice(0, 8)} (session file missing)`
+          `[active-sessions] Pruning stale session ${entry.session_id.slice(0, 8)} (age: ${Math.round(age / 3600000)}h)`
         );
         cleanupSessionDir(gitmemDir, entry.session_id);
         return false;
       }
-    }
 
-    // Check age
-    const age = now - new Date(entry.started_at).getTime();
-    if (age > STALE_THRESHOLD_MS) {
-      console.error(
-        `[active-sessions] Pruning stale session ${entry.session_id.slice(0, 8)} (age: ${Math.round(age / 3600000)}h)`
-      );
-      cleanupSessionDir(gitmemDir, entry.session_id);
-      return false;
-    }
-
-    // Check if PID is alive (only for sessions on the same host)
-    if (entry.hostname === currentHostname) {
-      try {
-        process.kill(entry.pid, 0); // Signal 0 = check existence only
-      } catch {
-        console.error(
-          `[active-sessions] Pruning dead session ${entry.session_id.slice(0, 8)} (pid ${entry.pid} no longer running)`
-        );
-        cleanupSessionDir(gitmemDir, entry.session_id);
-        return false;
+      // Check if PID is alive (only for sessions on the same host)
+      if (entry.hostname === currentHostname) {
+        try {
+          process.kill(entry.pid, 0); // Signal 0 = check existence only
+        } catch {
+          console.error(
+            `[active-sessions] Pruning dead session ${entry.session_id.slice(0, 8)} (pid ${entry.pid} no longer running)`
+          );
+          cleanupSessionDir(gitmemDir, entry.session_id);
+          return false;
+        }
       }
+
+      return true;
+    });
+
+    const pruned = before - registry.sessions.length;
+    if (pruned > 0) {
+      writeRegistry(registry);
+      console.error(`[active-sessions] Pruned ${pruned} stale session(s)`);
     }
 
-    return true;
+    // GIT-22: Clean up orphaned session directories (dir exists but no registry entry)
+    pruneOrphanedDirs(gitmemDir, registry);
+
+    return pruned;
   });
-
-  const pruned = before - registry.sessions.length;
-  if (pruned > 0) {
-    writeRegistry(registry);
-    console.error(`[active-sessions] Pruned ${pruned} stale session(s)`);
-  }
-
-  // GIT-22: Clean up orphaned session directories (dir exists but no registry entry)
-  pruneOrphanedDirs(gitmemDir, registry);
-
-  return pruned;
 }
 
 /**
@@ -291,51 +307,53 @@ export function migrateFromLegacy(): boolean {
   migrationRan = true;
 
   try {
-    const gitmemDir = getGitmemDir();
-    const oldPath = path.join(gitmemDir, "active-session.json");
-    const newPath = path.join(gitmemDir, REGISTRY_FILENAME);
+    return withLockSync(getLockPath(), () => {
+      const gitmemDir = getGitmemDir();
+      const oldPath = path.join(gitmemDir, "active-session.json");
+      const newPath = path.join(gitmemDir, REGISTRY_FILENAME);
 
-    // Skip if new registry already exists or old file is absent
-    if (fs.existsSync(newPath) || !fs.existsSync(oldPath)) {
-      return false;
-    }
+      // Skip if new registry already exists or old file is absent
+      if (fs.existsSync(newPath) || !fs.existsSync(oldPath)) {
+        return false;
+      }
 
-    const raw = fs.readFileSync(oldPath, "utf-8");
-    const old = JSON.parse(raw);
+      const raw = fs.readFileSync(oldPath, "utf-8");
+      const old = JSON.parse(raw);
 
-    if (!old.session_id) {
-      console.warn("[active-sessions] Legacy file has no session_id, skipping migration");
-      return false;
-    }
+      if (!old.session_id) {
+        console.warn("[active-sessions] Legacy file has no session_id, skipping migration");
+        return false;
+      }
 
-    // 1. Create per-session directory with session.json
-    const sessionFilePath = getSessionPath(old.session_id, "session.json");
-    fs.writeFileSync(sessionFilePath, JSON.stringify({
-      ...old,
-      hostname: old.hostname || os.hostname(),
-      pid: old.pid || process.pid,
-    }, null, 2));
+      // 1. Create per-session directory with session.json
+      const sessionFilePath = getSessionPath(old.session_id, "session.json");
+      fs.writeFileSync(sessionFilePath, JSON.stringify({
+        ...old,
+        hostname: old.hostname || os.hostname(),
+        pid: old.pid || process.pid,
+      }, null, 2));
 
-    // 2. Create registry with single entry
-    const entry: ActiveSessionEntry = {
-      session_id: old.session_id,
-      agent: old.agent || "CLI",
-      started_at: old.started_at || new Date().toISOString(),
-      hostname: old.hostname || os.hostname(),
-      pid: old.pid || process.pid,
-      project: old.project || "default",
-    };
-    writeRegistry({ sessions: [entry] });
+      // 2. Create registry with single entry
+      const entry: ActiveSessionEntry = {
+        session_id: old.session_id,
+        agent: old.agent || "CLI",
+        started_at: old.started_at || new Date().toISOString(),
+        hostname: old.hostname || os.hostname(),
+        pid: old.pid || process.pid,
+        project: old.project || "default",
+      };
+      writeRegistry({ sessions: [entry] });
 
-    // 3. Rename old file to backup
-    const backupPath = path.join(gitmemDir, "active-session.json.migrated");
-    fs.renameSync(oldPath, backupPath);
+      // 3. Rename old file to backup
+      const backupPath = path.join(gitmemDir, "active-session.json.migrated");
+      fs.renameSync(oldPath, backupPath);
 
-    console.error(
-      `[active-sessions] Migrated legacy active-session.json → ` +
-      `sessions/${old.session_id.slice(0, 8)}/ + active-sessions.json (backup: active-session.json.migrated)`
-    );
-    return true;
+      console.error(
+        `[active-sessions] Migrated legacy active-session.json → ` +
+        `sessions/${old.session_id.slice(0, 8)}/ + active-sessions.json (backup: active-session.json.migrated)`
+      );
+      return true;
+    });
   } catch (error) {
     console.warn("[active-sessions] Legacy migration failed (non-fatal):", error);
     return false;

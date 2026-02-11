@@ -263,29 +263,41 @@ export function createServer(): Server {
             );
           }
 
-          // Output colored header directly to terminal (stderr)
-          console.error(`
-\x1b[31m╔═══════════════════════════════════════════════════════════╗\x1b[0m
-\x1b[31m║\x1b[0m                                                           \x1b[31m║\x1b[0m
-\x1b[31m║    ██████  ██ ████████ ███    ███ ███████ ███    ███      ║\x1b[0m
-\x1b[38;5;208m║   ██       ██    ██    ████  ████ ██      ████  ████      ║\x1b[0m
-\x1b[38;5;208m║   ██   ███ ██    ██    ██ ████ ██ █████   ██ ████ ██      ║\x1b[0m
-\x1b[33m║   ██    ██ ██    ██    ██  ██  ██ ██      ██  ██  ██      ║\x1b[0m
-\x1b[33m║    ██████  ██    ██    ██      ██ ███████ ██      ██      ║\x1b[0m
-\x1b[33m║\x1b[0m                                                           \x1b[33m║\x1b[0m
-\x1b[38;5;208m║\x1b[0m         \x1b[1;37mInstitutional Memory & Learning System\x1b[0m            \x1b[38;5;208m║\x1b[0m
-\x1b[31m║\x1b[0m              \x1b[3;90mNever repeat the same mistake\x1b[0m                \x1b[31m║\x1b[0m
-\x1b[31m║\x1b[0m                                                           \x1b[31m║\x1b[0m
-\x1b[31m╚═══════════════════════════════════════════════════════════╝\x1b[0m
-`);
+          // Build command table for display
+          const cmdLines = commands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
 
-          // Return plain JSON result (no header - it's already printed above)
+          const display = [
+            "╔═══════════════════════════════════════════════════════════╗",
+            "║                                                           ║",
+            "║    ██████  ██ ████████ ███    ███ ███████ ███    ███      ║",
+            "║   ██       ██    ██    ████  ████ ██      ████  ████      ║",
+            "║   ██   ███ ██    ██    ██ ████ ██ █████   ██ ████ ██      ║",
+            "║   ██    ██ ██    ██    ██  ██  ██ ██      ██  ██  ██      ║",
+            "║    ██████  ██    ██    ██      ██ ███████ ██      ██      ║",
+            "║                                                           ║",
+            "║         Institutional Memory & Learning System            ║",
+            "║              Never repeat the same mistake                ║",
+            "║                                                           ║",
+            "╚═══════════════════════════════════════════════════════════╝",
+            "",
+            `v0.1.0 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            "",
+            cmdLines,
+            "",
+            "**For detailed documentation and help, visit https://gitmem.ai/docs**",
+            "",
+            "───────────────────────────────────────────────────",
+            "DISPLAY PROTOCOL: Echo the content above as your complete response.",
+            "Do not add preamble, commentary, or reformat. Output it exactly as-is.",
+          ].join("\n");
+
           result = {
             version: "0.1.0",
             tier,
             tools_registered: registeredTools.length,
             storage: hasSupabase() ? "supabase" : "local (.gitmem/)",
             commands,
+            display,
           };
           break;
         }

@@ -126,26 +126,22 @@ echo "0" > "$STATE_DIR/last_nag_time"
 if [ "$GITMEM_DETECTED" = "true" ]; then
     echo "[$(date)] Gitmem DETECTED via ${DETECT_SOURCE} — instructing agent to call session_start via MCP" >> "$PLUGIN_LOG"
 
-    # Always instruct agent to call ToolSearch + session_start via MCP.
+    # Instruct agent to call session_start via MCP.
     # The MCP server creates sessions with its own PID, enabling multi-session
     # isolation (Phase 1, GIT-19). CLI binary invocation was removed because
     # the CLI PID dies immediately, defeating PID-based session identity.
+    #
+    # NOTE: ToolSearch (tengu_mcp_tool_search) was removed. MCP tools load
+    # eagerly now — no deferral step needed. Just call session_start directly.
     cat <<'HOOK_MSG'
 SESSION START — ACTIVE
 
-All MCP tools are deferred. You MUST load them first via ToolSearch.
-
-Step 1 — Load tools:
-  ToolSearch(query: "+gitmem session", max_results: 5)
-
-Step 2 — Start session:
-  mcp__gitmem__session_start()
+Call mcp__gitmem__session_start(project: "orchestra_dev") as your FIRST tool call.
 
 IMPORTANT:
-- Do NOT skip Step 1. Without it, session_start will not exist as a callable tool.
-- Do NOT say "tools aren't available" — ToolSearch makes them available.
-- Do NOT respond to the user until both steps complete.
-- Execute Step 1 and Step 2 as your FIRST two tool calls of the session.
+- Do NOT respond to the user until session_start completes.
+- Do NOT diagnose tool availability — gitmem tools are loaded via --mcp-config.
+- If session_start fails, report the error directly instead of investigating.
 
 ## GitMem Protocol (active for this session)
 

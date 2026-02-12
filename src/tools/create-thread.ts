@@ -29,6 +29,7 @@ import {
 import { checkDuplicate } from "../services/thread-dedup.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { writeTriplesForThreadCreation } from "../services/triple-writer.js";
+import { getEffectTracker } from "../services/effect-tracker.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import {
   Timer,
@@ -221,14 +222,16 @@ export async function createThread(
   }).catch(() => {});
 
   // Phase 4: Knowledge graph triples (fire-and-forget)
-  writeTriplesForThreadCreation({
-    thread_id: thread.id,
-    text: trimmedText,
-    linear_issue: params.linear_issue,
-    session_id: sessionId,
-    project,
-    agent: getAgentIdentity(),
-  }).catch(() => {});
+  getEffectTracker().track("triple_write", "thread_creation", () =>
+    writeTriplesForThreadCreation({
+      thread_id: thread.id,
+      text: trimmedText,
+      linear_issue: params.linear_issue,
+      session_id: sessionId,
+      project,
+      agent: getAgentIdentity(),
+    })
+  );
 
   return {
     success: true,

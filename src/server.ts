@@ -49,6 +49,7 @@ import {
   flushCache,
   startBackgroundInit,
 } from "./services/startup.js";
+import { getEffectTracker } from "./services/effect-tracker.js";
 import { getProject } from "./services/session-state.js";
 import {
   getTier,
@@ -245,6 +246,7 @@ export function createServer(): Server {
             { alias: "gitmem-ps", full: "promote_suggestion", description: "Promote a suggested thread to open thread" },
             { alias: "gitmem-ds", full: "dismiss_suggestion", description: "Dismiss a suggested thread" },
             { alias: "gitmem-cleanup", full: "cleanup_threads", description: "Triage threads by lifecycle health" },
+            { alias: "gitmem-health", full: "health", description: "Show write health for fire-and-forget operations" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });
@@ -286,6 +288,21 @@ export function createServer(): Server {
             storage: hasSupabase() ? "supabase" : "local (.gitmem/)",
             commands,
             display,
+          };
+          break;
+        }
+
+        // Effect Tracker health report
+        case "health":
+        case "gitmem-health":
+        case "gm-health": {
+          const failureLimit = typeof toolArgs.failure_limit === "number" ? toolArgs.failure_limit : 10;
+          const tracker = getEffectTracker();
+          const report = tracker.getHealthReport(failureLimit);
+          const summary = tracker.formatSummary();
+          result = {
+            ...report,
+            text: summary || "No tracked effects this session.",
           };
           break;
         }

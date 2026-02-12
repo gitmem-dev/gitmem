@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "./supabase-client.js";
+import { getEffectTracker } from "./effect-tracker.js";
 
 /**
  * Tool names that can be tracked
@@ -32,7 +33,8 @@ export type ToolName =
   | "resolve_thread"
   | "create_thread"
   | "confirm_scars"
-  | "cleanup_threads";
+  | "cleanup_threads"
+  | "health";
 
 /**
  * Phase tags for context
@@ -102,6 +104,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   create_thread: 100,       // In-memory mutation + file write
   confirm_scars: 500,       // In-memory validation + file write
   cleanup_threads: 2000,    // Fetch all threads + lifecycle computation
+  health: 100,              // In-memory read from EffectTracker
 };
 
 /**
@@ -127,33 +130,34 @@ export class Timer {
 }
 
 /**
- * Track a query and record metrics
+ * Track a query and record metrics.
+ *
+ * Wrapped by Effect Tracker — failures are recorded instead of swallowed.
+ * Callers can still use `.catch(() => {})` but failures will appear in health reports.
  */
 export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
-  try {
-    const record: Record<string, unknown> = {
-      id: metrics.id,
-      session_id: metrics.session_id || null,
-      agent: metrics.agent || null,
-      tool_name: metrics.tool_name,
-      query_text: metrics.query_text || null,
-      tables_searched: metrics.tables_searched || null,
-      latency_ms: metrics.latency_ms,
-      result_count: metrics.result_count,
-      similarity_scores: metrics.similarity_scores || null,
-      context_bytes: metrics.context_bytes || null,
-      phase_tag: metrics.phase_tag || null,
-      linear_issue: metrics.linear_issue || null,
-      memories_surfaced: metrics.memories_surfaced || null,
-      metadata: metrics.metadata || {},
-      created_at: new Date().toISOString(),
-    };
+  const record: Record<string, unknown> = {
+    id: metrics.id,
+    session_id: metrics.session_id || null,
+    agent: metrics.agent || null,
+    tool_name: metrics.tool_name,
+    query_text: metrics.query_text || null,
+    tables_searched: metrics.tables_searched || null,
+    latency_ms: metrics.latency_ms,
+    result_count: metrics.result_count,
+    similarity_scores: metrics.similarity_scores || null,
+    context_bytes: metrics.context_bytes || null,
+    phase_tag: metrics.phase_tag || null,
+    linear_issue: metrics.linear_issue || null,
+    memories_surfaced: metrics.memories_surfaced || null,
+    metadata: metrics.metadata || {},
+    created_at: new Date().toISOString(),
+  };
 
-    await supabase.directUpsert("gitmem_query_metrics", record);
-  } catch (error) {
-    // Log but don't fail the operation - metrics are secondary
-    console.error("[metrics] Failed to record:", error);
-  }
+  const tracker = getEffectTracker();
+  await tracker.track("metrics", metrics.tool_name, () =>
+    supabase.directUpsert("gitmem_query_metrics", record)
+  );
 }
 
 /**
@@ -337,12 +341,15 @@ export async function withMetrics<T>(
 
 /**
  * Update metrics with relevance data (called at session close)
+ *
+ * Wrapped by Effect Tracker — failures are visible in health reports.
  */
 export async function updateRelevanceData(
   sessionId: string,
   memoriesApplied: string[]
 ): Promise<void> {
-  try {
+  const tracker = getEffectTracker();
+  await tracker.track("relevance_update", sessionId, async () => {
     // Get all metrics for this session that surfaced memories
     const metrics = await supabase.listRecords<{
       id: string;
@@ -369,9 +376,7 @@ export async function updateRelevanceData(
         }
       }
     }
-  } catch (error) {
-    console.error("[metrics] Failed to update relevance:", error);
-  }
+  });
 }
 
 /**

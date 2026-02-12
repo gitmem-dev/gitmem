@@ -14,6 +14,7 @@ import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
+import { getEffectTracker } from "../services/effect-tracker.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { getProject } from "../services/session-state.js";
@@ -189,20 +190,20 @@ export async function createLearning(
 
       console.error(`[create_learning] directUpsert succeeded, verified ID: ${writeResult.id}`);
 
-      // OD-466: Auto-create knowledge triples (fire-and-forget)
-      writeTriplesForLearning({
-        id: learningId,
-        learning_type: params.learning_type,
-        title: params.title,
-        description: params.description,
-        scar_type: params.scar_type,
-        source_linear_issue: params.source_linear_issue,
-        persona_name: agentIdentity,
-        domain: params.domain,
-        project: (params.project || getProject() || "default"),
-      }).catch((err) => {
-        console.warn("[create_learning] Triple generation failed (non-fatal):", err);
-      });
+      // OD-466: Auto-create knowledge triples (tracked fire-and-forget)
+      getEffectTracker().track("triple_write", "learning", () =>
+        writeTriplesForLearning({
+          id: learningId,
+          learning_type: params.learning_type,
+          title: params.title,
+          description: params.description,
+          scar_type: params.scar_type,
+          source_linear_issue: params.source_linear_issue,
+          persona_name: agentIdentity,
+          domain: params.domain,
+          project: (params.project || getProject() || "default"),
+        })
+      );
 
       // Invalidate local cache so next recall picks up the new learning
       const project = (params.project || getProject() || "default") as Project;

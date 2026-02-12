@@ -705,6 +705,23 @@ export const TOOLS = [
     },
   },
 
+  // --- Effect Health Tool ---
+
+  {
+    name: "health",
+    description:
+      "Show write health for the current session. Reports success/failure rates for all tracked fire-and-forget operations (metrics, cache, triple writes, embeddings, scar usage). Use this to diagnose silent failures.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        failure_limit: {
+          type: "number",
+          description: "Max number of recent failures to return (default: 10)",
+        },
+      },
+    },
+  },
+
   // ============================================================================
   // SHORT ALIASES (gitmem-*)
   // Self-documenting: each description includes both alias and full name
@@ -1318,6 +1335,17 @@ export const TOOLS = [
       },
     },
   },
+  // gitmem-health (health) — Effect Tracker health report
+  {
+    name: "gitmem-health",
+    description: "gitmem-health (health) - Show write health for fire-and-forget operations this session",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        failure_limit: { type: "number", description: "Max recent failures to return (default: 10)" },
+      },
+    },
+  },
 
   // ============================================================================
   // GM-* SHORT, MEMORABLE ALIASES (user-facing ergonomics)
@@ -1695,6 +1723,17 @@ export const TOOLS = [
       properties: {
         project: { type: "string" },
         auto_archive: { type: "boolean", description: "Auto-archive dormant threads" },
+      },
+    },
+  },
+  // gm-health (health) — Effect Tracker health report
+  {
+    name: "gm-health",
+    description: "gm-health (health) - Show write health for fire-and-forget operations",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        failure_limit: { type: "number", description: "Max recent failures (default: 10)" },
       },
     },
   },

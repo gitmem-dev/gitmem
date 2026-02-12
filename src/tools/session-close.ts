@@ -28,6 +28,7 @@ import {
   updateRelevanceData,
 } from "../services/metrics.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
+import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
 import { processTranscript } from "../services/transcript-chunker.js";
 import * as fs from "fs";
@@ -325,6 +326,14 @@ function formatCloseDisplay(
     lines.push("");
     lines.push(`### Learnings`);
     lines.push(`${learningsCount} created`);
+  }
+
+  // Write health (Effect Tracker)
+  const healthSummary = getEffectTracker().formatSummary();
+  if (healthSummary && healthSummary !== "No tracked effects this session.") {
+    lines.push("");
+    lines.push(`### Write Health`);
+    lines.push(healthSummary);
   }
 
   return lines.join("\n");
@@ -895,62 +904,58 @@ export async function sessionClose(
     // Embedding + thread detection run fire-and-forget after
     await supabase.directUpsert("orchestra_sessions", sessionData);
 
-    // OD-646: Fire-and-forget embedding generation + session update + thread detection
+    // OD-646: Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
-      (async () => {
-        try {
-          const embeddingParts = [
-            sessionData.session_title as string || "",
-            params.closing_reflection?.what_worked || "",
-            params.closing_reflection?.what_broke || "",
-            ...(params.open_threads || []).map(t => typeof t === "string" ? t : t.text),
-          ].filter(Boolean);
-          const embeddingText = embeddingParts.join(" | ");
-          if (embeddingText.length > 10) {
-            const embeddingVector = await embed(embeddingText);
-            if (embeddingVector) {
-              const embeddingJson = JSON.stringify(embeddingVector);
-              // Update session with embedding
-              await supabase.directUpsert("orchestra_sessions", {
-                id: sessionId,
-                embedding: embeddingJson,
-              });
-              console.error("[session_close] Embedding saved to session");
+      getEffectTracker().track("embedding", "session_close", async () => {
+        const embeddingParts = [
+          sessionData.session_title as string || "",
+          params.closing_reflection?.what_worked || "",
+          params.closing_reflection?.what_broke || "",
+          ...(params.open_threads || []).map(t => typeof t === "string" ? t : t.text),
+        ].filter(Boolean);
+        const embeddingText = embeddingParts.join(" | ");
+        if (embeddingText.length > 10) {
+          const embeddingVector = await embed(embeddingText);
+          if (embeddingVector) {
+            const embeddingJson = JSON.stringify(embeddingVector);
+            // Update session with embedding
+            await supabase.directUpsert("orchestra_sessions", {
+              id: sessionId,
+              embedding: embeddingJson,
+            });
+            console.error("[session_close] Embedding saved to session");
 
-              // Phase 5: Implicit thread detection (chained after embedding)
-              const suggestProject = (existingSession?.project as string) || "default";
-              const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
-              const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
-              if (recentSessions && threadEmbs) {
-                const existing = loadSuggestions();
-                const updated = detectSuggestedThreads(
-                  { session_id: sessionId, title: sessionData.session_title as string, embedding: embeddingVector },
-                  recentSessions,
-                  threadEmbs,
-                  existing
-                );
-                saveSuggestions(updated);
-              }
+            // Phase 5: Implicit thread detection (chained after embedding)
+            const suggestProject = (existingSession?.project as string) || "default";
+            const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
+            const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
+            if (recentSessions && threadEmbs) {
+              const existing = loadSuggestions();
+              const updated = detectSuggestedThreads(
+                { session_id: sessionId, title: sessionData.session_title as string, embedding: embeddingVector },
+                recentSessions,
+                threadEmbs,
+                existing
+              );
+              saveSuggestions(updated);
             }
           }
-        } catch (err) {
-          console.error("[session_close] Embedding/thread detection failed (non-fatal):", err);
         }
-      })();
+      });
     }
 
-    // OD-646: Fire-and-forget scar usage recording (was blocking ~200-500ms)
+    // OD-646: Tracked fire-and-forget scar usage recording (was blocking ~200-500ms)
     // OD-552: scars_to_record may now come from auto-bridge above
     if (params.scars_to_record && params.scars_to_record.length > 0) {
       const project = isRetroactive
         ? "default"
         : (existingSession!.project as string | undefined);
-      recordScarUsageBatch({
-        scars: params.scars_to_record,
-        project,
-      }).catch(err => {
-        console.error("[session_close] Scar usage recording failed (non-fatal):", err);
-      });
+      getEffectTracker().track("scar_usage", "session_close_batch", () =>
+        recordScarUsageBatch({
+          scars: params.scars_to_record!,
+          project,
+        })
+      );
     }
 
     const latencyMs = timer.stop();

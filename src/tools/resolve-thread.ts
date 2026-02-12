@@ -21,6 +21,7 @@ import {
 } from "../services/thread-manager.js";
 import { resolveThreadInSupabase } from "../services/thread-supabase.js";
 import { writeTriplesForThreadResolution } from "../services/triple-writer.js";
+import { getEffectTracker } from "../services/effect-tracker.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import {
   Timer,
@@ -108,14 +109,16 @@ export async function resolveThread(
   }).catch(() => {});
 
   // Phase 4: Knowledge graph triples (fire-and-forget)
-  writeTriplesForThreadResolution({
-    thread_id: resolved.id,
-    text: resolved.text,
-    resolution_note: params.resolution_note,
-    session_id: sessionId,
-    project: "default",
-    agent: getAgentIdentity(),
-  }).catch(() => {});
+  getEffectTracker().track("triple_write", "thread_resolution", () =>
+    writeTriplesForThreadResolution({
+      thread_id: resolved.id,
+      text: resolved.text,
+      resolution_note: params.resolution_note,
+      session_id: sessionId,
+      project: "default",
+      agent: getAgentIdentity(),
+    })
+  );
 
   return {
     success: true,

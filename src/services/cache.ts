@@ -11,6 +11,7 @@
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
+import { getEffectTracker } from "./effect-tracker.js";
 
 // Default cache directory
 // Uses env var if set, otherwise falls back to user's home directory or /tmp
@@ -221,8 +222,10 @@ export class CacheService {
     // Cache miss - fetch from source
     const data = await fetcher();
 
-    // Cache the result (async, don't await)
-    this.setResult(key, data, TTL.SCAR_SEARCH).catch(() => {});
+    // Cache the result (tracked, fire-and-forget)
+    getEffectTracker().track("cache_set", "scar_search", () =>
+      this.setResult(key, data, TTL.SCAR_SEARCH)
+    );
 
     return { data, cache_hit: false };
   }
@@ -245,8 +248,10 @@ export class CacheService {
     // Cache miss - fetch from source
     const data = await fetcher();
 
-    // Cache the result (async, don't await)
-    this.setResult(key, data, TTL.DECISIONS).catch(() => {});
+    // Cache the result (tracked, fire-and-forget)
+    getEffectTracker().track("cache_set", "decisions", () =>
+      this.setResult(key, data, TTL.DECISIONS)
+    );
 
     return { data, cache_hit: false };
   }
@@ -269,8 +274,10 @@ export class CacheService {
     // Cache miss - fetch from source
     const data = await fetcher();
 
-    // Cache the result (async, don't await)
-    this.setResult(key, data, TTL.WINS).catch(() => {});
+    // Cache the result (tracked, fire-and-forget)
+    getEffectTracker().track("cache_set", "wins", () =>
+      this.setResult(key, data, TTL.WINS)
+    );
 
     return { data, cache_hit: false };
   }
@@ -306,7 +313,9 @@ export class CacheService {
     }
 
     const data = await fetcher();
-    this.setResult(key, data, TTL.SESSIONS).catch(() => {});
+    getEffectTracker().track("cache_set", "sessions", () =>
+      this.setResult(key, data, TTL.SESSIONS)
+    );
     return { data, cache_hit: false };
   }
 
@@ -327,7 +336,9 @@ export class CacheService {
     }
 
     const data = await fetcher();
-    this.setResult(key, data, TTL.SCAR_USAGE).catch(() => {});
+    getEffectTracker().track("cache_set", "scar_usage", () =>
+      this.setResult(key, data, TTL.SCAR_USAGE)
+    );
     return { data, cache_hit: false };
   }
 

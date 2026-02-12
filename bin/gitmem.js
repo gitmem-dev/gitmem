@@ -37,7 +37,7 @@ GitMem — Institutional Memory for AI Coding
 
 Usage:
   npx gitmem setup             Output SQL for Supabase schema setup (pro/dev tier)
-  npx gitmem init              Load starter scars (auto-detects tier)
+  npx gitmem init [--project name]  Load starter scars (auto-detects tier)
   npx gitmem configure         Generate .mcp.json config for Claude Code
   npx gitmem check              Run diagnostic health check
   npx gitmem check --full       Full diagnostic with benchmarks
@@ -82,6 +82,10 @@ async function cmdInit() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  // Parse --project flag
+  const projectIdx = process.argv.indexOf("--project");
+  const projectArg = projectIdx !== -1 ? process.argv[projectIdx + 1] : null;
+
   let starterScars;
   try {
     const scarsPath = join(__dirname, "..", "schema", "starter-scars.json");
@@ -99,6 +103,29 @@ async function cmdInit() {
     const gitmemDir = join(process.cwd(), ".gitmem");
     if (!existsSync(gitmemDir)) {
       mkdirSync(gitmemDir, { recursive: true });
+    }
+
+    // Write config.json (with project if specified via --project)
+    const configPath = join(gitmemDir, "config.json");
+    if (!existsSync(configPath)) {
+      const config = {};
+      if (projectArg) config.project = projectArg;
+      writeFileSync(configPath, JSON.stringify(config, null, 2));
+      if (projectArg) {
+        console.log(`  + Created .gitmem/config.json (project: "${projectArg}")`);
+      } else {
+        console.log("  + Created .gitmem/config.json");
+      }
+    } else if (projectArg) {
+      // Config exists — update project field
+      try {
+        const existing = JSON.parse(readFileSync(configPath, "utf-8"));
+        existing.project = projectArg;
+        writeFileSync(configPath, JSON.stringify(existing, null, 2));
+        console.log(`  + Updated .gitmem/config.json project: "${projectArg}"`);
+      } catch {
+        console.warn("  (Could not update config.json)");
+      }
     }
 
     const learningsPath = join(gitmemDir, "learnings.json");
@@ -166,6 +193,23 @@ async function cmdInit() {
     console.log("To upgrade to Pro tier (semantic search + Supabase persistence):");
     console.log("  Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then run init again.");
     return;
+  }
+
+  // Write/update .gitmem/config.json if --project specified
+  if (projectArg) {
+    const gitmemDir = join(process.cwd(), ".gitmem");
+    if (!existsSync(gitmemDir)) {
+      mkdirSync(gitmemDir, { recursive: true });
+    }
+    const configPath = join(gitmemDir, "config.json");
+    let config = {};
+    if (existsSync(configPath)) {
+      try { config = JSON.parse(readFileSync(configPath, "utf-8")); } catch {}
+    }
+    config.project = projectArg;
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log(`  + Set project: "${projectArg}" in .gitmem/config.json`);
+    console.log("");
   }
 
   // Pro/Dev tier: load into Supabase via REST API

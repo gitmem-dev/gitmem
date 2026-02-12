@@ -86,6 +86,27 @@ export function getSessionPath(sessionId: string, filename: string): string {
 }
 
 /**
+ * Read the "project" field from .gitmem/config.json.
+ * Returns null if the file doesn't exist or has no project field.
+ *
+ * Precedence (handled by callers): explicit param > config.json > "default"
+ */
+export function getConfigProject(): string | null {
+  try {
+    const configPath = path.join(getGitmemDir(), "config.json");
+    if (fs.existsSync(configPath)) {
+      const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (raw.project && typeof raw.project === "string") {
+        return raw.project;
+      }
+    }
+  } catch {
+    // File doesn't exist or is invalid — fall through
+  }
+  return null;
+}
+
+/**
  * Clear the cached path (for testing)
  */
 export function clearGitmemDirCache(): void {

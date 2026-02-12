@@ -13,6 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { writeTriplesForDecision } from "../services/triple-writer.js";
+import { getEffectTracker } from "../services/effect-tracker.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { getProject } from "../services/session-state.js";
@@ -89,21 +90,21 @@ export async function createDecision(
         network_call: true,
       };
 
-      // OD-466: Auto-create knowledge triples (fire-and-forget)
-      writeTriplesForDecision({
-        id: decisionId,
-        title: params.title,
-        decision: params.decision,
-        rationale: params.rationale,
-        personas_involved: params.personas_involved,
-        docs_affected: params.docs_affected,
-        linear_issue: params.linear_issue,
-        session_id: params.session_id,
-        project: (params.project || getProject() || "default"),
-        agent: getAgentIdentity(),
-      }).catch((err) => {
-        console.warn("[create_decision] Triple generation failed (non-fatal):", err);
-      });
+      // OD-466: Auto-create knowledge triples (tracked fire-and-forget)
+      getEffectTracker().track("triple_write", "decision", () =>
+        writeTriplesForDecision({
+          id: decisionId,
+          title: params.title,
+          decision: params.decision,
+          rationale: params.rationale,
+          personas_involved: params.personas_involved,
+          docs_affected: params.docs_affected,
+          linear_issue: params.linear_issue,
+          session_id: params.session_id,
+          project: (params.project || getProject() || "default"),
+          agent: getAgentIdentity(),
+        })
+      );
     } else {
       // Free tier: Store locally without embedding
       const upsertStart = Date.now();

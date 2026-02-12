@@ -133,10 +133,30 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     #
     # NOTE: ToolSearch (tengu_mcp_tool_search) was removed. MCP tools load
     # eagerly now — no deferral step needed. Just call session_start directly.
-    cat <<'HOOK_MSG'
+    #
+    # Read project from .gitmem/config.json if available.
+    # Fallback: let session_start default (reads config.json server-side too).
+    GITMEM_PROJECT=""
+    if [ -f ".gitmem/config.json" ] && command -v jq &>/dev/null; then
+        GITMEM_PROJECT=$(jq -r '.project // empty' .gitmem/config.json 2>/dev/null || true)
+    fi
+
+    if [ -n "$GITMEM_PROJECT" ]; then
+        echo "[$(date)] Project from config: ${GITMEM_PROJECT}" >> "$PLUGIN_LOG"
+        cat <<HOOK_MSG
+SESSION START — ACTIVE
+
+Call mcp__gitmem__session_start(project: "${GITMEM_PROJECT}") as your FIRST tool call.
+HOOK_MSG
+    else
+        cat <<'HOOK_MSG'
 SESSION START — ACTIVE
 
 Call mcp__gitmem__session_start() as your FIRST tool call.
+HOOK_MSG
+    fi
+
+    cat <<'HOOK_MSG2'
 
 IMPORTANT:
 - Do NOT respond to the user until session_start completes.
@@ -177,7 +197,7 @@ Run the standard closing ceremony:
 4. CALL session_close with session_id and close_type: "standard"
 
 For short exploratory sessions (< 30 min, no real work), use close_type: "quick" — no questions needed.
-HOOK_MSG
+HOOK_MSG2
 else
     echo "[$(date)] Gitmem NOT detected (checked: project .mcp.json, mcp-config, ~/.claude.json, disk)" >> "$PLUGIN_LOG"
     echo "GITMEM PLUGIN: GitMem MCP server not detected. Session lifecycle hooks are inactive. To enable, ensure gitmem is configured via --mcp-config, project .mcp.json, or set GITMEM_ENABLED=true."

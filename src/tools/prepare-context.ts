@@ -29,6 +29,15 @@ import {
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
+import {
+  estimateTokens,
+  formatCompact,
+  formatGate,
+  SEVERITY_EMOJI,
+  SEVERITY_LABEL,
+  SEVERITY_ORDER,
+} from "../hooks/format-utils.js";
+import type { FormattableScar } from "../hooks/format-utils.js";
 
 // --- Types ---
 
@@ -53,131 +62,7 @@ export interface PrepareContextResult {
 
 // --- Raw scar type (includes required_verification from Supabase) ---
 
-interface RawScarRecord {
-  id: string;
-  title: string;
-  description: string;
-  severity: string;
-  counter_arguments?: string[];
-  source_linear_issue?: string;
-  similarity?: number;
-  required_verification?: {
-    when: string;
-    queries: string[];
-    must_show: string;
-    blocking?: boolean;
-  };
-  why_this_matters?: string;
-  action_protocol?: string[];
-  self_check_criteria?: string[];
-}
-
-// --- Token Estimation ---
-
-/**
- * Estimate tokens from a string.
- * Rough heuristic: ~4 characters per token for English text.
- */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-// --- Severity Helpers ---
-
-const SEVERITY_EMOJI: Record<string, string> = {
-  critical: "🔴",
-  high: "🟠",
-  medium: "🟡",
-  low: "🟢",
-};
-
-const SEVERITY_LABEL: Record<string, string> = {
-  critical: "CRITICAL",
-  high: "HIGH",
-  medium: "MEDIUM",
-  low: "LOW",
-};
-
-const SEVERITY_ORDER: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
-// --- Formatters ---
-
-/**
- * Format scars in compact mode.
- * One line per scar: emoji LABEL: Title — first sentence of description.
- * Sorted by severity (critical first). Truncated to token budget.
- */
-function formatCompact(
-  scars: RawScarRecord[],
-  plan: string,
-  maxTokens: number
-): { payload: string; included: number } {
-  const sorted = [...scars].sort(
-    (a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
-  );
-
-  const header = `[INSTITUTIONAL MEMORY — ${sorted.length} scars for: "${plan.slice(0, 60)}"]`;
-  const lines: string[] = [header];
-  let included = 0;
-
-  for (const scar of sorted) {
-    const emoji = SEVERITY_EMOJI[scar.severity] || "⚪";
-    const label = SEVERITY_LABEL[scar.severity] || "UNKNOWN";
-    const firstSentence = scar.description.split(/\.\s/)[0].slice(0, 120);
-    const line = `${emoji} ${label}: ${scar.title} — ${firstSentence}`;
-
-    // Check token budget before adding (always include at least one)
-    const candidate = [...lines, line].join("\n");
-    if (estimateTokens(candidate) > maxTokens && included > 0) {
-      break;
-    }
-
-    lines.push(line);
-    included++;
-  }
-
-  return { payload: lines.join("\n"), included };
-}
-
-/**
- * Format scars in gate mode.
- * Only blocking scars (required_verification.blocking === true).
- * Returns PASS if none found.
- */
-function formatGate(scars: RawScarRecord[]): { payload: string; blocking: number } {
-  const blockingScars = scars.filter(
-    (s) => s.required_verification?.blocking === true
-  );
-
-  if (blockingScars.length === 0) {
-    return {
-      payload: "[MEMORY GATE: PASS — no blocking scars]",
-      blocking: 0,
-    };
-  }
-
-  const lines: string[] = [
-    `[MEMORY GATE: ${blockingScars.length} blocking scar${blockingScars.length === 1 ? "" : "s"}]`,
-  ];
-
-  for (const scar of blockingScars) {
-    const rv = scar.required_verification!;
-    lines.push(`🚨 BLOCK: ${rv.when}`);
-    if (rv.queries && rv.queries.length > 0) {
-      for (const query of rv.queries) {
-        lines.push(`  RUN: ${query}`);
-      }
-    }
-    lines.push(`MUST SHOW: ${rv.must_show}`);
-  }
-
-  return { payload: lines.join("\n"), blocking: blockingScars.length };
-}
+type RawScarRecord = FormattableScar;
 
 /**
  * Format scars in full mode.

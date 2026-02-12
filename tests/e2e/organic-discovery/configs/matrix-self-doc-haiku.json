@@ -1,0 +1,51 @@
+{
+  "description": "Self-Documentation Nudge Probe — v4 nudge with explicit MEMORY.md mention, haiku (OD-658)",
+  "model": "haiku",
+  "runs_per_config": 3,
+  "configs": [
+    {
+      "id": "D1",
+      "nudge": "v4",
+      "hooks": "h0",
+      "starting_state": "s0",
+      "description": "Self-doc nudge, no hooks"
+    },
+    {
+      "id": "D2",
+      "nudge": "v4",
+      "hooks": "h1",
+      "starting_state": "s0",
+      "description": "Self-doc nudge, session-start hook"
+    },
+    {
+      "id": "D3",
+      "nudge": "v4",
+      "hooks": "h2",
+      "starting_state": "s0",
+      "description": "Self-doc nudge, full hooks"
+    }
+  ],
+  "sessions": [
+    {
+      "number": 1,
+      "type": "onboarding",
+      "max_turns": 15,
+      "prompt_source": "nudge",
+      "description": "Deliver the v4 nudge. Agent discovers gitmem and may update MEMORY.md."
+    },
+    {
+      "number": 2,
+      "type": "real_task",
+      "max_turns": 10,
+      "prompt": "Fix the off-by-one error in src/utils.ts. The calculateTotal function skips the last item.",
+      "description": "Real task with no mention of gitmem. Tests persistence."
+    },
+    {
+      "number": 3,
+      "type": "real_task",
+      "max_turns": 10,
+      "prompt": "Add input validation to the parseConfig function in src/utils.ts. It should reject null/undefined input and non-object types.",
+      "description": "Second real task. Tests sustained adoption."
+    }
+  ]
+}

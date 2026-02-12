@@ -123,7 +123,8 @@ const CONFIGS_DIR = join(__dirname, "configs");
 const RESULTS_DIR = join(__dirname, "results");
 
 function loadMatrix(): Matrix {
-  return JSON.parse(readFileSync(join(CONFIGS_DIR, "matrix.json"), "utf-8"));
+  const matrixFile = process.env.DISCOVERY_MATRIX ?? "matrix.json";
+  return JSON.parse(readFileSync(join(CONFIGS_DIR, matrixFile), "utf-8"));
 }
 
 function loadNudge(version: string): string {
@@ -136,6 +137,7 @@ function nudgeName(version: string): string {
     v1: "minimal",
     v2: "exploratory",
     v3: "objective",
+    v4: "self-doc",
   };
   return names[version] || "control";
 }
@@ -395,7 +397,7 @@ async function runConfigChain(
         cwd: testDir,
         maxTurns: sessionDef.max_turns,
         model: matrix.model,
-        maxBudgetUsd: 0.50,
+        maxBudgetUsd: matrix.model === "haiku" ? 0.50 : 2.00,
       });
 
       const memoryMdAfter = existsSync(memoryMdPath)

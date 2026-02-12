@@ -13,6 +13,8 @@
  * Issue: OD-473
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import { isConfigured, loadScarsWithEmbeddings } from "./supabase-client.js";
 import {
   initializeLocalSearch,
@@ -31,6 +33,44 @@ const startupCompleted: Map<string, boolean> = new Map();
 const startupPromises: Map<string, Promise<void>> = new Map();
 let backgroundRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Persist scars to disk for hook process consumption.
+ *
+ * Hook processes (e.g., auto-retrieve-hook.sh → quick-retrieve.js) run as
+ * separate child processes without the MCP server's env vars or in-memory
+ * cache. This writes a stripped-down scar file (no embeddings) that hook
+ * processes can read for keyword search.
+ */
+function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
+  try {
+    const gitmemDir = path.join(process.cwd(), ".gitmem", "cache");
+    if (!fs.existsSync(gitmemDir)) {
+      fs.mkdirSync(gitmemDir, { recursive: true });
+    }
+
+    // Strip embeddings (large) — hooks only need searchable fields
+    const stripped = scars.map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      severity: s.severity,
+      counter_arguments: s.counter_arguments,
+      project: s.project,
+      keywords: s.keywords,
+      why_this_matters: s.why_this_matters,
+      action_protocol: s.action_protocol,
+      self_check_criteria: s.self_check_criteria,
+    }));
+
+    const cachePath = path.join(gitmemDir, "hook-scars.json");
+    fs.writeFileSync(cachePath, JSON.stringify(stripped));
+    console.error(`[startup] Persisted ${stripped.length} scars to ${cachePath} for hook processes`);
+  } catch (error) {
+    // Non-fatal — hooks will just return nothing
+    console.error("[startup] Failed to persist scars for hooks:", error);
+  }
+}
+
 // Scar record from database (with embedding)
 interface ScarWithEmbedding {
   id: string;
@@ -41,6 +81,11 @@ interface ScarWithEmbedding {
   project?: string;
   embedding?: number[];
   updated_at?: string;
+  keywords?: string[];
+  why_this_matters?: string;
+  action_protocol?: string[];
+  self_check_criteria?: string[];
+  [key: string]: unknown;
 }
 
 /**
@@ -163,6 +208,9 @@ export async function initializeGitMem(project: Project = "default"): Promise<{
 
     // Initialize local vector search
     await initializeLocalSearch(scars, project, latestUpdatedAt || undefined);
+
+    // Persist scars to disk for hook processes (no embeddings)
+    persistScarsForHooks(scars);
 
     const elapsed = Date.now() - startTime;
     const scarCount = getLocalVectorSearch(project).getScarCount();
@@ -419,6 +467,9 @@ export async function flushCache(project: Project = "default"): Promise<CacheFlu
 
     // Reinitialize the index
     await reinitializeLocalSearch(scars, project, latestUpdatedAt || undefined);
+
+    // Update disk cache for hook processes too
+    persistScarsForHooks(scars);
 
     const newCount = getLocalVectorSearch(project).getScarCount();
     const elapsed = Date.now() - startTime;

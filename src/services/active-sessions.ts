@@ -22,6 +22,7 @@ import { withLockSync } from "./file-lock.js";
 const REGISTRY_FILENAME = "active-sessions.json";
 const LOCK_FILENAME = "active-sessions.lock";
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const ADOPT_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours — adopt dead-PID sessions if recent
 
 // --- Atomic write utility ---
 
@@ -102,7 +103,11 @@ function writeRegistry(registry: ActiveSessionsRegistry): void {
 export function registerSession(entry: ActiveSessionEntry): void {
   withLockSync(getLockPath(), () => {
     const registry = readRegistry();
-    registry.sessions = registry.sessions.filter((s) => s.session_id !== entry.session_id);
+    // Remove by session_id AND by hostname+pid to prevent duplicates
+    registry.sessions = registry.sessions.filter((s) =>
+      s.session_id !== entry.session_id &&
+      !(s.hostname === entry.hostname && s.pid === entry.pid)
+    );
     registry.sessions.push(entry);
     writeRegistry(registry);
   });
@@ -178,8 +183,10 @@ export function pruneStale(): number {
     const registry = readRegistry();
     const now = Date.now();
     const currentHostname = os.hostname();
+    const currentPid = process.pid;
     const before = registry.sessions.length;
     const gitmemDir = getGitmemDir();
+    let adopted = false;
 
     registry.sessions = registry.sessions.filter((entry) => {
       // GIT-22: Check for orphaned registry entry (session file missing)
@@ -212,6 +219,17 @@ export function pruneStale(): number {
         try {
           process.kill(entry.pid, 0); // Signal 0 = check existence only
         } catch {
+          // PID is dead. If session is recent, adopt it into the current process
+          // instead of pruning. This handles MCP server restarts during context
+          // compaction where the hostname stays the same but the PID changes.
+          if (age < ADOPT_THRESHOLD_MS) {
+            console.error(
+              `[active-sessions] Adopting orphaned session ${entry.session_id.slice(0, 8)} (dead pid ${entry.pid} → ${currentPid})`
+            );
+            entry.pid = currentPid;
+            adopted = true;
+            return true; // Keep in registry with updated PID
+          }
           console.error(
             `[active-sessions] Pruning dead session ${entry.session_id.slice(0, 8)} (pid ${entry.pid} no longer running)`
           );
@@ -224,9 +242,11 @@ export function pruneStale(): number {
     });
 
     const pruned = before - registry.sessions.length;
-    if (pruned > 0) {
+    if (pruned > 0 || adopted) {
       writeRegistry(registry);
-      console.error(`[active-sessions] Pruned ${pruned} stale session(s)`);
+      if (pruned > 0) {
+        console.error(`[active-sessions] Pruned ${pruned} stale session(s)`);
+      }
     }
 
     // GIT-22: Clean up orphaned session directories (dir exists but no registry entry)

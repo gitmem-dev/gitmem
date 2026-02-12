@@ -135,9 +135,10 @@ describe("listActiveSessions", () => {
   });
 
   it("returns all registered sessions", () => {
-    registerSession(makeEntry({ session_id: "11111111-1111-1111-1111-111111111111" }));
-    registerSession(makeEntry({ session_id: "22222222-2222-2222-2222-222222222222" }));
-    registerSession(makeEntry({ session_id: "33333333-3333-3333-3333-333333333333" }));
+    // Use different hostname+pid combos to avoid dedup
+    registerSession(makeEntry({ session_id: "11111111-1111-1111-1111-111111111111", hostname: "host-a", pid: 100 }));
+    registerSession(makeEntry({ session_id: "22222222-2222-2222-2222-222222222222", hostname: "host-b", pid: 200 }));
+    registerSession(makeEntry({ session_id: "33333333-3333-3333-3333-333333333333", hostname: "host-c", pid: 300 }));
 
     expect(listActiveSessions()).toHaveLength(3);
   });
@@ -227,15 +228,36 @@ describe("pruneStale", () => {
     expect(sessions[0].session_id).toBe(fresh.session_id);
   });
 
-  it("removes sessions with dead PIDs on same host", () => {
+  it("adopts recent sessions with dead PIDs on same host (MCP server restart)", () => {
     const dead = makeEntry({
       session_id: "11111111-1111-1111-1111-111111111111",
       hostname: os.hostname(),
       pid: 99999999, // very unlikely to be a real PID
+      started_at: new Date().toISOString(), // recent — should be adopted
     });
 
     registerSession(dead);
     createSessionFile(dead.session_id); // file exists but PID is dead
+
+    const pruned = pruneStale();
+    expect(pruned).toBe(0); // adopted, not pruned
+
+    const sessions = listActiveSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe(dead.session_id);
+    expect(sessions[0].pid).toBe(process.pid); // PID updated to current process
+  });
+
+  it("prunes old sessions with dead PIDs on same host", () => {
+    const oldDead = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: 99999999, // very unlikely to be a real PID
+      started_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3h ago — past adopt threshold
+    });
+
+    registerSession(oldDead);
+    createSessionFile(oldDead.session_id);
 
     const pruned = pruneStale();
     expect(pruned).toBe(1);

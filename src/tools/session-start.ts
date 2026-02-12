@@ -34,7 +34,7 @@ import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates }
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js"; // OD-623, Phase 6
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
-import { setGitmemDir, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
+import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
@@ -428,7 +428,7 @@ async function sessionStartFree(
   // writeSessionFiles merges with existing file threads to preserve mid-session creations
   let freeMergedThreads = freeAggregatedThreads;
   try {
-    freeMergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads);
+    freeMergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads, undefined, false, false, isResuming ? existingStartedAt : undefined);
   } catch (error) {
     console.warn("[session_start] Failed to persist session files:", error);
   }
@@ -573,6 +573,7 @@ function writeSessionFiles(
   recordingPath?: string | null,
   isRefresh?: boolean,
   supabaseAuthoritative?: boolean,
+  startedAt?: Date,
 ): ThreadObject[] {
   const gitmemDir = path.join(process.cwd(), ".gitmem");
   if (!fs.existsSync(gitmemDir)) {
@@ -580,10 +581,25 @@ function writeSessionFiles(
   }
   setGitmemDir(gitmemDir);
 
+  // Preserve original started_at on resume/refresh to keep duration accurate
+  let effectiveStartedAt = startedAt?.toISOString() || new Date().toISOString();
+  if (isRefresh || startedAt) {
+    // On refresh or resume, try to read the existing started_at from the session file
+    try {
+      const existingPath = getSessionPath(sessionId, "session.json");
+      if (fs.existsSync(existingPath)) {
+        const existing = JSON.parse(fs.readFileSync(existingPath, "utf-8"));
+        if (existing.started_at) {
+          effectiveStartedAt = existing.started_at;
+        }
+      }
+    } catch { /* use calculated value */ }
+  }
+
   const data = {
     session_id: sessionId,
     agent,
-    started_at: new Date().toISOString(),
+    started_at: effectiveStartedAt,
     project,
     hostname: os.hostname(),
     pid: process.pid,
@@ -751,7 +767,7 @@ export async function sessionStart(
   // 1. Detect agent (or use provided)
   const env = detectAgent();
   const agent = params.agent_identity || env.agent;
-  const project: Project = params.project || "default";
+  const project: Project = params.project || getConfigProject() || "default";
 
   // OD-558: Check for existing active session — reuse session_id but still load full context
   const existingSession = checkExistingSession(agent, params.force);
@@ -839,7 +855,7 @@ export async function sessionStart(
   // feedback loop accumulation of resolved threads.
   let mergedThreads = aggregatedThreads;
   try {
-    mergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath, false, lastSessionResult.threadsFromSupabase);
+    mergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, aggregatedThreads, recordingPath, false, lastSessionResult.threadsFromSupabase, isResuming ? (existingSession?.startedAt || undefined) : undefined);
   } catch (error) {
     console.warn("[session_start] Failed to persist session files:", error);
   }

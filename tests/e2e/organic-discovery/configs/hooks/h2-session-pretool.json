@@ -1,0 +1,27 @@
+{
+  "description": "SessionStart + PreToolUse hooks — auto-session-start plus recall reminders before edits",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'SESSION START — Call mcp__gitmem__session_start as your first tool call.'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'REMINDER: Have you checked gitmem recall for relevant lessons before making this change?'"
+          }
+        ]
+      }
+    ]
+  }
+}

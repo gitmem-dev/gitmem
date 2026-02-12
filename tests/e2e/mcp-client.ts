@@ -261,14 +261,14 @@ export const PRO_TOOLS = [
  *   TRANSCRIPT_TOOL_NAMES (dev): 4
  *   graph_traverse (pro+):     3
  *
- *   free = 70 - 6 - 3 - 2 - 4 - 3 = 52
- *   pro  = 70 - 2 - 4              = 64
- *   dev  = 70
+ *   free = 73 - 6 - 3 - 2 - 4 - 3 = 55
+ *   pro  = 73 - 2 - 4              = 67
+ *   dev  = 73
  *
  * If these numbers change, a tool was added/removed from definitions.ts.
  */
 export const EXPECTED_TOOL_COUNTS = {
-  free: 52,
-  pro: 64,
-  dev: 70,
+  free: 55,
+  pro: 67,
+  dev: 73,
 } as const;

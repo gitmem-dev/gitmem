@@ -1,0 +1,3 @@
+# Results are generated per-run, not committed
+results/*.json
+!results/.gitkeep

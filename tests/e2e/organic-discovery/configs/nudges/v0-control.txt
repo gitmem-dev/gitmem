@@ -1,0 +1,1 @@
+Fix the off-by-one error in the calculateTotal function in src/utils.ts. The function should sum items from index 0 to length-1 but currently skips the last item.

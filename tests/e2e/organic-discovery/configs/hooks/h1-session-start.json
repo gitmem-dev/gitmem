@@ -1,0 +1,16 @@
+{
+  "description": "SessionStart hook only — auto-triggers session_start call reminder",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'SESSION START — Call mcp__gitmem__session_start as your first tool call.'"
+          }
+        ]
+      }
+    ]
+  }
+}

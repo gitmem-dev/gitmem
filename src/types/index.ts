@@ -186,6 +186,8 @@ export interface SessionStartResult {
   suggested_threads?: ThreadSuggestion[];
   relevant_scars?: RelevantScar[];
   recent_decisions?: RecentDecision[];
+  /** OD-666: Cross-agent rapport summaries from recent sessions */
+  rapport_summaries?: { agent: string; summary: string; date: string }[];
   recent_wins?: RecentWin[];
   performance?: PerformanceData;
   /** OD-558: Whether this session was resumed from an existing active session */
@@ -216,6 +218,10 @@ export interface ClosingReflection {
   scars_applied: string[];
   /** Q7: What from this session should be captured as institutional memory? */
   institutional_memory_items?: string;
+  /** Q8: How did the human prefer to work this session? */
+  collaborative_dynamic?: string;
+  /** Q9: What collaborative dynamic worked or didn't work? */
+  rapport_notes?: string;
 }
 
 /**

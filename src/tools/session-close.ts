@@ -645,6 +645,14 @@ export async function sessionClose(
       reflection.human_additions = params.human_corrections;
     }
     sessionData.closing_reflection = reflection;
+
+    // OD-666: Distill Q8+Q9 into rapport_summary for cross-agent surfacing
+    const q8 = params.closing_reflection.collaborative_dynamic;
+    const q9 = params.closing_reflection.rapport_notes;
+    if (q8 || q9) {
+      const parts = [q8, q9].filter(Boolean);
+      sessionData.rapport_summary = parts.join(" | ");
+    }
   }
 
   // Add decisions if provided

@@ -58,6 +58,8 @@ interface SessionRecord {
   decisions?: (string | { title: string; decision?: string })[];
   open_threads?: (string | ThreadObject)[];
   close_compliance?: Record<string, unknown> | null;
+  // OD-666: Rapport summary from Q8+Q9
+  rapport_summary?: string | null;
   // From lite view (counts only)
   decision_count?: number;
   open_thread_count?: number;
@@ -201,6 +203,41 @@ async function loadLastSession(
 }
 
 // OD-645: queryRelevantScars removed — scars load on-demand via recall()
+
+/**
+ * OD-666: Load recent rapport summaries across all agents for this project.
+ * Returns up to 3 most recent sessions that have a non-null rapport_summary.
+ * Cross-agent by design: CLI session rapport visible to DAC's next session.
+ */
+async function loadRecentRapport(
+  project: Project
+): Promise<{ agent: string; summary: string; date: string }[]> {
+  try {
+    const sessions = await supabase.listRecords<{
+      agent: string;
+      rapport_summary: string | null;
+      created_at: string;
+    }>({
+      table: "orchestra_sessions_lite",
+      columns: "agent,rapport_summary,created_at",
+      filters: { project },
+      limit: 20, // Fetch more to find ones with rapport
+      orderBy: { column: "created_at", ascending: false },
+    });
+
+    return sessions
+      .filter((s) => s.rapport_summary)
+      .slice(0, 3)
+      .map((s) => ({
+        agent: s.agent,
+        summary: s.rapport_summary!,
+        date: formatDate(s.created_at),
+      }));
+  } catch (error) {
+    console.error("[session_start] Failed to load rapport summaries:", error);
+    return [];
+  }
+}
 
 /**
  * Load recent decisions with caching (OD-473)
@@ -722,6 +759,17 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
     }
   }
 
+  // OD-666: Rapport section — cross-agent working style preferences
+  const hasRapport = result.rapport_summaries && result.rapport_summaries.length > 0;
+  if (hasRapport) {
+    visual.push("");
+    visual.push(`\x1b[1mRapport\x1b[0m`);
+    for (const r of result.rapport_summaries!) {
+      const summary = r.summary.length > 60 ? r.summary.slice(0, 57) + "..." : r.summary;
+      visual.push(`  ${r.agent}: ${summary}`);
+    }
+  }
+
   // Footer
   if (!hasThreads && !hasDecisions) {
     visual.push("");
@@ -778,11 +826,12 @@ export async function sessionStart(
     return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt);
   }
 
-  // 2. OD-645: Load last session + decisions in parallel (was sequential)
+  // 2. OD-645: Load last session + decisions + rapport in parallel (was sequential)
   // Scars and wins removed from pipeline — load on-demand via recall/search
-  const [lastSessionResult, decisionsResult] = await Promise.all([
+  const [lastSessionResult, decisionsResult, rapportSummaries] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
+    loadRecentRapport(project), // OD-666: cross-agent rapport
   ]);
 
   const lastSession = lastSessionResult.session;
@@ -889,6 +938,8 @@ export async function sessionStart(
     }),
     // OD-645: scars, wins, suggested_threads removed from start result
     recent_decisions: decisions,
+    // OD-666: Cross-agent rapport summaries
+    ...(rapportSummaries.length > 0 && { rapport_summaries: rapportSummaries }),
     ...(recordingPath && { recording_path: recordingPath }),
     gitmem_dir: getGitmemDir(),
     project,
@@ -1002,11 +1053,12 @@ export async function sessionRefresh(
     };
   }
 
-  // 2. OD-645: Load last session + decisions in parallel (same as session_start)
+  // 2. OD-645: Load last session + decisions + rapport in parallel (same as session_start)
   // Scars and wins removed — load on-demand via recall/search
-  const [lastSessionResult, decisionsResult] = await Promise.all([
+  const [lastSessionResult, decisionsResult, refreshRapport] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
+    loadRecentRapport(project), // OD-666
   ]);
 
   const lastSession = lastSessionResult.session;
@@ -1057,6 +1109,8 @@ export async function sessionRefresh(
     ...(projectState && { project_state: projectState }),
     // open_threads filled after merge below
     recent_decisions: decisions,
+    // OD-666: Cross-agent rapport summaries
+    ...(refreshRapport.length > 0 && { rapport_summaries: refreshRapport }),
     ...(recordingPath && { recording_path: recordingPath }),
     project,
     performance,

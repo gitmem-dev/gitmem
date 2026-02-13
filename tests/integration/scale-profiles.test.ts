@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { randomUUID } from "crypto";
 import { pgClient, truncateAllTables, formatVector } from "./setup.js";
 import {
   seedScaleProfile,
@@ -304,7 +305,7 @@ describe("Scale Profiles", () => {
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, project, embedding)
          VALUES ($1, $2, $3, $4, $5, $6::vector)`,
-        ["baseline-insert", "Baseline", "Test", "scar", "baseline", formatVector(embedding)]
+        [randomUUID(), "Baseline", "Test", "scar", "baseline", formatVector(embedding)]
       );
       const elapsed = Date.now() - startTime;
 

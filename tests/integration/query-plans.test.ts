@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll } from "vitest";
+import { randomUUID } from "crypto";
 import { pgClient, truncateAllTables, analyzeQueryPlan, indexExists, formatVector } from "./setup.js";
 import { seedScaleProfile, generateRandomVector } from "../fixtures/scale-seed.js";
 
@@ -185,7 +186,7 @@ describe("Query Plans", () => {
   describe("scar usage tracking performance", () => {
     it("uses index for scar usage lookup", async () => {
       // First insert some usage records
-      const scarId = "test-scar-for-usage";
+      const scarId = randomUUID();
       const embedding = generateRandomVector();
 
       await pgClient.query(
@@ -199,7 +200,7 @@ describe("Query Plans", () => {
         await pgClient.query(
           `INSERT INTO gitmem_scar_usage (id, scar_id, agent, reference_type, surfaced_at)
            VALUES ($1, $2, $3, $4, $5)`,
-          [`usage-${i}`, scarId, "CLI", "acknowledged", new Date().toISOString()]
+          [randomUUID(), scarId, "CLI", "acknowledged", new Date().toISOString()]
         );
       }
 

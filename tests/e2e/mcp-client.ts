@@ -241,13 +241,22 @@ export const CORE_TOOLS = [
 ];
 
 /**
- * Pro/Dev only tools
+ * Pro tier tools (available in pro and dev)
  */
 export const PRO_TOOLS = [
+  "analyze",
+  "gitmem-cache-status",
+  "gitmem-cache-health",
+  "gitmem-cache-flush",
+];
+
+/**
+ * Dev-only tools (not available in pro)
+ */
+export const DEV_TOOLS = [
   "record_scar_usage_batch",
   "save_transcript",
   "get_transcript",
-  "analyze",
 ];
 
 /**

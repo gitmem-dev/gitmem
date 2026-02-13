@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { randomUUID } from "crypto";
 import { pgClient, truncateAllTables, formatVector } from "./setup.js";
 import { generateRandomVector } from "../fixtures/scale-seed.js";
 import { mkdirSync, rmSync, existsSync, readdirSync, readFileSync } from "fs";
@@ -42,10 +43,11 @@ describe("Cache Behavior", () => {
   describe("cache file operations", () => {
     it("creates cache file on first query", async () => {
       // Seed a decision
+      const testId = randomUUID();
       await pgClient.query(
         `INSERT INTO gitmem_decisions (id, title, decision, rationale, project)
          VALUES ($1, $2, $3, $4, $5)`,
-        ["cache-test-1", "Cache Test Decision", "Test caching", "Verify cache works", "gitmem_test"]
+        [testId, "Cache Test Decision", "Test caching", "Verify cache works", "gitmem_test"]
       );
 
       // Simulate cache write (as CacheService would do)
@@ -54,7 +56,7 @@ describe("Cache Behavior", () => {
         key: cacheKey,
         created_at: Date.now(),
         expires_at: Date.now() + 5 * 60 * 1000, // 5 min TTL
-        data: [{ id: "cache-test-1", title: "Cache Test Decision" }],
+        data: [{ id: testId, title: "Cache Test Decision" }],
       };
 
       const cacheFile = join(TEST_CACHE_DIR, "results", `${cacheKey.replace(/:/g, "_")}.json`);
@@ -179,11 +181,12 @@ describe("Cache Behavior", () => {
   describe("cache with real database", () => {
     it("caches query results", async () => {
       // Seed database
+      const testId = randomUUID();
       const embedding = generateRandomVector();
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, project, embedding)
          VALUES ($1, $2, $3, $4, $5, $6::vector)`,
-        ["db-cache-test", "DB Cache Test", "Testing cache", "win", "gitmem_test", formatVector(embedding)]
+        [testId, "DB Cache Test", "Testing cache", "win", "gitmem_test", formatVector(embedding)]
       );
 
       // Query database
@@ -214,11 +217,12 @@ describe("Cache Behavior", () => {
 
     it("re-fetches after cache expiration", async () => {
       // Seed initial data
+      const testId = randomUUID();
       const embedding = generateRandomVector();
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, project, embedding)
          VALUES ($1, $2, $3, $4, $5, $6::vector)`,
-        ["expire-test", "Original Title", "Testing", "win", "gitmem_test", formatVector(embedding)]
+        [testId, "Original Title", "Testing", "win", "gitmem_test", formatVector(embedding)]
       );
 
       // Create expired cache
@@ -226,7 +230,7 @@ describe("Cache Behavior", () => {
         key: "wins:gitmem_test:8",
         created_at: Date.now() - 10 * 60 * 1000,
         expires_at: Date.now() - 5 * 60 * 1000, // Expired
-        data: [{ id: "expire-test", title: "Stale Title" }],
+        data: [{ id: testId, title: "Stale Title" }],
       };
 
       const fs = await import("fs");
@@ -241,7 +245,7 @@ describe("Cache Behavior", () => {
         // Fetch fresh from DB
         const freshResult = await pgClient.query(
           `SELECT id, title FROM gitmem_learnings WHERE id = $1`,
-          ["expire-test"]
+          [testId]
         );
 
         // Update cache
@@ -270,7 +274,7 @@ describe("Cache Behavior", () => {
           `INSERT INTO gitmem_learnings (id, title, description, learning_type, severity, project, embedding)
            VALUES ($1, $2, $3, $4, $5, $6, $7::vector)`,
           [
-            `search-test-${i}`,
+            randomUUID(),
             `Search Test Scar ${i}`,
             `Description for scar ${i}`,
             "scar",

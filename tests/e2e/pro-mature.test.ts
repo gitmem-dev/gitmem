@@ -56,6 +56,14 @@ describe.skipIf(!DOCKER_AVAILABLE)("Pro Tier - Mature System E2E", () => {
     });
     await pgClient.connect();
 
+    // Stub Supabase auth.role() — plain Postgres doesn't have the auth schema
+    await pgClient.query(`
+      CREATE SCHEMA IF NOT EXISTS auth;
+      CREATE OR REPLACE FUNCTION auth.role() RETURNS TEXT AS $$
+        SELECT 'service_role'::TEXT;
+      $$ LANGUAGE sql;
+    `);
+
     // Load schema
     const schemaPath = join(__dirname, "../../schema/setup.sql");
     const schema = readFileSync(schemaPath, "utf-8");
@@ -137,7 +145,7 @@ describe.skipIf(!DOCKER_AVAILABLE)("Pro Tier - Mature System E2E", () => {
       const startTime = Date.now();
 
       const result = await callTool(mcpClient.client, "session_start", {
-        agent: "CLI",
+        agent_identity: "CLI",
         project: "gitmem_test",
       });
 

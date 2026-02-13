@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { randomUUID } from "crypto";
 import { pgClient, truncateAllTables, generateRandomVector, formatVector } from "./setup.js";
 import { createTestSession, createMinimalSession } from "../fixtures/sessions.js";
 import { SCAR_DEPLOYMENT_VERIFICATION } from "../fixtures/scars.js";
@@ -72,12 +73,13 @@ describe("Session Lifecycle", () => {
 
     it("loads recent wins for session context", async () => {
       // Seed a win
+      const testWinId = randomUUID();
       const embedding = generateRandomVector();
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, project, embedding)
          VALUES ($1, $2, $3, $4, $5, $6::vector)`,
         [
-          "test-win-id",
+          testWinId,
           "Test Win",
           "A successful pattern",
           "win",
@@ -182,7 +184,7 @@ describe("Session Lifecycle", () => {
       );
 
       // 2. Create a scar during session
-      const scar = { ...SCAR_DEPLOYMENT_VERIFICATION, id: "lifecycle-test-scar" };
+      const scar = { ...SCAR_DEPLOYMENT_VERIFICATION, id: randomUUID() };
       const embedding = generateRandomVector();
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, severity, counter_arguments, project, embedding)
@@ -256,7 +258,7 @@ describe("Session Lifecycle", () => {
         [session.id, session.session_title, session.agent, session.project]
       );
 
-      const scar = { ...SCAR_DEPLOYMENT_VERIFICATION, id: "usage-test-scar" };
+      const scar = { ...SCAR_DEPLOYMENT_VERIFICATION, id: randomUUID() };
       const embedding = generateRandomVector();
       await pgClient.query(
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, severity, project, embedding)
@@ -269,7 +271,7 @@ describe("Session Lifecycle", () => {
         `INSERT INTO gitmem_scar_usage (id, scar_id, session_id, agent, reference_type, reference_context, surfaced_at, execution_successful)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
-          "usage-record-1",
+          randomUUID(),
           scar.id,
           session.id,
           "CLI",

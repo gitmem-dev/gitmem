@@ -79,6 +79,14 @@ beforeAll(async () => {
   });
   await pgClient.connect();
 
+  // Stub Supabase auth.role() — plain Postgres doesn't have the auth schema
+  await pgClient.query(`
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE OR REPLACE FUNCTION auth.role() RETURNS TEXT AS $$
+      SELECT 'service_role'::TEXT;
+    $$ LANGUAGE sql;
+  `);
+
   // Load and execute schema
   const schemaPath = join(__dirname, "../../schema/setup.sql");
   const schema = readFileSync(schemaPath, "utf-8");

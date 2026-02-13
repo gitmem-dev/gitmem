@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { randomUUID } from "crypto";
 import { pgClient, truncateAllTables, formatVector, generateRandomVector } from "./setup.js";
 import { getStarterScarsForProject, STARTER_SCARS } from "../fixtures/starter-scars.js";
 
@@ -59,7 +60,7 @@ describe("Fresh Install", () => {
     });
 
     it("can create first session in empty database", async () => {
-      const sessionId = "first-session";
+      const sessionId = randomUUID();
 
       await pgClient.query(
         `INSERT INTO gitmem_sessions (id, session_title, agent, project)
@@ -77,7 +78,7 @@ describe("Fresh Install", () => {
     });
 
     it("can create first scar in empty database", async () => {
-      const scarId = "first-scar";
+      const scarId = randomUUID();
       const embedding = generateRandomVector();
 
       await pgClient.query(
@@ -261,7 +262,7 @@ describe("Fresh Install", () => {
   describe("first-run experience", () => {
     it("can complete full session lifecycle on fresh install", async () => {
       // 1. Start session
-      const sessionId = "fresh-lifecycle";
+      const sessionId = randomUUID();
       await pgClient.query(
         `INSERT INTO gitmem_sessions (id, session_title, agent, project)
          VALUES ($1, $2, $3, $4)`,
@@ -281,7 +282,7 @@ describe("Fresh Install", () => {
         `INSERT INTO gitmem_learnings (id, title, description, learning_type, severity, project, embedding)
          VALUES ($1, $2, $3, $4, $5, $6, $7::vector)`,
         [
-          "first-scar",
+          randomUUID(),
           "First Learning",
           "Discovered during first session",
           "scar",
@@ -296,7 +297,7 @@ describe("Fresh Install", () => {
         `INSERT INTO gitmem_decisions (id, title, decision, rationale, session_id, project)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          "first-decision",
+          randomUUID(),
           "Use GitMem",
           "Adopt gitmem for institutional memory",
           "Prevents repeat mistakes",

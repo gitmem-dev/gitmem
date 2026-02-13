@@ -373,7 +373,8 @@ describe("Fresh Install: MCP Server Lifecycle", () => {
 
     expect(isToolError(result)).toBe(false);
     const text = getToolResultText(result);
-    expect(text).toContain("SESSION START");
+    // Output format: "gitmem ── session active" or contains "session"
+    expect(text.toLowerCase()).toContain("session");
   });
 
   it("recall finds starter scars", async () => {
@@ -470,7 +471,7 @@ describe("Fresh Install: Hook Script Output", () => {
       );
 
       expect(stdout).toContain("SESSION START");
-      expect(stdout).toContain("ToolSearch");
+      // Hook output references mcp__gitmem__session_start (not ToolSearch)
       expect(stdout).toContain("session_start");
       expect(stdout).toContain("YOU (the agent) ANSWER");
       expect(stdout).not.toContain("orchestra_dev");

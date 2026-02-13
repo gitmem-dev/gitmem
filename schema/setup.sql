@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS gitmem_learnings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  learning_type TEXT NOT NULL CHECK (learning_type IN ('scar', 'win', 'pattern')),
+  learning_type TEXT NOT NULL CHECK (learning_type IN ('scar', 'win', 'pattern', 'anti_pattern')),
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   severity TEXT CHECK (severity IN ('critical', 'high', 'medium', 'low')),

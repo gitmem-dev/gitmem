@@ -18,6 +18,10 @@ export const ClosingReflectionSchema = z.object({
   scars_applied: z.array(z.string()),
   /** Q7: What from this session should be captured as institutional memory? */
   institutional_memory_items: z.string().optional(),
+  /** Q8: How did the human prefer to work this session? */
+  collaborative_dynamic: z.string().optional(),
+  /** Q9: What collaborative dynamic worked or didn't work? */
+  rapport_notes: z.string().optional(),
 });
 
 export type ClosingReflection = z.infer<typeof ClosingReflectionSchema>;

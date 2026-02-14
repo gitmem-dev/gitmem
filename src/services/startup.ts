@@ -28,7 +28,8 @@ import {
 import { getConfig, shouldUseLocalSearch } from "./config.js";
 import type { Project } from "../types/index.js";
 
-// Track startup state per-project (avoids cross-project blocking)
+// Track startup state — unified cache, no per-project partitioning
+const UNIFIED_KEY = "__all__";
 const startupCompleted: Map<string, boolean> = new Map();
 const startupPromises: Map<string, Promise<void>> = new Map();
 let backgroundRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -97,16 +98,16 @@ interface ScarWithEmbedding {
  * NOTE: Now loads all learning types (scars, patterns, wins, anti-patterns),
  * not just scars. This fixes the issue where ~64 patterns were being ignored.
  */
-async function loadScarsFromSupabase(project: Project): Promise<{
+async function loadScarsFromSupabase(): Promise<{
   scars: ScarWithEmbedding[];
   latestUpdatedAt: string | null;
 }> {
-  console.error(`[startup] Loading learnings with embeddings from Supabase (direct) for project: ${project}`);
+  console.error(`[startup] Loading ALL learnings with embeddings from Supabase (cross-project)`);
   const startTime = Date.now();
 
   try {
-    // Load directly from Supabase REST API (not ww-mcp) to get embeddings
-    const learnings = await loadScarsWithEmbeddings<ScarWithEmbedding>(project, 500);
+    // Load ALL learnings across projects — semantic similarity handles relevance
+    const learnings = await loadScarsWithEmbeddings<ScarWithEmbedding>(undefined, 500);
 
     const elapsed = Date.now() - startTime;
     console.error(`[startup] Loaded ${learnings.length} learnings in ${elapsed}ms`);
@@ -131,7 +132,7 @@ async function loadScarsFromSupabase(project: Project): Promise<{
  * Uses direct Supabase REST API for consistency with loadScarsFromSupabase.
  * NOTE: Now loads all learning types (scars, patterns, wins, anti-patterns).
  */
-async function getRemoteScarStats(project: Project): Promise<{
+async function getRemoteScarStats(): Promise<{
   count: number;
   latestUpdatedAt: string | null;
 }> {
@@ -140,10 +141,10 @@ async function getRemoteScarStats(project: Project): Promise<{
     const { directQuery } = await import("./supabase-client.js");
 
     // Quick query to get count and latest timestamp (no embeddings needed)
+    // Cross-project — matches unified cache loading
     const learnings = await directQuery<{ id: string; updated_at?: string }>("orchestra_learnings", {
       select: "id,updated_at",
       filters: {
-        project,
         learning_type: "in.(scar,pattern,win,anti_pattern)"
       },
       order: "updated_at.desc",
@@ -166,7 +167,7 @@ async function getRemoteScarStats(project: Project): Promise<{
  * Call this at server startup to pre-load the scar index.
  * Subsequent session_start calls will use the in-memory index.
  */
-export async function initializeGitMem(project: Project = "default"): Promise<{
+export async function initializeGitMem(_project?: Project): Promise<{
   success: boolean;
   scar_count: number;
   elapsed_ms: number;
@@ -176,8 +177,8 @@ export async function initializeGitMem(project: Project = "default"): Promise<{
   const startTime = Date.now();
   const config = getConfig();
 
-  // Set TTL from config
-  setCacheTtl(config.cacheTtlMinutes, project);
+  // Set TTL from config (unified cache)
+  setCacheTtl(config.cacheTtlMinutes);
 
   // If remote mode, skip local initialization
   if (!shouldUseLocalSearch()) {
@@ -203,19 +204,19 @@ export async function initializeGitMem(project: Project = "default"): Promise<{
   }
 
   try {
-    // Load scars from Supabase
-    const { scars, latestUpdatedAt } = await loadScarsFromSupabase(project);
+    // Load ALL scars from Supabase (cross-project unified cache)
+    const { scars, latestUpdatedAt } = await loadScarsFromSupabase();
 
-    // Initialize local vector search
-    await initializeLocalSearch(scars, project, latestUpdatedAt || undefined);
+    // Initialize unified local vector search
+    await initializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
 
     // Persist scars to disk for hook processes (no embeddings)
     persistScarsForHooks(scars);
 
     const elapsed = Date.now() - startTime;
-    const scarCount = getLocalVectorSearch(project).getScarCount();
+    const scarCount = getLocalVectorSearch().getScarCount();
 
-    console.error(`[startup] GitMem initialized: ${scarCount} scars indexed in ${elapsed}ms`);
+    console.error(`[startup] GitMem initialized: ${scarCount} scars indexed (cross-project) in ${elapsed}ms`);
 
     return {
       success: true,
@@ -243,40 +244,40 @@ export async function initializeGitMem(project: Project = "default"): Promise<{
  *
  * Safe to call multiple times - only initializes once.
  */
-export async function ensureInitialized(project: Project = "default"): Promise<void> {
+export async function ensureInitialized(_project?: Project): Promise<void> {
   if (!shouldUseLocalSearch()) {
     return; // Remote mode, nothing to initialize
   }
 
-  if (startupCompleted.get(project) && isLocalSearchReady(project)) {
+  if (startupCompleted.get(UNIFIED_KEY) && isLocalSearchReady()) {
     return;
   }
 
-  const existing = startupPromises.get(project);
+  const existing = startupPromises.get(UNIFIED_KEY);
   if (existing) {
     return existing;
   }
 
   const promise = (async () => {
-    const result = await initializeGitMem(project);
-    startupCompleted.set(project, result.success);
+    const result = await initializeGitMem();
+    startupCompleted.set(UNIFIED_KEY, result.success);
     if (!result.success) {
-      console.warn(`[startup] GitMem not fully initialized for ${project}: ${result.error}`);
+      console.warn(`[startup] GitMem not fully initialized: ${result.error}`);
     }
   })();
 
-  startupPromises.set(project, promise);
+  startupPromises.set(UNIFIED_KEY, promise);
   return promise;
 }
 
 /**
  * Check if local search is available
  */
-export function isLocalSearchAvailable(project: Project = "default"): boolean {
+export function isLocalSearchAvailable(_project?: Project): boolean {
   if (!shouldUseLocalSearch()) {
     return false; // Remote mode
   }
-  return isLocalSearchReady(project);
+  return isLocalSearchReady();
 }
 
 /**
@@ -289,9 +290,9 @@ export function getInitStatus(): {
 } {
   const config = getConfig();
   return {
-    complete: startupCompleted.get("default") ?? false,
+    complete: startupCompleted.get(UNIFIED_KEY) ?? false,
     search_mode: config.resolvedSearchMode,
-    default_ready: isLocalSearchReady("default"),
+    default_ready: isLocalSearchReady(),
   };
 }
 
@@ -331,9 +332,9 @@ export interface CacheFlushResult {
 /**
  * Get cache status for a project
  */
-export function getCacheStatus(project: Project = "default"): CacheStatus {
+export function getCacheStatus(_project?: Project): CacheStatus {
   const config = getConfig();
-  const metadata = getCacheMetadata(project);
+  const metadata = getCacheMetadata();
 
   if (config.resolvedSearchMode === "remote") {
     return {
@@ -376,7 +377,7 @@ export function getCacheStatus(project: Project = "default"): CacheStatus {
 /**
  * Check cache health against remote Supabase
  */
-export async function checkCacheHealth(project: Project = "default"): Promise<CacheHealth> {
+export async function checkCacheHealth(_project?: Project): Promise<CacheHealth> {
   const config = getConfig();
 
   if (config.resolvedSearchMode === "remote") {
@@ -391,7 +392,7 @@ export async function checkCacheHealth(project: Project = "default"): Promise<Ca
     };
   }
 
-  const metadata = getCacheMetadata(project);
+  const metadata = getCacheMetadata();
   if (!metadata) {
     return {
       status: "unavailable",
@@ -404,8 +405,8 @@ export async function checkCacheHealth(project: Project = "default"): Promise<Ca
     };
   }
 
-  // Get remote stats
-  const remoteStats = await getRemoteScarStats(project);
+  // Get remote stats (cross-project, matching unified cache)
+  const remoteStats = await getRemoteScarStats();
 
   const localCount = metadata.scarCount;
   const remoteCount = remoteStats.count;
@@ -445,7 +446,7 @@ export async function checkCacheHealth(project: Project = "default"): Promise<Ca
 /**
  * Flush and reload the cache
  */
-export async function flushCache(project: Project = "default"): Promise<CacheFlushResult> {
+export async function flushCache(_project?: Project): Promise<CacheFlushResult> {
   const startTime = Date.now();
   const config = getConfig();
 
@@ -459,19 +460,19 @@ export async function flushCache(project: Project = "default"): Promise<CacheFlu
     };
   }
 
-  const previousCount = getLocalVectorSearch(project).getScarCount();
+  const previousCount = getLocalVectorSearch().getScarCount();
 
   try {
-    // Load fresh scars
-    const { scars, latestUpdatedAt } = await loadScarsFromSupabase(project);
+    // Load ALL fresh scars (cross-project)
+    const { scars, latestUpdatedAt } = await loadScarsFromSupabase();
 
-    // Reinitialize the index
-    await reinitializeLocalSearch(scars, project, latestUpdatedAt || undefined);
+    // Reinitialize the unified index
+    await reinitializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
 
     // Update disk cache for hook processes too
     persistScarsForHooks(scars);
 
-    const newCount = getLocalVectorSearch(project).getScarCount();
+    const newCount = getLocalVectorSearch().getScarCount();
     const elapsed = Date.now() - startTime;
 
     console.error(`[cache] Flushed and reloaded: ${previousCount} → ${newCount} scars in ${elapsed}ms`);
@@ -501,7 +502,7 @@ export async function flushCache(project: Project = "default"): Promise<CacheFlu
  * Check if cache needs refresh based on TTL or staleness
  * Returns true if a refresh is recommended
  */
-export async function shouldRefreshCache(project: Project = "default"): Promise<boolean> {
+export async function shouldRefreshCache(_project?: Project): Promise<boolean> {
   const config = getConfig();
 
   if (!config.staleCheckEnabled) {
@@ -512,7 +513,7 @@ export async function shouldRefreshCache(project: Project = "default"): Promise<
     return false;
   }
 
-  const metadata = getCacheMetadata(project);
+  const metadata = getCacheMetadata();
   if (!metadata) {
     return true; // Not initialized
   }
@@ -523,12 +524,12 @@ export async function shouldRefreshCache(project: Project = "default"): Promise<
 /**
  * Auto-refresh cache if stale (call periodically or before critical operations)
  */
-export async function autoRefreshIfStale(project: Project = "default"): Promise<boolean> {
-  const needsRefresh = await shouldRefreshCache(project);
+export async function autoRefreshIfStale(_project?: Project): Promise<boolean> {
+  const needsRefresh = await shouldRefreshCache();
 
   if (needsRefresh) {
     console.error("[cache] Auto-refreshing stale cache...");
-    const result = await flushCache(project);
+    const result = await flushCache();
     return result.success;
   }
 
@@ -545,7 +546,7 @@ export async function autoRefreshIfStale(project: Project = "default"): Promise<
  * This allows the server to start immediately while scars load in the background.
  * First few queries will use Supabase fallback until cache is ready.
  */
-export function startBackgroundInit(project: Project = "default"): void {
+export function startBackgroundInit(_project?: Project): void {
   const config = getConfig();
 
   if (!shouldUseLocalSearch()) {
@@ -553,10 +554,10 @@ export function startBackgroundInit(project: Project = "default"): void {
     return;
   }
 
-  console.error("[startup] Starting background initialization...");
+  console.error("[startup] Starting background initialization (unified cross-project cache)...");
 
   // Initialize in background (don't await)
-  initializeGitMem(project)
+  initializeGitMem()
     .then((result) => {
       if (result.success) {
         console.error(`[startup] Background init complete: ${result.scar_count} scars loaded in ${result.elapsed_ms}ms`);
@@ -570,16 +571,16 @@ export function startBackgroundInit(project: Project = "default"): void {
 
   // Start periodic refresh if configured
   if (config.staleCheckEnabled && config.cacheTtlMinutes > 0) {
-    startPeriodicRefresh(project, config.cacheTtlMinutes);
+    startPeriodicRefresh(config.cacheTtlMinutes);
   }
 }
 
 /**
  * Start periodic cache refresh
  *
- * Refreshes the local cache every TTL period to keep it fresh.
+ * Refreshes the unified local cache every TTL period to keep it fresh.
  */
-export function startPeriodicRefresh(project: Project, intervalMinutes: number): void {
+export function startPeriodicRefresh(intervalMinutes: number): void {
   // Clear any existing interval
   if (backgroundRefreshInterval) {
     clearInterval(backgroundRefreshInterval);
@@ -591,7 +592,7 @@ export function startPeriodicRefresh(project: Project, intervalMinutes: number):
   backgroundRefreshInterval = setInterval(async () => {
     console.error("[startup] Periodic refresh triggered...");
     try {
-      const result = await flushCache(project);
+      const result = await flushCache();
       if (result.success) {
         console.error(`[startup] Periodic refresh complete: ${result.new_scar_count} scars`);
       } else {

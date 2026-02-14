@@ -224,6 +224,37 @@ describe("resolveThread", () => {
   });
 });
 
+describe("resolveThread — duplicate cascade detection", () => {
+  it("does not cascade when resolution note has no duplicate reference", () => {
+    const threads: ThreadObject[] = [
+      { id: "t-aaa", text: "Original thread", status: "open", created_at: "2026-01-01T00:00:00Z" },
+      { id: "t-bbb", text: "Other thread", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    resolveThread(threads, { threadId: "t-bbb", resolutionNote: "Just done" });
+    expect(threads.find(t => t.id === "t-aaa")?.status).toBe("open");
+  });
+
+  it("does not cascade when referenced thread does not exist", () => {
+    const threads: ThreadObject[] = [
+      { id: "t-bbb", text: "Duplicate thread", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    // Resolution mentions t-aaaa1234 which doesn't exist — should not throw
+    const resolved = resolveThread(threads, { threadId: "t-bbb", resolutionNote: "Duplicate of t-aaaa1234" });
+    expect(resolved?.status).toBe("resolved");
+  });
+
+  it("does not cascade when referenced thread is already resolved", () => {
+    const threads: ThreadObject[] = [
+      { id: "t-aaa11111", text: "Already resolved original", status: "resolved", created_at: "2026-01-01T00:00:00Z", resolved_at: "2026-01-02T00:00:00Z" },
+      { id: "t-bbb", text: "Duplicate thread", status: "open", created_at: "2026-01-01T00:00:00Z" },
+    ];
+    resolveThread(threads, { threadId: "t-bbb", resolutionNote: "Duplicate of t-aaa11111" });
+    // Original should still have its original resolved_at, not a new one
+    const original = threads.find(t => t.id === "t-aaa11111");
+    expect(original?.resolved_at).toBe("2026-01-02T00:00:00Z");
+  });
+});
+
 describe("aggregateThreads", () => {
   it("deduplicates threads across sessions by text", () => {
     const sessions = [

@@ -1036,7 +1036,7 @@ export async function sessionRefresh(
   if (currentSession) {
     sessionId = currentSession.sessionId;
     agent = (currentSession.agent as AgentIdentity) || "CLI";
-    project = params.project || "default";
+    project = params.project || currentSession.project || "default";
   } else {
     // GIT-20: Fallback — check registry for this process, then legacy file
     const mySession = findSessionByHostPid(os.hostname(), process.pid);

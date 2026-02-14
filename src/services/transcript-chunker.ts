@@ -222,8 +222,19 @@ export async function processTranscript(
   try {
     console.error(`[transcript-chunker] Processing transcript for session ${sessionId}`);
 
+    // Handle JSON wrapper format: { session_id, agent, project, captured_at, transcript: "<JSONL>" }
+    let jsonlContent = transcriptContent;
+    try {
+      const parsed = JSON.parse(transcriptContent);
+      if (parsed && typeof parsed.transcript === "string") {
+        jsonlContent = parsed.transcript;
+      }
+    } catch {
+      // Not JSON wrapper — treat as raw JSONL
+    }
+
     // 1. Parse transcript and extract content
-    const extracted = parseTranscript(transcriptContent);
+    const extracted = parseTranscript(jsonlContent);
     console.error(`[transcript-chunker] Extracted ${extracted.length} content blocks`);
 
     if (extracted.length === 0) {
@@ -285,9 +296,10 @@ export async function processTranscript(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Content-Profile": "public",
           "Authorization": `Bearer ${SUPABASE_KEY}`,
           "apikey": SUPABASE_KEY,
-          "Prefer": "return=minimal", // Don't return inserted rows (faster)
+          "Prefer": "return=minimal",
         },
         body: JSON.stringify(allChunks),
       });

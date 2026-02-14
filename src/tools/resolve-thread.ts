@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getThreads, getCurrentSession } from "../services/session-state.js";
 import {
   resolveThread as resolveThreadInList,
+  findThreadById,
   loadThreadsFile,
   saveThreadsFile,
 } from "../services/thread-manager.js";
@@ -76,6 +77,27 @@ export async function resolveThread(
     };
   }
 
+  // Duplicate cascade: if resolution_note says "duplicate of t-XXXX",
+  // also resolve the referenced original thread
+  const alsoResolved: typeof resolved[] = [];
+  if (params.resolution_note) {
+    const dupMatch = params.resolution_note.match(/\bduplicate of (t-[a-zA-Z0-9_-]+)\b/i);
+    if (dupMatch) {
+      const referencedId = dupMatch[1];
+      const original = findThreadById(threads, referencedId);
+      if (original && original.status === "open") {
+        const cascaded = resolveThreadInList(threads, {
+          threadId: referencedId,
+          sessionId,
+          resolutionNote: `Auto-resolved: ${resolved.id} was resolved as duplicate of this thread`,
+        });
+        if (cascaded) {
+          alsoResolved.push(cascaded);
+        }
+      }
+    }
+  }
+
   // Persist to local file (cache)
   saveThreadsFile(threads);
 
@@ -90,8 +112,17 @@ export async function resolveThread(
     supabaseSynced = true;
   }
 
+  // Sync cascaded resolutions to Supabase too
+  for (const cascaded of alsoResolved) {
+    await resolveThreadInSupabase(cascaded.id, {
+      resolvedAt: cascaded.resolved_at,
+      resolutionNote: cascaded.resolution_note,
+      resolvedBySession: cascaded.resolved_by_session || sessionId,
+    }).catch(() => {});
+  }
+
   const latencyMs = timer.stop();
-  const perfData = buildPerformanceData("resolve_thread", latencyMs, 1);
+  const perfData = buildPerformanceData("resolve_thread", latencyMs, 1 + alsoResolved.length);
 
   recordMetrics({
     id: metricsId,
@@ -99,12 +130,13 @@ export async function resolveThread(
     query_text: `resolve:${params.thread_id || "text:" + params.text_match}`,
     tables_searched: supabaseSynced ? ["orchestra_threads"] : [],
     latency_ms: latencyMs,
-    result_count: 1,
+    result_count: 1 + alsoResolved.length,
     phase_tag: "ad_hoc",
     metadata: {
       thread_id: resolved.id,
       resolution_note: params.resolution_note,
       supabase_synced: supabaseSynced,
+      cascade_resolved: alsoResolved.map(t => t.id),
     },
   }).catch(() => {});
 
@@ -120,9 +152,26 @@ export async function resolveThread(
     })
   );
 
+  // Triples for cascaded resolutions
+  for (const cascaded of alsoResolved) {
+    getEffectTracker().track("triple_write", "thread_resolution_cascade", () =>
+      writeTriplesForThreadResolution({
+        thread_id: cascaded.id,
+        text: cascaded.text,
+        resolution_note: cascaded.resolution_note,
+        session_id: sessionId,
+        project: "default",
+        agent: getAgentIdentity(),
+      })
+    );
+  }
+
   return {
     success: true,
     resolved_thread: formatThreadForDisplay(resolved),
+    ...(alsoResolved.length > 0 && {
+      also_resolved: alsoResolved.map(formatThreadForDisplay),
+    }),
     performance: perfData,
   };
 }

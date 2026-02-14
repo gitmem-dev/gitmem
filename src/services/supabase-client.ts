@@ -473,19 +473,23 @@ export async function directPatch<T = unknown>(
  * NOTE: Changed from "scars only" to "all learning types" (OD-542 related fix)
  */
 export async function loadScarsWithEmbeddings<T = unknown>(
-  project: string,
+  project?: string,
   limit = 500
 ): Promise<T[]> {
-  console.error(`[supabase-direct] Loading learnings with embeddings for project: ${project}`);
+  console.error(`[supabase-direct] Loading learnings with embeddings${project ? ` for project: ${project}` : " (all projects)"}`);
   const startTime = Date.now();
 
   try {
+    const filters: Record<string, string> = {
+      learning_type: "in.(scar,pattern,win,anti_pattern)",
+    };
+    if (project) {
+      filters.project = project;
+    }
+
     const learnings = await directQuery<T>("orchestra_learnings", {
       select: "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type",
-      filters: {
-        project,
-        learning_type: "in.(scar,pattern,win,anti_pattern)",
-      },
+      filters,
       order: "updated_at.desc",
       limit,
     });
@@ -685,10 +689,10 @@ export async function saveTranscript(
 
   // Update the session record with transcript_path (direct REST API)
   try {
-    await directUpsert("orchestra_sessions", {
-      id: sessionId,
-      transcript_path: path,
-    });
+    await directPatch("orchestra_sessions",
+      { id: sessionId },
+      { transcript_path: path }
+    );
   } catch (error) {
     // Log but don't fail - transcript is saved even if session update fails
     console.error("Failed to update session with transcript_path:", error);

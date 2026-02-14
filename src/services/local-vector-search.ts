@@ -314,17 +314,20 @@ export class LocalVectorSearch {
   }
 }
 
-// Singleton instances per project
+// Unified cache — all scars loaded into single instance regardless of project.
+// At ~400 scars, semantic similarity handles relevance better than project partitioning.
+// Project params kept in signatures for backward compat but ignored for cache lookup.
+const UNIFIED_KEY: Project = "__all__" as Project;
 const instances: Map<Project, LocalVectorSearch> = new Map();
 
 /**
- * Get the LocalVectorSearch instance for a project
+ * Get the LocalVectorSearch instance (unified, cross-project)
  */
-export function getLocalVectorSearch(project: Project = "default"): LocalVectorSearch {
-  let instance = instances.get(project);
+export function getLocalVectorSearch(_project?: Project): LocalVectorSearch {
+  let instance = instances.get(UNIFIED_KEY);
   if (!instance) {
-    instance = new LocalVectorSearch(project);
-    instances.set(project, instance);
+    instance = new LocalVectorSearch(UNIFIED_KEY);
+    instances.set(UNIFIED_KEY, instance);
   }
   return instance;
 }
@@ -336,10 +339,10 @@ export function getLocalVectorSearch(project: Project = "default"): LocalVectorS
  */
 export async function initializeLocalSearch(
   scars: ScarRecord[],
-  project: Project = "default",
+  _project?: Project,
   latestUpdatedAt?: string
 ): Promise<void> {
-  const instance = getLocalVectorSearch(project);
+  const instance = getLocalVectorSearch();
   await instance.initialize(scars, latestUpdatedAt);
 }
 
@@ -348,10 +351,10 @@ export async function initializeLocalSearch(
  */
 export async function reinitializeLocalSearch(
   scars: ScarRecord[],
-  project: Project = "default",
+  _project?: Project,
   latestUpdatedAt?: string
 ): Promise<void> {
-  const instance = getLocalVectorSearch(project);
+  const instance = getLocalVectorSearch();
   await instance.reinitialize(scars, latestUpdatedAt);
 }
 
@@ -363,40 +366,40 @@ export async function reinitializeLocalSearch(
 export async function localScarSearch(
   query: string,
   k: number = 5,
-  project: Project = "default"
+  _project?: Project
 ): Promise<RelevantScar[]> {
-  const instance = getLocalVectorSearch(project);
+  const instance = getLocalVectorSearch();
   return instance.search(query, k);
 }
 
 /**
  * Check if local search is ready
  */
-export function isLocalSearchReady(project: Project = "default"): boolean {
-  const instance = instances.get(project);
+export function isLocalSearchReady(_project?: Project): boolean {
+  const instance = instances.get(UNIFIED_KEY);
   return instance?.isReady() ?? false;
 }
 
 /**
  * Get cache metadata for a project
  */
-export function getCacheMetadata(project: Project = "default"): CacheMetadata | null {
-  const instance = instances.get(project);
+export function getCacheMetadata(_project?: Project): CacheMetadata | null {
+  const instance = instances.get(UNIFIED_KEY);
   return instance?.getCacheMetadata() ?? null;
 }
 
 /**
  * Set cache TTL for a project
  */
-export function setCacheTtl(minutes: number, project: Project = "default"): void {
-  const instance = getLocalVectorSearch(project);
+export function setCacheTtl(minutes: number, _project?: Project): void {
+  const instance = getLocalVectorSearch();
   instance.setTtlMinutes(minutes);
 }
 
 /**
  * Clear the local search index
  */
-export function clearLocalSearch(project: Project = "default"): void {
-  const instance = instances.get(project);
+export function clearLocalSearch(_project?: Project): void {
+  const instance = instances.get(UNIFIED_KEY);
   instance?.clear();
 }

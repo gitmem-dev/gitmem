@@ -543,6 +543,8 @@ export interface ResolveThreadParams {
 export interface ResolveThreadResult {
   success: boolean;
   resolved_thread?: ThreadObject;
+  /** Threads that were also resolved via duplicate cascade */
+  also_resolved?: ThreadObject[];
   error?: string;
   performance: PerformanceData;
 }

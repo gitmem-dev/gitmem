@@ -34,13 +34,13 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     surfacedScars: context.surfacedScars || [],
     confirmations: [],
-    observations: [],
-    children: [],
+    observations: context.observations || [],
+    children: context.children || [],
     threads: context.threads || [],
   };
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);

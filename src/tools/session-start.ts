@@ -39,7 +39,7 @@ import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } 
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 // OD-645: Suggested threads removed from start display
-import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar } from "../types/index.js";
+import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
 import type {
   SessionStartParams,
   SessionStartResult,
@@ -365,7 +365,8 @@ async function sessionStartFree(
   timer: Timer,
   metricsId: string,
   existingSessionId?: string,
-  existingStartedAt?: Date
+  existingStartedAt?: Date,
+  forceCarryActivity?: { surfacedScars: SurfacedScar[]; observations: Observation[]; children: SessionChild[] },
 ): Promise<SessionStartResult> {
   const storage = getStorage();
   const isResuming = !!existingSessionId;
@@ -470,13 +471,16 @@ async function sessionStartFree(
     console.warn("[session_start] Failed to persist session files:", error);
   }
 
-  // t-f7c2fa01: On resume, preserve original startedAt so session_close duration is accurate
+  // t-f7c2fa01: On resume OR force, preserve original startedAt so session_close duration is accurate
+  const freeMergedScars = forceCarryActivity ? [...forceCarryActivity.surfacedScars, ...surfacedScars] : surfacedScars;
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
     startedAt: (isResuming && existingStartedAt) || new Date(),
-    surfacedScars,
+    surfacedScars: freeMergedScars,
+    observations: forceCarryActivity?.observations,
+    children: forceCarryActivity?.children,
     threads: freeMergedThreads,
   });
 
@@ -821,9 +825,19 @@ export async function sessionStart(
   const existingSession = checkExistingSession(agent, params.force);
   const isResuming = existingSession !== null;
 
+  // t-f7c2fa01: When force:true kills an existing session, carry forward its startedAt
+  // so session_close duration reflects the full conversation, not just the new session.
+  // Also carry forward activity counts (recalls, observations) so standard close isn't rejected.
+  const priorSession = params.force ? getCurrentSession() : null;
+  const forceCarryStartedAt = priorSession?.startedAt;
+  const forceCarrySurfacedScars = priorSession?.surfacedScars || [];
+  const forceCarryObservations = priorSession?.observations || [];
+  const forceCarryChildren = priorSession?.children || [];
+
   // Free tier: all-local path
   if (!hasSupabase()) {
-    return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt);
+    return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt || forceCarryStartedAt,
+      priorSession ? { surfacedScars: forceCarrySurfacedScars, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
   }
 
   // 2. OD-645: Load last session + decisions + rapport in parallel (was sequential)
@@ -912,14 +926,17 @@ export async function sessionStart(
   // OD-547: Set active session for variant assignment in recall
   // OD-552: Initialize with surfaced scars for auto-bridge at close time
   // OD-thread-lifecycle: Initialize with merged threads (aggregated + mid-session preserved)
-  // t-f7c2fa01: On resume, preserve original startedAt so session_close duration is accurate
+  // t-f7c2fa01: On resume OR force, preserve original startedAt so session_close duration is accurate
+  const mergedScars = [...forceCarrySurfacedScars, ...surfacedScars];
   setCurrentSession({
     sessionId,
     linearIssue: params.linear_issue,
     agent,
     project,
-    startedAt: (isResuming && existingSession?.startedAt) || new Date(),
-    surfacedScars,
+    startedAt: (isResuming && existingSession?.startedAt) || forceCarryStartedAt || new Date(),
+    surfacedScars: mergedScars,
+    observations: forceCarryObservations,
+    children: forceCarryChildren,
     threads: mergedThreads,
   });
 

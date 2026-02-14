@@ -290,7 +290,7 @@ export async function processTranscript(
         throw new Error("Supabase configuration missing");
       }
 
-      const restUrl = `${SUPABASE_URL}/rest/v1/orchestra_transcript_chunks`;
+      const restUrl = `${SUPABASE_URL}/rest/v1/orchestra_transcript_chunks?on_conflict=session_id,chunk_index`;
 
       const response = await fetch(restUrl, {
         method: "POST",

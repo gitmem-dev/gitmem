@@ -23,6 +23,8 @@ import { recall } from "./tools/recall.js";
 import { confirmScars } from "./tools/confirm-scars.js";
 import { saveTranscript } from "./tools/save-transcript.js";
 import { getTranscript } from "./tools/get-transcript.js";
+import { searchTranscripts } from "./tools/search-transcripts.js";
+import type { SearchTranscriptsParams } from "./tools/search-transcripts.js";
 import { search } from "./tools/search.js";
 import { log } from "./tools/log.js";
 import { analyze } from "./tools/analyze.js";
@@ -171,6 +173,11 @@ export function createServer(): Server {
         case "gitmem-gt":
           result = await getTranscript(toolArgs as unknown as GetTranscriptParams);
           break;
+        case "search_transcripts":
+        case "gitmem-stx":
+        case "gm-stx":
+          result = await searchTranscripts(toolArgs as unknown as SearchTranscriptsParams);
+          break;
         case "search":
         case "gitmem-search":
         case "gm-search":
@@ -255,6 +262,7 @@ export function createServer(): Server {
             commands.push(
               { alias: "gitmem-st", full: "save_transcript", description: "Save session transcript to storage" },
               { alias: "gitmem-gt", full: "get_transcript", description: "Retrieve session transcript" },
+              { alias: "gitmem-stx", full: "search_transcripts", description: "Semantic search over transcript chunks" },
             );
           }
           if (hasCacheManagement()) {

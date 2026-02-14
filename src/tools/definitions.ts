@@ -439,6 +439,32 @@ export const TOOLS = [
     },
   },
 
+  {
+    name: "search_transcripts",
+    description: "Semantic search over session transcript chunks. Generates embedding for query and calls match_transcript_chunks RPC to find relevant conversation fragments across all indexed sessions.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query (e.g., 'deployment verification discussion', 'what was decided about caching')",
+        },
+        match_count: {
+          type: "number",
+          description: "Maximum number of chunks to return (default: 10, max: 50)",
+        },
+        similarity_threshold: {
+          type: "number",
+          description: "Minimum similarity score 0-1 (default: 0.3). Higher values return more relevant results.",
+        },
+        project: {
+          type: "string",
+          description: "Project namespace to filter by (e.g., 'orchestra_dev')",
+        },
+      },
+      required: ["query"],
+    },
+  },
   // ============================================================================
   // SEARCH & LOG TOOLS (OD-560, OD-561)
   // ============================================================================
@@ -1131,6 +1157,59 @@ export const TOOLS = [
         },
       },
       required: ["session_id"],
+    },
+  },
+  // gitmem-stx / gm-stx (search_transcripts)
+  {
+    name: "gitmem-stx",
+    description: "gitmem-stx (search_transcripts) - Semantic search over transcript chunks",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query",
+        },
+        match_count: {
+          type: "number",
+          description: "Maximum number of chunks to return (default: 10, max: 50)",
+        },
+        similarity_threshold: {
+          type: "number",
+          description: "Minimum similarity score 0-1 (default: 0.3)",
+        },
+        project: {
+          type: "string",
+          description: "Project namespace to filter by",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "gm-stx",
+    description: "gm-stx (search_transcripts) - Semantic search over transcript chunks",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query",
+        },
+        match_count: {
+          type: "number",
+          description: "Maximum number of chunks to return (default: 10, max: 50)",
+        },
+        similarity_threshold: {
+          type: "number",
+          description: "Minimum similarity score 0-1 (default: 0.3)",
+        },
+        project: {
+          type: "string",
+          description: "Project namespace to filter by",
+        },
+      },
+      required: ["query"],
     },
   },
   // gitmem-search (OD-560)
@@ -2054,6 +2133,7 @@ export const BATCH_TOOL_NAMES = new Set([
 export const TRANSCRIPT_TOOL_NAMES = new Set([
   "save_transcript", "gitmem-st",
   "get_transcript", "gitmem-gt",
+  "search_transcripts", "gitmem-stx", "gm-stx",
 ]);
 
 export const ANALYZE_TOOL_NAMES = new Set([

@@ -210,6 +210,15 @@ export class EffectTracker {
     if (report.overall.failed > 0) {
       lines.push("");
       lines.push(`  ⚠ ${report.overall.failed} total failures across: ${report.overall.paths_with_failures.join(", ")}`);
+
+      // Show recent failure details
+      if (report.recentFailures.length > 0) {
+        lines.push("");
+        lines.push("  Recent failures:");
+        for (const f of report.recentFailures.slice(0, 5)) {
+          lines.push(`    [${f.path}/${f.target}] ${f.error.slice(0, 200)}`);
+        }
+      }
     }
 
     return lines.join("\n");

@@ -25,6 +25,7 @@ export type ToolName =
   | "record_scar_usage_batch"
   | "save_transcript"
   | "get_transcript"
+  | "search_transcripts"
   | "analyze"
   | "graph_traverse"
   | "prepare_context"
@@ -95,6 +96,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   record_scar_usage_batch: 2000,
   save_transcript: 5000,  // Large payload upload
   get_transcript: 3000,   // Retrieval
+  search_transcripts: 3000, // Embedding + RPC
   analyze: 3000,          // Session analytics queries
   graph_traverse: 3000,   // Knowledge graph traversal
   prepare_context: 500,   // Same pipeline as search, different formatter

@@ -299,7 +299,7 @@ export async function processTranscript(
           "Content-Profile": "public",
           "Authorization": `Bearer ${SUPABASE_KEY}`,
           "apikey": SUPABASE_KEY,
-          "Prefer": "return=minimal",
+          "Prefer": "return=minimal,resolution=merge-duplicates",
         },
         body: JSON.stringify(allChunks),
       });

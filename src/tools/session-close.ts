@@ -926,11 +926,11 @@ export async function sessionClose(
           const embeddingVector = await embed(embeddingText);
           if (embeddingVector) {
             const embeddingJson = JSON.stringify(embeddingVector);
-            // Update session with embedding
-            await supabase.directUpsert("orchestra_sessions", {
-              id: sessionId,
-              embedding: embeddingJson,
-            });
+            // Update session with embedding (PATCH, not upsert — row already exists)
+            await supabase.directPatch("orchestra_sessions",
+              { id: sessionId },
+              { embedding: embeddingJson }
+            );
             console.error("[session_close] Embedding saved to session");
 
             // Phase 5: Implicit thread detection (chained after embedding)

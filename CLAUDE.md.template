@@ -109,3 +109,20 @@ When contributing to GitMem itself:
 | `npx gitmem check --full` | Full diagnostic with benchmarks (~30s) |
 
 **Before pushing:** Always run `npm run test:unit` at minimum.
+
+### Definition of Done
+
+Before marking any feature or fix as complete:
+
+- [ ] Code committed and pushed
+- [ ] **Tests exist for the change** — not just "tests pass", but new/modified tests covering the feature or fix
+- [ ] **Test count delta noted** in PR or completion comment (e.g., "+10 tests: 7 unit, 3 E2E")
+
+| Change Type | Required Tests |
+|-------------|---------------|
+| New schema/field | Unit tests for validation, defaults, backwards compat |
+| New tool behavior | E2E tests through MCP protocol |
+| Bug fix | Regression test that would have caught the bug |
+| Refactor | Existing tests still pass (no new tests needed if behavior unchanged) |
+
+⚠️ **"Tests pass" ≠ "Tests exist."** Passing a suite that doesn't cover your change proves nothing.

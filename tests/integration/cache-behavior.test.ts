@@ -267,9 +267,12 @@ describe("Cache Behavior", () => {
 
   describe("scar search caching", () => {
     it("caches semantic search results", async () => {
-      // Seed scars with embeddings
+      // Seed scars with embeddings — save first embedding to use as query vector
+      // (guarantees similarity=1.0, avoids flake where random high-dim vectors are orthogonal)
+      let queryEmbedding: number[] | null = null;
       for (let i = 0; i < 5; i++) {
         const embedding = generateRandomVector();
+        if (i === 0) queryEmbedding = embedding;
         await pgClient.query(
           `INSERT INTO gitmem_learnings (id, title, description, learning_type, severity, project, embedding)
            VALUES ($1, $2, $3, $4, $5, $6, $7::vector)`,
@@ -285,15 +288,15 @@ describe("Cache Behavior", () => {
         );
       }
 
-      // Perform semantic search
-      const queryEmbedding = generateRandomVector();
+      // Perform semantic search using first scar's embedding as query
+      // This guarantees at least 1 result (similarity=1.0 for exact match)
       const searchResult = await pgClient.query(
         `SELECT * FROM gitmem_semantic_search($1::vector(1536), 5, 0.0)`,
-        [formatVector(queryEmbedding)]
+        [formatVector(queryEmbedding!)]
       );
 
       // Cache results
-      const cacheKey = `scar_search:${queryEmbedding.slice(0, 8).join("")}:gitmem_test:5`;
+      const cacheKey = `scar_search:${queryEmbedding!.slice(0, 8).join("")}:gitmem_test:5`;
       const cacheData = {
         key: cacheKey,
         created_at: Date.now(),

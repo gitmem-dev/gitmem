@@ -76,6 +76,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
       model: EMBEDDING_MODEL,
       input: text,
     }),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!response.ok) {
@@ -302,6 +303,7 @@ export async function processTranscript(
           "Prefer": "return=minimal,resolution=merge-duplicates",
         },
         body: JSON.stringify(allChunks),
+        signal: AbortSignal.timeout(60000),
       });
 
       if (!response.ok) {

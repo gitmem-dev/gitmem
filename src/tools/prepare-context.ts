@@ -79,7 +79,7 @@ Proceed with caution — this may be new territory without documented lessons.`;
   }
 
   const lines: string[] = [
-    "⚠️ INSTITUTIONAL MEMORY ACTIVATED",
+    "🧠 INSTITUTIONAL MEMORY ACTIVATED",
     "",
     `Found ${scars.length} relevant scar${scars.length === 1 ? "" : "s"} for your plan:`,
     "",

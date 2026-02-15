@@ -29,9 +29,11 @@ export function generateThreadId(): string {
  * Migrate a plain string thread to a ThreadObject.
  */
 export function migrateStringThread(text: string, sourceSession?: string): ThreadObject {
+  // Strip stale thread ID prefixes (e.g., "t-489d9c6c: actual text")
+  const cleaned = text.replace(/^t-[a-f0-9]+:\s*/i, "");
   return {
     id: generateThreadId(),
-    text,
+    text: cleaned,
     status: "open",
     created_at: new Date().toISOString(),
     ...(sourceSession && { source_session: sourceSession }),

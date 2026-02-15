@@ -96,9 +96,11 @@ export function threadObjectToRow(
  * Map a Supabase row to a local ThreadObject.
  */
 export function rowToThreadObject(row: ThreadRow): ThreadObject {
+  // Strip stale thread ID prefixes baked into text (e.g., "t-489d9c6c: actual text")
+  const text = row.text.replace(/^t-[a-f0-9]+:\s*/i, "");
   return {
     id: row.thread_id,                 // thread_id column -> ThreadObject.id
-    text: row.text,
+    text,
     status: mapStatusFromSupabase(row.status),
     created_at: row.created_at,
     ...(row.last_touched_at && { last_touched_at: row.last_touched_at }),

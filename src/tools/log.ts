@@ -72,12 +72,12 @@ function buildLogDisplay(entries: LogEntry[], total: number, filters: LogResult[
   if (fp.length > 0) lines.push(`Filters: ${fp.join(", ")}`);
   lines.push("");
   if (entries.length === 0) {
-    lines.push("No learnings found.");
+    lines.push("No entries found.");
     return wrapDisplay(lines.join("\n"));
   }
   for (const e of entries) {
     const te = TYPE[e.learning_type] || "·";
-    const se = SEV[e.severity] || "⚪";
+    const se = e.learning_type === "decision" ? "\u{1F4CB}" : (SEV[e.severity] || "\u{26AA}");
     const t = truncate(e.title, 50);
     const time = relativeTime(e.created_at);
     const issue = e.source_linear_issue ? `  ${e.source_linear_issue}` : "";
@@ -128,11 +128,40 @@ export async function log(params: LogParams): Promise<LogResult> {
       const records = await storage.query<LogEntry>("learnings", {
         filters,
         order: "created_at.desc",
-        limit,
+        limit: limit * 2, // fetch extra since we merge with decisions
       });
 
+      // Also fetch decisions (unless filtering by learning_type or severity, which don't apply to decisions)
+      let allEntries: LogEntry[] = [...records];
+      if (!typeFilter && !severityFilter) {
+        try {
+          const decisions = await storage.query<{
+            id: string;
+            title: string;
+            decision: string;
+            created_at: string;
+            linear_issue?: string;
+            project?: string;
+          }>("decisions", { order: "created_at.desc", limit: limit * 2 });
+
+          const decisionEntries: LogEntry[] = decisions.map(d => ({
+            id: d.id,
+            title: d.title,
+            learning_type: "decision",
+            severity: "",
+            created_at: d.created_at,
+            source_linear_issue: d.linear_issue,
+            project: d.project || project,
+          }));
+          allEntries = [...allEntries, ...decisionEntries];
+        } catch { /* decisions file may not exist */ }
+      }
+
+      // Sort by created_at descending
+      allEntries.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
       // Post-filter by since date (local storage doesn't support gte filters)
-      let filtered = records;
+      let filtered = allEntries;
       if (sinceDate) {
         filtered = filtered.filter(r => r.created_at >= sinceDate!);
       }

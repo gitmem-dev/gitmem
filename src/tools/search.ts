@@ -139,8 +139,50 @@ export async function search(params: SearchParams): Promise<SearchResult> {
         similarity: r.similarity || 0,
       }));
 
+      // Also search decisions
+      try {
+        const decisions = await storage.query<{
+          id: string;
+          title: string;
+          decision: string;
+          rationale: string;
+          created_at: string;
+          linear_issue?: string;
+        }>("decisions", {});
+
+        const queryLower = query.toLowerCase();
+        const queryTokens = queryLower.split(/\s+/).filter(t => t.length > 1);
+
+        const decisionResults: SearchResultEntry[] = decisions
+          .map(d => {
+            const searchText = `${d.title} ${d.decision} ${d.rationale}`.toLowerCase();
+            let score = 0;
+            for (const token of queryTokens) {
+              if (searchText.includes(token)) score += 1;
+            }
+            return { ...d, score };
+          })
+          .filter(d => d.score > 0)
+          .map(d => ({
+            id: d.id,
+            title: d.title,
+            learning_type: "decision",
+            severity: "",
+            description: d.decision,
+            counter_arguments: [],
+            similarity: Math.min(d.score / queryTokens.length, 1),
+          }));
+
+        filtered = [...filtered, ...decisionResults];
+        // Re-sort by similarity descending
+        filtered.sort((a, b) => b.similarity - a.similarity);
+      } catch { /* decisions file may not exist */ }
+
       if (severityFilter) {
         filtered = filtered.filter(r => r.severity === severityFilter);
+      }
+      if (typeFilter) {
+        filtered = filtered.filter(r => r.learning_type === typeFilter);
       }
 
       filtered = filtered.slice(0, matchCount);

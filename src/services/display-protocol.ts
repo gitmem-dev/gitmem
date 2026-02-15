@@ -68,4 +68,5 @@ export const TYPE: Record<string, string> = {
   win: "🏆",
   pattern: "🔄",
   anti_pattern: "⛔",
+  decision: "📋",
 };

@@ -427,9 +427,38 @@ export async function syncThreadsToSupabase(
     return;
   }
 
+  // OD-thread-dedup: Load existing open threads once upfront for text-based dedup.
+  // Prevents duplicate creation when closing ceremony generates new thread IDs
+  // for threads that already exist with the same (or similar) text.
+  let existingOpenThreads: { thread_id: string; text: string; status: string }[] = [];
+  try {
+    existingOpenThreads = await supabase.directQuery<{ thread_id: string; text: string; status: string }>(
+      "orchestra_threads",
+      {
+        select: "thread_id,text,status",
+        filters: {
+          project,
+          status: "not.in.(resolved,archived)",
+        },
+        limit: 200,
+      }
+    );
+  } catch (err) {
+    console.error("[thread-supabase] Failed to load existing threads for dedup (proceeding without):", err instanceof Error ? err.message : err);
+  }
+
+  // Build normalized text → thread_id lookup for dedup
+  const textToExistingId = new Map<string, string>();
+  for (const t of existingOpenThreads) {
+    const key = normalizeText(t.text);
+    if (key && !textToExistingId.has(key)) {
+      textToExistingId.set(key, t.thread_id);
+    }
+  }
+
   for (const thread of threads) {
     try {
-      // Check if thread exists in Supabase
+      // Check if thread exists in Supabase by ID
       const existing = await supabase.directQuery<ThreadRow>("orchestra_threads", {
         select: "id,thread_id,status",
         filters: { thread_id: thread.id },
@@ -437,8 +466,22 @@ export async function syncThreadsToSupabase(
       });
 
       if (existing.length === 0) {
-        // New thread — create it
-        await createThreadInSupabase(thread, project);
+        // Thread ID not found — check for text-based duplicate before creating
+        const normalizedNewText = normalizeText(thread.text || "");
+        const matchedThreadId = normalizedNewText ? textToExistingId.get(normalizedNewText) : undefined;
+
+        if (matchedThreadId) {
+          // Duplicate text found — touch existing instead of creating
+          console.error(`[thread-supabase] Dedup: "${thread.id}" matches existing "${matchedThreadId}" by text — touching instead of creating`);
+          await touchThreadsInSupabase([matchedThreadId]);
+        } else {
+          // Genuinely new thread — create it
+          await createThreadInSupabase(thread, project);
+          // Register in lookup so subsequent threads in this batch also dedup
+          if (normalizedNewText) {
+            textToExistingId.set(normalizedNewText, thread.id);
+          }
+        }
       } else if (thread.status === "resolved" && existing[0].status !== "resolved") {
         // Thread was resolved during this session
         await resolveThreadInSupabase(thread.id, {

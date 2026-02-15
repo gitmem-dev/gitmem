@@ -117,6 +117,7 @@ vi.mock("../../../src/services/effect-tracker.js", () => ({
   getEffectTracker: () => ({
     track: () => {},
     formatSummary: () => "No tracked effects this session.",
+    getHealthReport: () => ({ overall: { attempted: 0, succeeded: 0, failed: 0, successRate: "N/A", paths_with_failures: [] }, byPath: {}, recentFailures: [] }),
   }),
 }));
 

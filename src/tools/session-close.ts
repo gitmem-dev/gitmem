@@ -392,12 +392,12 @@ function formatCloseDisplay(
     lines.push(`${B}Threads${R}: ${openCount} open${resolvedCount > 0 ? `, ${resolvedCount} resolved` : ""}`);
   }
 
-  // Write health (compact)
-  const healthSummary = getEffectTracker().formatSummary();
-  if (healthSummary && healthSummary !== "No tracked effects this session.") {
+  // Write health — only surface when there are failures (dev diagnostic)
+  const healthReport = getEffectTracker().getHealthReport();
+  if (healthReport.overall.failed > 0) {
     lines.push("");
-    lines.push(`${B}Write Health${R}`);
-    lines.push(healthSummary);
+    lines.push(`${B}Write Health${R} (${healthReport.overall.failed} failure${healthReport.overall.failed > 1 ? "s" : ""})`);
+    lines.push(getEffectTracker().formatSummary());
   }
 
   // Reflection highlights (Q4 what worked, Q3 do differently)

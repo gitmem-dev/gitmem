@@ -50,6 +50,7 @@ export async function refreshBehavioralScores(): Promise<BehavioralRefreshResult
         "Authorization": `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Content-Profile": "public",
       },
       body: "{}",
     });

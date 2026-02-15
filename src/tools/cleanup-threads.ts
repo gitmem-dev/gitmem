@@ -13,6 +13,7 @@ import { hasSupabase } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { computeLifecycleStatus } from "../services/thread-vitality.js";
 import { archiveDormantThreads } from "../services/thread-supabase.js";
+import { loadThreadsFile } from "../services/thread-manager.js";
 import type { ThreadRow } from "../services/thread-supabase.js";
 import type { ThreadClass, LifecycleStatus } from "../services/thread-vitality.js";
 import {
@@ -122,17 +123,70 @@ export async function cleanupThreads(
   const project = (params.project || getProject() || "default") as Project;
 
   if (!hasSupabase() || !supabase.isConfigured()) {
+    // Free tier: read threads from local .gitmem/threads.json
+    const localThreads = loadThreadsFile().filter(t => t.status === "open");
+    const now = new Date();
+    const localGroups: Record<string, ThreadSummary[]> = {
+      emerging: [],
+      active: [],
+      cooling: [],
+      dormant: [],
+    };
+
+    for (const t of localThreads) {
+      const lastTouched = t.last_touched_at || t.created_at;
+      const { lifecycle_status, vitality } = computeLifecycleStatus({
+        last_touched_at: lastTouched,
+        touch_count: 1,
+        created_at: t.created_at,
+        thread_class: "backlog" as ThreadClass,
+        current_status: t.status,
+      }, now);
+
+      const daysSinceTouch = Math.max(
+        (now.getTime() - new Date(lastTouched).getTime()) / (1000 * 60 * 60 * 24),
+        0
+      );
+
+      const summary: ThreadSummary = {
+        thread_id: t.id,
+        text: t.text,
+        lifecycle_status,
+        vitality_score: vitality.vitality_score,
+        thread_class: "backlog",
+        days_since_touch: Math.round(daysSinceTouch),
+      };
+
+      const bucket = lifecycle_status === "archived" ? "dormant" : lifecycle_status;
+      if (localGroups[bucket]) {
+        localGroups[bucket].push(summary);
+      }
+    }
+
     const latencyMs = timer.stop();
-    const emptySummary = { emerging: 0, active: 0, cooling: 0, dormant: 0, total_open: 0 };
-    const emptyGroups = { emerging: [] as ThreadSummary[], active: [] as ThreadSummary[], cooling: [] as ThreadSummary[], dormant: [] as ThreadSummary[] };
+    const totalOpen = localGroups.emerging.length + localGroups.active.length + localGroups.cooling.length + localGroups.dormant.length;
+    const localSummary = {
+      emerging: localGroups.emerging.length,
+      active: localGroups.active.length,
+      cooling: localGroups.cooling.length,
+      dormant: localGroups.dormant.length,
+      total_open: totalOpen,
+    };
+    const localResult = {
+      emerging: localGroups.emerging,
+      active: localGroups.active,
+      cooling: localGroups.cooling,
+      dormant: localGroups.dormant,
+    };
+
     return {
-      success: false,
-      summary: emptySummary,
-      groups: emptyGroups,
+      success: true,
+      summary: localSummary,
+      groups: localResult,
       archived_count: 0,
       archived_ids: [],
-      display: buildCleanupDisplay(emptySummary, emptyGroups, 0),
-      performance: buildPerformanceData("cleanup_threads", latencyMs, 0),
+      display: buildCleanupDisplay(localSummary, localResult, 0),
+      performance: buildPerformanceData("cleanup_threads", latencyMs, totalOpen),
     };
   }
 

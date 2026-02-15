@@ -10,11 +10,15 @@
 
 const DISPLAY_SUFFIX =
   "\n───────────────────────────────────────────────────\n" +
-  "DISPLAY PROTOCOL: Output the content above verbatim as your response text.\n" +
-  "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.";
+  "DISPLAY PROTOCOL: The content above is already visible to the user in the tool result.\n" +
+  "Do NOT echo or repeat it — respond briefly and naturally to the user's request.";
 
 /**
  * Wrap formatted content with the display protocol suffix.
+ *
+ * NOTE: When the PostToolUse display hook is active, this suffix is stripped
+ * and the display is routed directly to the terminal. The suffix remains as
+ * a fallback for environments without the hook (e.g. Brain Cloud, DAC).
  */
 export function wrapDisplay(content: string): string {
   return content + DISPLAY_SUFFIX;

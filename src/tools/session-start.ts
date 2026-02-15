@@ -108,7 +108,6 @@ async function loadLastSession(
 ): Promise<{
   session: LastSession | null;
   aggregated_open_threads: ThreadObject[];
-  recently_resolved_threads: ThreadObject[];
   displayInfo: ThreadDisplayInfo[];
   latency_ms: number;
   network_call: boolean;
@@ -128,7 +127,6 @@ async function loadLastSession(
 
     // OD-623: Try loading threads from Supabase (source of truth) first
     let aggregated_open_threads: ThreadObject[];
-    let recently_resolved_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];
     let threadsFromSupabase = false;
     const supabaseThreads = await loadActiveThreadsFromSupabase(project);
@@ -136,10 +134,9 @@ async function loadLastSession(
     if (supabaseThreads !== null) {
       // Supabase is source of truth for threads
       aggregated_open_threads = supabaseThreads.open;
-      recently_resolved_threads = supabaseThreads.recentlyResolved;
       displayInfo = supabaseThreads.displayInfo;
       threadsFromSupabase = true;
-      console.error(`[session_start] Loaded threads from Supabase: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved`);
+      console.error(`[session_start] Loaded ${aggregated_open_threads.length} open threads from Supabase`);
 
       // Phase 6: Auto-archive dormant threads (fire-and-forget)
       archiveDormantThreads(project).catch(() => {});
@@ -147,14 +144,13 @@ async function loadLastSession(
       // Fallback: aggregate from session records (original behavior)
       const threadResult = aggregateThreads(sessions);
       aggregated_open_threads = threadResult.open;
-      recently_resolved_threads = threadResult.recently_resolved;
-      console.error(`[session_start] Aggregated threads from sessions: ${aggregated_open_threads.length} open, ${recently_resolved_threads.length} recently resolved (Supabase thread query failed)`);
+      console.error(`[session_start] Aggregated ${aggregated_open_threads.length} open threads from sessions (Supabase thread query failed)`);
     }
 
     const latency_ms = timer.stop();
 
     if (sessions.length === 0) {
-      return { session: null, aggregated_open_threads, recently_resolved_threads, displayInfo, latency_ms, network_call: true, threadsFromSupabase };
+      return { session: null, aggregated_open_threads, displayInfo, latency_ms, network_call: true, threadsFromSupabase };
     }
 
     // Find the most recent session that was properly closed
@@ -173,7 +169,6 @@ async function loadLastSession(
           open_threads: session.open_threads || [],
         },
         aggregated_open_threads,
-        recently_resolved_threads,
         displayInfo,
         latency_ms,
         network_call: true,
@@ -190,7 +185,6 @@ async function loadLastSession(
         open_threads: closedSession.open_threads || [],
       },
       aggregated_open_threads,
-      recently_resolved_threads,
       displayInfo,
       latency_ms,
       network_call: true,
@@ -198,7 +192,7 @@ async function loadLastSession(
     };
   } catch (error) {
     console.error("[session_start] Failed to load last session:", error);
-    return { session: null, aggregated_open_threads: [], recently_resolved_threads: [], displayInfo: [], latency_ms: timer.stop(), network_call: true, threadsFromSupabase: false };
+    return { session: null, aggregated_open_threads: [], displayInfo: [], latency_ms: timer.stop(), network_call: true, threadsFromSupabase: false };
   }
 }
 
@@ -408,7 +402,6 @@ async function sessionStartFree(
   // Load last session from local storage
   let lastSession: LastSession | null = null;
   let freeAggregatedThreads: ThreadObject[] = [];
-  let freeRecentlyResolved: ThreadObject[] = [];
   try {
     const sessions = await storage.query<SessionRecord & Record<string, unknown>>("sessions", {
       order: "session_date.desc",
@@ -417,7 +410,6 @@ async function sessionStartFree(
     // Aggregate threads across recent sessions (OD-thread-lifecycle)
     const freeThreadResult = aggregateThreads(sessions as SessionRecord[]);
     freeAggregatedThreads = freeThreadResult.open;
-    freeRecentlyResolved = freeThreadResult.recently_resolved;
 
     const closedSession = sessions.find((s) => s.close_compliance != null) || sessions[0];
     if (closedSession) {
@@ -525,7 +517,6 @@ async function sessionStartFree(
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
     ...(freeMergedThreads.length > 0 && { open_threads: freeMergedThreads }),
-    ...(freeRecentlyResolved.length > 0 && { recently_resolved: freeRecentlyResolved }),
     recent_decisions: decisions,
     gitmem_dir: getGitmemDir(),
     project,
@@ -951,7 +942,6 @@ export async function sessionStart(
   const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
 
   const aggregatedThreads = lastSessionResult.aggregated_open_threads;
-  const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
   const threadDisplayInfo = lastSessionResult.displayInfo;
 
   // GIT-20: Persist to per-session dir, legacy file, and active-sessions registry
@@ -983,20 +973,23 @@ export async function sessionStart(
 
   // OD-645: Build result — no scars/wins (load on-demand via recall/search)
   const openOnly = mergedThreads.filter(t => t.status === "open" || !t.status);
+  // Strip bulky fields from last_session — open_threads used only for PROJECT STATE extraction above
+  const slimLastSession = lastSession ? {
+    id: lastSession.id,
+    title: lastSession.title,
+    date: lastSession.date,
+    key_decisions: lastSession.key_decisions,
+    open_threads: [], // stripped — stale prior-session threads add noise
+  } : null;
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
     ...(isResuming && { resumed: true }),
     detected_environment: env,
-    last_session: lastSession,
+    last_session: slimLastSession,
     ...(projectState && { project_state: projectState }), // OD-534
     ...(openOnly.length > 0 && { open_threads: openOnly }),
-    ...(recentlyResolvedThreads.length > 0 && {
-      recently_resolved: recentlyResolvedThreads,
-    }),
-    // OD-645: scars, wins, suggested_threads removed from start result
     recent_decisions: decisions,
-    // OD-666: Rapport disabled — not injected into session context
     ...(recordingPath && { recording_path: recordingPath }),
     gitmem_dir: getGitmemDir(),
     project,
@@ -1123,7 +1116,6 @@ export async function sessionRefresh(
 
   // OD-645: surfacedScars not re-queried on refresh — existing ones preserved in session state
   const refreshAggregatedThreads = lastSessionResult.aggregated_open_threads;
-  const recentlyResolvedThreads = lastSessionResult.recently_resolved_threads;
   const refreshDisplayInfo = lastSessionResult.displayInfo;
 
   // 3. Extract PROJECT STATE (OD-534)
@@ -1187,10 +1179,6 @@ export async function sessionRefresh(
   if (refreshOpenOnly.length > 0) {
     result.open_threads = refreshOpenOnly;
   }
-  if (recentlyResolvedThreads.length > 0) {
-    result.recently_resolved = recentlyResolvedThreads;
-  }
-
   // 5. Update in-memory session state with merged threads
   setCurrentSession({
     sessionId,

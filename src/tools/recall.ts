@@ -185,7 +185,7 @@ Proceed with caution - this may be new territory without documented lessons.`;
       low: "🟢",
     }[scar.severity] || "⚪";
 
-    lines.push(`${severityEmoji} **${scar.title}** (${scar.severity}, score: ${scar.similarity.toFixed(2)})`);
+    lines.push(`${severityEmoji} **${scar.title}** (${scar.severity}, score: ${scar.similarity.toFixed(2)}) · id: ${scar.id}`);
 
     // Inline archival hint: scars with high dismiss rates get annotated
     if (dismissals) {

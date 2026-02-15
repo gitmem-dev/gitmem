@@ -90,7 +90,7 @@ function buildSearchDisplay(
     const sim = `(${r.similarity.toFixed(2)})`;
     const issue = r.source_linear_issue ? `  ${r.source_linear_issue}` : "";
     lines.push(`${te} ${se} ${t.padEnd(52)} ${sim}${issue}`);
-    lines.push(`   ${truncate(r.description, 80)}`);
+    lines.push(`   ${truncate(r.description, 72)}  id:${r.id.slice(0, 8)}`);
   }
   lines.push("");
   lines.push(`${total_found} results found`);

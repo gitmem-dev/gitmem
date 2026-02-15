@@ -364,15 +364,27 @@ export function createServer(): Server {
           throw new Error(`Unknown tool: ${name}`);
       }
 
+      // Build the response text.
+      // When a `display` field exists, use it directly as the response.
+      // The display should contain everything both the user and LLM need —
+      // formatted output for readability, plus any key IDs/refs inline.
+      // No separate machine-data blob: it bloats the response and causes
+      // CLI auto-collapse ("+N lines"), hurting the user experience.
+      let responseText: string;
+
+      if (result && typeof result === "object" && "display" in result && typeof result.display === "string") {
+        responseText = (result as Record<string, unknown>).display as string;
+      } else if (result && typeof result === "object" && "text" in result && typeof result.text === "string") {
+        responseText = (result as { text: string }).text;
+      } else {
+        responseText = JSON.stringify(result, null, 2);
+      }
+
       return {
         content: [
           {
             type: "text" as const,
-            text: (result && typeof result === "object" && "display" in result && typeof result.display === "string")
-              ? result.display
-              : (result && typeof result === "object" && "text" in result && typeof result.text === "string")
-                ? result.text
-                : JSON.stringify(result, null, 2),
+            text: responseText,
           },
         ],
       };

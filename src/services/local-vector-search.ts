@@ -30,6 +30,7 @@ interface ScarRecord {
   counter_arguments?: string[];
   project?: string;
   embedding?: number[];
+  decay_multiplier?: number;
   // OD-508: LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
@@ -226,10 +227,11 @@ export class LocalVectorSearch {
     // Generate query embedding locally
     const queryEmbedding = await this._embed(query);
 
-    // Compute similarities to all scars
+    // Compute similarities to all scars, weighted by behavioral decay
     const scored = this.scars.map((indexed) => ({
       scar: indexed.scar,
-      similarity: cosineSimilarity(queryEmbedding, indexed.embedding),
+      similarity: cosineSimilarity(queryEmbedding, indexed.embedding)
+        * (indexed.scar.decay_multiplier ?? 1.0),
     }));
 
     // Sort by similarity (descending) and take top k
@@ -249,6 +251,7 @@ export class LocalVectorSearch {
       why_this_matters: scar.why_this_matters,
       action_protocol: scar.action_protocol,
       self_check_criteria: scar.self_check_criteria,
+      decay_multiplier: scar.decay_multiplier,
     }));
 
     const elapsed = Date.now() - startTime;

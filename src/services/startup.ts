@@ -83,6 +83,7 @@ interface ScarWithEmbedding {
   embedding?: number[];
   updated_at?: string;
   keywords?: string[];
+  decay_multiplier?: number;
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];

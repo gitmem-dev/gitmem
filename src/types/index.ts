@@ -156,6 +156,8 @@ export interface RelevantScar {
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
+  // Behavioral decay multiplier (organic scar lifecycle)
+  decay_multiplier?: number;
 }
 
 export interface RecentDecision {

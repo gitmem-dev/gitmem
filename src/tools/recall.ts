@@ -39,6 +39,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getSessionPath } from "../services/gitmem-dir.js";
 import { wrapDisplay } from "../services/display-protocol.js";
+import { fetchDismissalCounts, type DismissalCounts } from "../services/behavioral-decay.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
 /**
@@ -83,6 +84,8 @@ interface ScarRecord {
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
+  // Behavioral decay
+  decay_multiplier?: number;
 }
 
 /**
@@ -106,6 +109,8 @@ interface FormattedScar {
   self_check_criteria?: string[];
   // OD-466: Knowledge triples for relationship context
   related_triples?: KnowledgeTriple[];
+  // Behavioral decay
+  decay_multiplier?: number;
 }
 
 /**
@@ -126,7 +131,7 @@ export interface RecallResult {
 /**
  * Format scars into a readable response for Claude
  */
-function formatResponse(scars: FormattedScar[], plan: string): string {
+function formatResponse(scars: FormattedScar[], plan: string, dismissals?: Map<string, DismissalCounts>): string {
   if (scars.length === 0) {
     return `No relevant scars found for: "${plan.slice(0, 100)}..."
 
@@ -181,6 +186,14 @@ Proceed with caution - this may be new territory without documented lessons.`;
     }[scar.severity] || "⚪";
 
     lines.push(`${severityEmoji} **${scar.title}** (${scar.severity}, score: ${scar.similarity.toFixed(2)})`);
+
+    // Inline archival hint: scars with high dismiss rates get annotated
+    if (dismissals) {
+      const counts = dismissals.get(scar.id);
+      if (counts && counts.surfaced >= 5 && (counts.dismissed / counts.surfaced) >= 0.7) {
+        lines.push(`  _[${counts.dismissed}x dismissed — consider archiving with gm-archive]_`);
+      }
+    }
 
     // OD-525: Use variant enforcement text if available (blind to variant name)
     if (scar.variant_info?.has_variants && scar.variant_info.variant) {
@@ -456,6 +469,14 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       console.error(`[recall] Found triples for ${triplesMap.size} scars (${tripleLatencyMs}ms)`);
     }
 
+    // Fetch dismissal counts for inline archival hints (non-blocking, graceful fallback)
+    let dismissalCounts: Map<string, DismissalCounts> | undefined;
+    try {
+      dismissalCounts = await fetchDismissalCounts(scarIds);
+    } catch (err) {
+      console.warn("[recall] Dismissal count fetch failed (non-fatal):", err);
+    }
+
     // Format scars for response
     const scars: FormattedScar[] = rawScars.map((scar) => ({
       id: scar.id,
@@ -475,6 +496,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       self_check_criteria: (scar as ScarRecord).self_check_criteria,
       // OD-466: Knowledge triples
       related_triples: triplesMap.get(scar.id),
+      // Behavioral decay
+      decay_multiplier: (scar as ScarRecord).decay_multiplier,
     }));
 
     // OD-552: Track surfaced scars for auto-bridge at session close
@@ -530,7 +553,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     });
 
     // Record metrics asynchronously
-    const mainFormatted = formatResponse(scars, plan);
+    const mainFormatted = formatResponse(scars, plan, dismissalCounts);
     const result = {
       activated: scars.length > 0,
       plan,

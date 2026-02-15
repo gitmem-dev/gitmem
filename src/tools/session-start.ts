@@ -752,11 +752,18 @@ function writeSessionFiles(
  *
  * Design: 80-char terminal safe, monospace-friendly, no markdown headers.
  */
+/**
+ * Strip thread ID prefixes (e.g., "t-d573c47f: ") from display text.
+ */
+function stripThreadPrefix(text: string): string {
+  return text.replace(/^t-[a-f0-9]+:\s*/i, "");
+}
+
 function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>): string {
   const visual: string[] = [];
 
   // Line 1: product name + session state
-  const stateLabel = result.refreshed ? "session refreshed" : (result.resumed ? "session resumed" : "session active");
+  const stateLabel = result.refreshed ? "refreshed" : (result.resumed ? "resumed" : "active");
   visual.push(`gitmem ── ${stateLabel}`);
 
   // Line 2: session ID + agent + project
@@ -764,13 +771,13 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   if (result.project) parts.push(result.project);
   visual.push(parts.join(" · "));
 
-  // Threads section — top 5 by vitality, truncated to 64 chars
+  // Threads section — top 5 by vitality, truncated to 60 chars
   const hasThreads = result.open_threads && result.open_threads.length > 0;
   const hasDecisions = result.recent_decisions && result.recent_decisions.length > 0;
 
   if (hasThreads) {
     visual.push("");
-    visual.push(`\x1b[1mThreads (${result.open_threads!.length})\x1b[0m  \x1b[2mgm-threads to see all\x1b[0m`);
+    visual.push(`Threads (${result.open_threads!.length})`);
 
     const enriched = result.open_threads!.map(t => ({
       thread: t,
@@ -780,8 +787,9 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
 
     const maxShow = 5;
     for (let i = 0; i < Math.min(enriched.length, maxShow); i++) {
-      const text = enriched[i].thread.text;
-      const truncated = text.length > 64 ? text.slice(0, 61) + "..." : text;
+      const raw = enriched[i].thread.text;
+      const text = stripThreadPrefix(raw);
+      const truncated = text.length > 60 ? text.slice(0, 57) + "..." : text;
       visual.push(`  ${truncated}`);
     }
     if (result.open_threads!.length > maxShow) {
@@ -792,39 +800,30 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   // Decisions section — top 3 with compact date
   if (hasDecisions) {
     visual.push("");
-    visual.push(`\x1b[1mDecisions (${result.recent_decisions!.length})\x1b[0m`);
+    visual.push(`Decisions (${result.recent_decisions!.length})`);
     for (const d of result.recent_decisions!.slice(0, 3)) {
       const title = d.title.length > 50 ? d.title.slice(0, 47) + "..." : d.title;
       visual.push(`  ${title} · ${d.date}`);
     }
   }
 
-  // OD-666: Rapport is included in the JSON result for LLM context
-  // but omitted from the visual display — it's noise for the human user.
-
-  // Footer
   if (!hasThreads && !hasDecisions) {
     visual.push("");
-    visual.push("No open threads. No recent decisions.");
-    visual.push("\x1b[1mUse recall before making changes.\x1b[0m Run gitmem-help for more options.");
-  } else {
-    visual.push("");
-    visual.push("\x1b[1mUse recall before making changes.\x1b[0m Run gitmem-help for more options.");
+    visual.push("No threads or decisions.");
   }
 
   const visualBlock = visual.join("\n");
 
   // ── Display-first layout ──
   // Visual block comes FIRST so Claude Code's collapsed tool output shows
-  // "gitmem ── session active" as the first visible line, not LLM instructions.
+  // "gitmem ── active" as the first visible line, not LLM instructions.
   // LLM instructions follow AFTER — the model reads the full result regardless.
   return [
     visualBlock,
     "",
     "───────────────────────────────────────────────────",
-    "DISPLAY PROTOCOL: Echo the content above as your complete response.",
-    "Do not add preamble, commentary, \"I've read CLAUDE.md\", or markdown headers.",
-    "Do not summarize or reformat. Output it exactly as-is.",
+    "DISPLAY PROTOCOL: The content above is already visible to the user in the tool result.",
+    "Do NOT echo or repeat it. Respond briefly and naturally to the user's request.",
   ].join("\n");
 }
 
@@ -905,6 +904,14 @@ export async function sessionStart(
   ensureInitialized(project).catch((err) => {
     console.error(`[session_start] Cache warmup failed for ${project}: ${err}`);
   });
+
+  // Refresh behavioral decay scores (fire-and-forget, zero latency impact)
+  // Aggregates scar_usage patterns to update decay_multiplier on scars
+  import("../services/behavioral-decay.js").then(({ refreshBehavioralScores }) => {
+    refreshBehavioralScores().catch((err) => {
+      console.error(`[session_start] Behavioral decay refresh failed: ${err}`);
+    });
+  }).catch(() => {});
 
   const latencyMs = timer.stop();
 

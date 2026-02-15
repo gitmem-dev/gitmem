@@ -489,7 +489,7 @@ export async function loadScarsWithEmbeddings<T = unknown>(
     }
 
     const learnings = await directQuery<T>("orchestra_learnings", {
-      select: "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type",
+      select: "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type,decay_multiplier",
       filters,
       order: "updated_at.desc",
       limit,

@@ -1,3 +1,4 @@
+<!-- gitmem:start -->
 # GitMem — Institutional Memory
 
 ## What is this?
@@ -126,3 +127,4 @@ Before marking any feature or fix as complete:
 | Refactor | Existing tests still pass (no new tests needed if behavior unchanged) |
 
 ⚠️ **"Tests pass" ≠ "Tests exist."** Passing a suite that doesn't cover your change proves nothing.
+<!-- gitmem:end -->

@@ -4,8 +4,9 @@
  * GitMem CLI
  *
  * Commands:
+ *   gitmem init            — Interactive setup wizard (detects, prompts, merges)
+ *   gitmem uninstall       — Clean reverse of everything init did
  *   gitmem setup           — Output SQL to paste into Supabase SQL Editor (pro/dev)
- *   gitmem init            — Load starter scars (local JSON or Supabase)
  *   gitmem configure       — Generate .mcp.json entry for Claude Code
  *   gitmem check           — Run diagnostic health check
  *   gitmem install-hooks   — Install Claude Code hooks plugin
@@ -36,30 +37,32 @@ function printUsage() {
 GitMem — Institutional Memory for AI Coding
 
 Usage:
+  npx gitmem init              Interactive setup wizard (recommended)
+  npx gitmem init --yes        Non-interactive setup (accept all defaults)
+  npx gitmem init --dry-run    Show what would be configured
+  npx gitmem uninstall         Clean removal of gitmem from project
+  npx gitmem uninstall --all   Also delete .gitmem/ data directory
+
+Other commands:
   npx gitmem setup             Output SQL for Supabase schema setup (pro/dev tier)
-  npx gitmem init [--project name]  Load starter scars (auto-detects tier)
   npx gitmem configure         Generate .mcp.json config for Claude Code
-  npx gitmem check              Run diagnostic health check
-  npx gitmem check --full       Full diagnostic with benchmarks
-  npx gitmem install-hooks     Install Claude Code hooks plugin
-  npx gitmem uninstall-hooks   Remove Claude Code hooks plugin
+  npx gitmem check             Run diagnostic health check
+  npx gitmem check --full      Full diagnostic with benchmarks
+  npx gitmem install-hooks     Install Claude Code hooks (standalone)
+  npx gitmem uninstall-hooks   Remove Claude Code hooks (standalone)
   npx gitmem server            Start MCP server (default)
   npx gitmem help              Show this help message
 
-Free Tier (zero config):
-  1. npx gitmem init
-  2. npx gitmem configure
-  3. Copy CLAUDE.md.template into your project
-  4. Start coding — memory is active!
+Quick Start:
+  npx gitmem init              One command sets up everything
+  npx gitmem uninstall         One command removes everything
 
 Pro Tier (with Supabase):
   1. Create free Supabase project → database.new
   2. npx gitmem setup   (copy SQL → Supabase SQL Editor)
-  3. Get API key for embeddings (OpenAI, OpenRouter, or Ollama)
-  4. npx gitmem configure
-  5. npx gitmem init    (load starter scars into Supabase)
-  6. Copy CLAUDE.md.template into your project
-  7. Start coding — memory is active!
+  3. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars
+  4. npx gitmem init    (auto-detects pro tier)
+  5. Start coding — memory is active!
 `);
 }
 
@@ -684,6 +687,14 @@ switch (command) {
     cmdSetup();
     break;
   case "init":
+    // New interactive wizard (replaces old cmdInit for CLI usage)
+    import("./init-wizard.js");
+    break;
+  case "uninstall":
+    import("./uninstall.js");
+    break;
+  case "init-scars":
+    // Legacy: load starter scars only (old init behavior)
     cmdInit();
     break;
   case "configure":

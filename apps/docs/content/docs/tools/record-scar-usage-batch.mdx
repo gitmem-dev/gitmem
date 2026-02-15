@@ -1,0 +1,33 @@
+---
+title: "record_scar_usage_batch"
+description: "Track multiple scar applications in a single batch operation (reduces session close latency)."
+---
+
+# record_scar_usage_batch
+
+**Tier:** Dev · **Aliases:** `gitmem-rsb`
+
+Track multiple scar applications in a single batch operation (reduces session close latency)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scars` | object[] | Yes | Array of scar usage entries to record |
+| `project` | string | No | Project scope for scar resolution |
+
+### scars items
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scar_identifier` | string | Yes | UUID or title/description of scar (tool resolves to UUID) |
+| `issue_id` | string | No | Linear issue UUID |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., OD-XXX) |
+| `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
+| `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
+| `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
+| `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
+| `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
+| `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
+| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+

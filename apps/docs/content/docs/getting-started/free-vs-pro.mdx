@@ -1,0 +1,60 @@
+---
+title: Free vs Pro
+description: Compare GitMem tiers and choose the right one for your workflow.
+---
+
+# Free vs Pro
+
+GitMem ships with a fully functional free tier. Pro adds cloud storage and advanced features.
+
+## Feature Comparison
+
+| Feature | Free | Pro |
+|---------|------|-----|
+| **Session Management** | Local `.gitmem/` | Supabase PostgreSQL |
+| **Recall (scar surfacing)** | Local vector search | Supabase pgvector |
+| **Create scars/wins/patterns** | Local JSON files | Supabase with embeddings |
+| **Threads** | Local tracking | Persistent across machines |
+| **Session history** | Last session only | Full history with search |
+| **Semantic search** | Local cache | Supabase pgvector |
+| **Multi-agent** | Single machine | Shared cloud storage |
+| **Batch operations** | — | Batch scar recording |
+| **Transcripts** | — | Save/search session transcripts |
+| **Cache management** | — | Status, health, flush tools |
+| **Knowledge graph** | — | Triple-based graph traversal |
+| **Analytics** | Basic | Full session analytics |
+
+## Tool Count by Tier
+
+| Tier | Tools Available |
+|------|----------------|
+| Free | 23 core tools |
+| Pro | 29 tools (+ batch, transcripts, cache) |
+| Dev | 29 tools (same as Pro, for development) |
+
+## When to Upgrade
+
+**Stay on Free if:**
+- You're a solo developer
+- Your projects are single-machine
+- You don't need cross-session semantic search
+
+**Upgrade to Pro if:**
+- You need shared memory across machines or teams
+- You want full semantic search over learnings
+- You need session transcript storage
+- You're running multi-agent workflows
+
+## Setting Up Pro
+
+1. Create a [Supabase](https://supabase.com) project
+2. Run the GitMem migration to set up tables
+3. Set environment variables:
+
+```bash
+export GITMEM_TIER=pro
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+See [Supabase Setup](/docs/guides/supabase-setup) for detailed instructions.

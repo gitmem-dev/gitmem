@@ -1,0 +1,35 @@
+---
+title: Changelog
+description: GitMem release history.
+---
+
+# Changelog
+
+## v1.0.1 (2026-02-16)
+
+### Bug Fixes
+
+- **OD-590:** Fixed stdout corruption — 22 `console.log` calls replaced with `console.error` in check.ts
+- **OD-554:** Error messages now surface in `create_learning` and `record_scar_usage` responses via `errors[]` array
+- **OD-548:** Session ID validation added to `session_close` — returns clear error with UUID format example instead of confusing DB lookup failure
+- **OD-640:** Removed hardcoded project enum — project names are now free-form strings
+
+### Tests
+
+- +2 regression tests for stdout purity
+- +8 tests for error message surfacing
+- +10 tests for session ID validation
+
+## v1.0.0 (2026-02-15)
+
+### Initial Release
+
+- 23 core tools (free tier) / 29 tools (pro tier)
+- Session management with closing ceremony
+- Scar recall with semantic search
+- Thread tracking across sessions
+- Multi-agent context injection
+- Knowledge graph traversal
+- Local `.gitmem/` storage (free) or Supabase (pro)
+- Claude Code hooks for automatic session management
+- 660+ automated tests across 6 tiers

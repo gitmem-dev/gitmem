@@ -1,0 +1,21 @@
+---
+title: "search"
+description: "Search institutional memory by query."
+---
+
+# search
+
+**Tier:** Free · **Aliases:** `gitmem-search`, `gm-search`
+
+Search institutional memory by query. Unlike recall (which is action-oriented), search is exploration-oriented — returns matching scars/wins/patterns without side effects.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Natural language search query (e.g., 'deployment failures', 'Supabase RLS') |
+| `match_count` | number | No | Number of results to return (default: 5) |
+| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
+

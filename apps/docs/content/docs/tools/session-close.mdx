@@ -1,0 +1,20 @@
+---
+title: "session_close"
+description: "Persist session with compliance validation."
+---
+
+# session_close
+
+**Tier:** Free · **Aliases:** `gitmem-sc`, `gm-close`
+
+Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to `{gitmem_dir}/closing-payload.json` using your file write tool — the `gitmem_dir` path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Echo it verbatim to the user instead of formatting your own close summary.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | Yes | Session ID from session_start |
+| `close_type` | `"standard"` \| `"quick"` \| `"autonomous"` | Yes | Type of close (standard requires full reflection) |
+| `linear_issue` | string | No | Associated Linear issue |
+| `ceremony_duration_ms` | number | No | End-to-end ceremony duration from agent perspective (in milliseconds) |
+

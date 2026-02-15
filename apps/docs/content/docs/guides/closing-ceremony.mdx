@@ -1,0 +1,67 @@
+---
+title: Closing Ceremony
+description: How to properly close a GitMem session with reflection and persistence.
+---
+
+# Closing Ceremony
+
+The closing ceremony is GitMem's session persistence ritual. It captures what happened, what was learned, and what carries forward.
+
+## Quick Close vs Standard Close
+
+| Type | When to Use | What Happens |
+|------|-------------|--------------|
+| **Quick** | Short sessions (< 30 min), purely exploratory | Minimal persistence, no reflection |
+| **Standard** | All substantive work sessions | Full 9-question reflection |
+
+## Standard Close Flow
+
+### Step 1: Read Session State
+
+The agent reads `.gitmem/active-sessions.json` to recover the session ID and any surfaced scars.
+
+### Step 2: Answer 9 Questions
+
+The agent reflects on:
+
+1. **What broke** that you didn't expect?
+2. **What took longer** than it should have?
+3. **What would you do differently** next time?
+4. **What pattern worked** well?
+5. **What assumption was wrong?**
+6. **Which scars** did you apply?
+7. **What should be captured** as institutional memory?
+8. **How did the human prefer to work?** (rapport)
+9. **What collaborative dynamic** worked or didn't? (rapport)
+
+### Step 3: Human Review
+
+The agent asks: "Any corrections or additions?"
+
+This human checkpoint prevents false learnings from being persisted.
+
+### Step 4: Create Learnings
+
+Any new scars, wins, or patterns identified in Q7 are created **before** session close.
+
+### Step 5: Persist
+
+`session_close` writes the full session record with:
+- Close compliance metadata
+- Scar usage records
+- Open threads
+- Rapport notes for the next session
+
+## Writing the Payload
+
+For standard closes, write heavy data to `.gitmem/closing-payload.json` before calling `session_close`. The tool reads this file automatically.
+
+```json
+{
+  "closing_reflection": "Session focused on auth migration...",
+  "task_completion": "partial",
+  "scars_to_record": [],
+  "open_threads": ["Rate limiting still needs implementation"],
+  "decisions": ["Chose JWT over session cookies for stateless auth"]
+}
+```

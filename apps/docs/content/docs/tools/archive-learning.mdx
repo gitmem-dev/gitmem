@@ -1,0 +1,18 @@
+---
+title: "archive_learning"
+description: "Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp."
+---
+
+# archive_learning
+
+**Tier:** Pro · **Aliases:** `gitmem-al`, `gm-archive`
+
+Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp. Archived learnings are excluded from recall and search results but preserved for audit trail.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | UUID of the learning to archive |
+| `reason` | string | No | Optional reason for archiving (e.g., 'superseded by OD-XXX', 'no longer relevant') |
+

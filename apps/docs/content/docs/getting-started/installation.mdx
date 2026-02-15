@@ -1,0 +1,98 @@
+---
+title: Installation
+description: Install GitMem via npx, global install, or MCP configuration.
+---
+
+# Installation
+
+## Option 1: Quick Init (Recommended)
+
+```bash
+cd your-project
+npx gitmem-mcp init
+```
+
+This is the fastest path. It:
+- Creates `.gitmem/` with local storage
+- Loads 12 starter scars covering common AI agent mistakes
+- Configures Claude Code hooks for automatic session management
+- Adds GitMem instructions to your `CLAUDE.md`
+
+## Option 2: MCP Server Only
+
+If you want to configure the MCP server manually without the init wizard:
+
+### Claude Code
+
+```bash
+claude mcp add gitmem -- npx -y gitmem-mcp
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+```
+
+## Option 3: Global Install
+
+```bash
+npm install -g gitmem-mcp
+```
+
+Then reference the global binary in your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "gitmem-mcp"
+    }
+  }
+}
+```
+
+## Verify Installation
+
+After setup, ask your AI agent:
+
+> "Run gitmem-help"
+
+You should see a list of available commands with your current tier and tool count.
+
+## Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Storage directory |
+| `GITMEM_TIER` | `free` | Tier: `free`, `pro`, or `dev` |
+| `SUPABASE_URL` | — | Pro tier: Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | — | Pro tier: Supabase service key |
+
+See [Configuration](/docs/getting-started/configuration) for full details.

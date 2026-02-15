@@ -1,0 +1,21 @@
+---
+title: "log"
+description: "List recent learnings chronologically (like git log)."
+---
+
+# log
+
+**Tier:** Free · **Aliases:** `gitmem-log`, `gm-log`
+
+List recent learnings chronologically (like git log). Shows scars, wins, and patterns ordered by creation date.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Number of entries to return (default: 10) |
+| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
+| `since` | number | No | Days to look back (e.g., 7 = last week) |
+

@@ -30,7 +30,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         match_count: {
           type: "number",
@@ -108,7 +108,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -222,7 +222,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -273,7 +273,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -287,7 +287,7 @@ export const TOOLS = [
       properties: {
         scar_id: {
           type: "string",
-          description: "UUID of the scar from orchestra_learnings",
+          description: "UUID of the scar",
         },
         issue_id: {
           type: "string",
@@ -422,7 +422,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["session_id", "transcript"],
@@ -463,7 +463,7 @@ export const TOOLS = [
         },
         project: {
           type: "string",
-          description: "Project namespace to filter by (e.g., 'orchestra_dev')",
+          description: "Project namespace to filter by (e.g., 'my-project')",
         },
       },
       required: ["query"],
@@ -489,7 +489,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -518,7 +518,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -567,7 +567,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -627,7 +627,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -691,7 +691,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["suggestion_id"],
@@ -725,7 +725,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         auto_archive: {
           type: "boolean",
@@ -769,7 +769,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         match_count: {
           type: "number",
@@ -833,7 +833,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -947,7 +947,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -998,7 +998,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -1012,7 +1012,7 @@ export const TOOLS = [
       properties: {
         scar_id: {
           type: "string",
-          description: "UUID of the scar from orchestra_learnings",
+          description: "UUID of the scar",
         },
         issue_id: {
           type: "string",
@@ -1147,7 +1147,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["session_id", "transcript"],
@@ -1238,7 +1238,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -1268,7 +1268,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -1314,7 +1314,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -1468,7 +1468,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -1605,7 +1605,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -1629,7 +1629,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -1659,7 +1659,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -1705,7 +1705,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -1845,7 +1845,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1878,7 +1878,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1911,7 +1911,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1946,7 +1946,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -1960,7 +1960,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -1974,7 +1974,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -1988,7 +1988,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -2002,7 +2002,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -2016,7 +2016,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
       },
     },
@@ -2094,7 +2094,7 @@ export const TOOLS = [
         },
         node: {
           type: "string",
-          description: "Starting node. Examples: 'OD-466', 'CLI', 'Elena', 'Scar: Done ≠ Deployed'. Required for all lenses except stats.",
+          description: "Starting node. Examples: 'OD-466', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats.",
         },
         predicate: {
           type: "string",
@@ -2108,7 +2108,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         limit: {
           type: "number",
@@ -2131,7 +2131,7 @@ export const TOOLS = [
         },
         node: {
           type: "string",
-          description: "Starting node (e.g., 'OD-466', 'CLI', 'Elena')",
+          description: "Starting node (e.g., 'OD-466', 'CLI')",
         },
         predicate: {
           type: "string",
@@ -2142,7 +2142,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         limit: { type: "number", description: "Max triples (default: 50)" },
       },
@@ -2170,7 +2170,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
         },
         limit: { type: "number", description: "Max triples" },
       },

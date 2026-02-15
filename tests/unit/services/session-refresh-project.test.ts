@@ -24,31 +24,31 @@ describe("session_refresh project resolution (OD-668)", () => {
     setCurrentSession({
       sessionId: "test-session",
       agent: "CLI",
-      project: "orchestra_dev",
+      project: "test-project",
       startedAt: new Date(),
     });
 
     const session = getCurrentSession();
     expect(session).not.toBeNull();
-    expect(session!.project).toBe("orchestra_dev");
+    expect(session!.project).toBe("test-project");
   });
 
   it("getProject() returns session project", () => {
     setCurrentSession({
       sessionId: "test-session",
       agent: "CLI",
-      project: "orchestra_dev",
+      project: "test-project",
       startedAt: new Date(),
     });
 
-    expect(getProject()).toBe("orchestra_dev");
+    expect(getProject()).toBe("test-project");
   });
 
   it("params.project || currentSession.project || 'default' resolves correctly", () => {
     setCurrentSession({
       sessionId: "test-session",
       agent: "CLI",
-      project: "orchestra_dev",
+      project: "test-project",
       startedAt: new Date(),
     });
 
@@ -57,7 +57,7 @@ describe("session_refresh project resolution (OD-668)", () => {
     // Simulate the FIXED resolution logic from sessionRefresh
     const paramsProject = undefined; // user didn't pass project
     const resolved = paramsProject || currentSession.project || "default";
-    expect(resolved).toBe("orchestra_dev");
+    expect(resolved).toBe("test-project");
 
     // Simulate the OLD BUGGY logic
     const buggyResolved = paramsProject || "default";
@@ -68,7 +68,7 @@ describe("session_refresh project resolution (OD-668)", () => {
     setCurrentSession({
       sessionId: "test-session",
       agent: "CLI",
-      project: "orchestra_dev",
+      project: "test-project",
       startedAt: new Date(),
     });
 

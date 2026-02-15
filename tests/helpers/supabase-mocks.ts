@@ -61,7 +61,7 @@ export function createMockSession(overrides?: Partial<{
   return {
     id: "393adb34-a80c-4c3a-b71a-bc0053b7a7ea",
     agent: "CLI",
-    project: "orchestra_dev",
+    project: "test-project",
     session_title: "Interactive Session",
     session_date: today,
     created_at: now,

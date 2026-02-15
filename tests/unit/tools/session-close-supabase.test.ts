@@ -160,7 +160,7 @@ function createMockSession(overrides?: Record<string, unknown>) {
   return {
     id: VALID_UUID,
     agent: "CLI",
-    project: "orchestra_dev",
+    project: "test-project",
     session_title: "Interactive Session",
     session_date: today,
     created_at: now,

@@ -22,7 +22,7 @@ describe("CreateDecisionParamsSchema", () => {
         decision: "We will use Zod schemas for parameter validation",
         rationale: "Provides type safety and clear error messages",
         alternatives_considered: ["Manual validation", "Yup", "io-ts"],
-        personas_involved: ["Elena", "Marcus"],
+        personas_involved: ["Alice", "Bob"],
         docs_affected: ["docs/systems/enforcement/roadmap.md", "CLAUDE.md"],
         linear_issue: "OD-580",
         session_id: "test-session-123",

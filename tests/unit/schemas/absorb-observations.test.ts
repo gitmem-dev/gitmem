@@ -44,7 +44,7 @@ describe("ObservationSchema", () => {
 
   it("accepts observation with context", () => {
     const result = ObservationSchema.safeParse({
-      source: "Teammate: Marcus",
+      source: "Teammate: reviewer",
       text: "Missing error handling",
       severity: "warning",
       context: "src/routes/api/foo.ts",

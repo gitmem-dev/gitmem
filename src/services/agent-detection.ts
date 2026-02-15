@@ -8,7 +8,7 @@
  * | ENTRYPOINT | Docker | Hostname | Identity |
  * |------------|--------|----------|----------|
  * | cli        | YES    | (any)    | CLI      |
- * | cli        | NO     | orchestra.nteg.com | CODA-1 |
+ * | cli        | NO     | (server hostname)  | CODA-1 |
  * | claude-desktop | NO | (any)    | DAC      |
  * | (empty)    | NO     | (local)  | Brain_Local |
  * | (empty)    | NO     | (no fs)  | Brain_Cloud |
@@ -55,8 +55,8 @@ export function detectAgent(): DetectedEnvironment {
     if (docker) {
       // CLI in Docker container
       agent = "CLI";
-    } else if (hostname === "orchestra.nteg.com" || hostname === "cyrus") {
-      // CLI on orchestra server = CODA-1
+    } else if (process.env.GITMEM_AGENT_HOSTNAME && (hostname === process.env.GITMEM_AGENT_HOSTNAME)) {
+      // CLI on configured server = CODA-1
       agent = "CODA-1";
     } else {
       // CLI elsewhere (fallback)

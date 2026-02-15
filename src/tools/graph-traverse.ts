@@ -29,7 +29,7 @@ export type GraphTraverseLens = "connected_to" | "produced_by" | "provenance" | 
 
 export interface GraphTraverseParams {
   lens: GraphTraverseLens;
-  /** Starting node. Examples: "OD-466", "CLI", "Elena", "Scar: Done ≠ Deployed" */
+  /** Starting node. Examples: "OD-466", "CLI", "Scar: Done ≠ Deployed" */
   node?: string;
   /** Filter by predicate */
   predicate?: string;
@@ -94,7 +94,8 @@ const SELECT_COLS =
   "id,subject,predicate,object,event_time,decay_weight,source_type,source_id,source_linear_issue,created_by";
 
 const KNOWN_AGENTS = ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"];
-const KNOWN_PERSONAS = ["Elena", "Marcus", "Reiko", "Jax", "Chris Crawford"];
+/** Persona names are resolved dynamically via triple-writer's normalizePersonaLabel */
+const KNOWN_PERSONAS: string[] = [];
 
 // --- Node Normalization ---
 
@@ -503,7 +504,7 @@ export async function graphTraverse(
 
   // Validate: node required for all lenses except stats
   if (lens !== "stats" && !params.node) {
-    const missingNodeMsg = `The '${lens}' lens requires a 'node' parameter (e.g., "OD-466", "CLI", "Elena")`;
+    const missingNodeMsg = `The '${lens}' lens requires a 'node' parameter (e.g., "OD-466", "CLI", "Scar: Done ≠ Deployed")`;
     return {
       success: false,
       lens,

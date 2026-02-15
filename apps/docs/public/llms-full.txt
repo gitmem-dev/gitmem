@@ -1207,7 +1207,7 @@ Session analytics and insights engine. Returns formatted markdown by default. Us
 |-----------|------|----------|-------------|
 | `lens` | `"summary"` \| `"reflections"` \| `"blindspots"` | No | Analysis lens to apply (default: summary) |
 | `days` | number | No | Number of days to analyze (default: 30) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `agent` | string | No | Filter by agent identity (e.g., CLI, DAC, CODA-1) |
 | `format` | `"text"` \| `"json"` | No | Output format: text (default, compact markdown) or json (raw data) |
 
@@ -1246,7 +1246,7 @@ gitmem-cache-flush - Force reload cache from Supabase (use when out of sync)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # gitmem-cache-health
@@ -1264,7 +1264,7 @@ gitmem-cache-health - Compare local cache against remote Supabase (detect out-of
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # gitmem-cache-status
@@ -1282,7 +1282,7 @@ gitmem-cache-status - Show local search cache status (scar count, age, staleness
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # cleanup_threads
@@ -1300,7 +1300,7 @@ Triage open threads by lifecycle health. Groups threads as active/cooling/dorman
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `auto_archive` | boolean | No | If true, auto-archive threads that have been dormant for 30+ days |
 
 ========================================================================
@@ -1353,7 +1353,7 @@ Log architectural/operational decision to institutional memory
 | `docs_affected` | string[] | No | Docs/files affected by this decision (relative paths from repo root) |
 | `linear_issue` | string | No | Associated Linear issue |
 | `session_id` | string | No | Current session ID |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # create_learning
@@ -1383,7 +1383,7 @@ Create scar, win, or pattern entry in institutional memory
 | `domain` | string[] | No | Domain tags |
 | `keywords` | string[] | No | Search keywords |
 | `source_linear_issue` | string | No | Source Linear issue |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # create_thread
@@ -1457,10 +1457,10 @@ Traverse the knowledge graph over institutional memory triples. Answers: 'show m
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `lens` | `"connected_to"` \| `"produced_by"` \| `"provenance"` \| `"stats"` | Yes | Traversal mode: connected_to (all connections to a node), produced_by (what an agent/persona produced), provenance (trace origin chain), stats (aggregate counts) |
-| `node` | string | No | Starting node. Examples: 'OD-466', 'CLI', 'Elena', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
+| `node` | string | No | Starting node. Examples: 'OD-466', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
 | `predicate` | `"created_in"` \| `"influenced_by"` \| `"supersedes"` \| `"demonstrates"` | No | Filter by predicate (optional) |
 | `depth` | number | No | Max chain depth for provenance lens (default: 3) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `limit` | number | No | Max triples to return (default: 50) |
 
 ========================================================================
@@ -1590,7 +1590,7 @@ List open threads across recent sessions. Shows unresolved work items that carry
 |-----------|------|----------|-------------|
 | `status` | `"open"` \| `"resolved"` | No | Filter by status (default: open) |
 | `include_resolved` | boolean | No | Include recently resolved threads (default: false) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # log
@@ -1609,7 +1609,7 @@ List recent learnings chronologically (like git log). Shows scars, wins, and pat
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `limit` | number | No | Number of entries to return (default: 10) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
 | `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
 | `since` | number | No | Days to look back (e.g., 7 = last week) |
@@ -1634,7 +1634,7 @@ Generate portable memory payload for sub-agent injection. Formats institutional 
 | `format` | `"full"` \| `"compact"` \| `"gate"` | Yes | Output format: full (rich markdown), compact (~500 tokens, one-line per scar), gate (~100 tokens, blocking scars only) |
 | `max_tokens` | number | No | Token budget for payload (default: 500 for compact, 100 for gate, unlimited for full) |
 | `agent_role` | string | No | Sub-agent role for relevance filtering (e.g., 'reviewer', 'deployer') — reserved for Phase 3 |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # promote_suggestion
@@ -1653,7 +1653,7 @@ Promote a suggested thread to an open thread. Takes a suggestion_id from session
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `suggestion_id` | string | Yes | Suggestion ID (e.g., "ts-a1b2c3d4") from suggested_threads list |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # recall
@@ -1672,7 +1672,7 @@ Check institutional memory for relevant scars before taking action. Returns matc
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `plan` | string | Yes | What you're about to do (e.g., 'implement auth layer', 'deploy to production') |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `match_count` | number | No | Number of scars to return (default: 3) |
 | `issue_id` | string | No | Linear issue identifier for variant assignment (e.g., 'OD-525'). When provided, scars with variants will be randomly assigned and formatted accordingly. |
 
@@ -1777,7 +1777,7 @@ Save full session transcript to storage for training data and post-mortems (OD-4
 | `session_id` | string | Yes | Session ID to associate transcript with |
 | `transcript` | string | Yes | Full conversation transcript content |
 | `format` | `"json"` \| `"markdown"` | No | Transcript format (default: json) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 
 ========================================================================
 # search_transcripts
@@ -1798,7 +1798,7 @@ Semantic search over session transcript chunks. Generates embedding for query an
 | `query` | string | Yes | Natural language search query (e.g., 'deployment verification discussion', 'what was decided about caching') |
 | `match_count` | number | No | Maximum number of chunks to return (default: 10, max: 50) |
 | `similarity_threshold` | number | No | Minimum similarity score 0-1 (default: 0.3). Higher values return more relevant results. |
-| `project` | string | No | Project namespace to filter by (e.g., 'orchestra_dev') |
+| `project` | string | No | Project namespace to filter by (e.g.) |
 
 ========================================================================
 # search
@@ -1818,7 +1818,7 @@ Search institutional memory by query. Unlike recall (which is action-oriented), 
 |-----------|------|----------|-------------|
 | `query` | string | Yes | Natural language search query (e.g., 'deployment failures', 'Supabase RLS') |
 | `match_count` | number | No | Number of results to return (default: 5) |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
 | `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
 
@@ -1882,6 +1882,6 @@ Initialize session, detect agent, load institutional context (last session, rece
 | `issue_title` | string | No | Issue title for scar context |
 | `issue_description` | string | No | Issue description for scar context |
 | `issue_labels` | string[] | No | Issue labels for scar context |
-| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `force` | boolean | No | Force create new session even if one already exists (OD-558) |
 

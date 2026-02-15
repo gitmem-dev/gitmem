@@ -303,7 +303,7 @@ describe("OD-640: project parameter accepts arbitrary strings", () => {
 
     // Should accept any string
     expect(ProjectSchema.safeParse("my-custom-project").success).toBe(true);
-    expect(ProjectSchema.safeParse("orchestra_dev").success).toBe(true);
+    expect(ProjectSchema.safeParse("test-project").success).toBe(true);
     expect(ProjectSchema.safeParse("weekend_warrior").success).toBe(true);
     expect(ProjectSchema.safeParse("acme-corp-internal").success).toBe(true);
     expect(ProjectSchema.safeParse("test-project-123").success).toBe(true);

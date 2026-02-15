@@ -22,7 +22,7 @@ describe("SearchTranscriptsParamsSchema", () => {
         query: "session close protocol",
         match_count: 5,
         similarity_threshold: 0.4,
-        project: "orchestra_dev",
+        project: "test-project",
       });
       expect(result.success).toBe(true);
       if (result.success) {

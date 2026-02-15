@@ -56,7 +56,7 @@ vi.mock("../../../src/services/storage.js", () => ({
 }));
 
 vi.mock("../../../src/services/session-state.js", () => ({
-  getProject: vi.fn(() => "orchestra_dev"),
+  getProject: vi.fn(() => "test-project"),
 }));
 
 vi.mock("../../../src/services/metrics.js", async (importOriginal) => {

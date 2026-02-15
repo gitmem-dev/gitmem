@@ -51,20 +51,11 @@ const HALF_LIFE_PROCESS = 9999;
  * Canonical persona name map.
  * Raw personas_involved values may contain full names or contextual suffixes.
  * This ensures consistent node identity in the knowledge graph.
+ *
+ * Users can populate this with their own team/persona names.
+ * Keys are lowercase, values are canonical display names.
  */
-const CANONICAL_PERSONA_NAMES: Record<string, string> = {
-  "elena vos": "Elena",
-  "elena": "Elena",
-  "marcus thorne": "Marcus",
-  "marcus": "Marcus",
-  "reiko tanaka": "Reiko",
-  "reiko": "Reiko",
-  "jax": "Jax",
-  "jax dimitri": "Jax",
-  "jax reed": "Jax",
-  "chris crawford": "Chris Crawford",
-  "chris": "Chris Crawford",
-};
+const CANONICAL_PERSONA_NAMES: Record<string, string> = {};
 
 /**
  * Normalize a persona label to its canonical form.
@@ -72,10 +63,10 @@ const CANONICAL_PERSONA_NAMES: Record<string, string> = {
  * Then maps to canonical short name if known.
  *
  * Examples:
- *   "Elena Vos" → "Elena"
- *   "Marcus - Architectural pattern" → "Marcus"
- *   "Elena: Prefers non-invasive instrumentation" → "Elena"
- *   "Chris Crawford - Process decision" → "Chris Crawford"
+ *   "Alice Smith" → "Alice" (if mapped)
+ *   "Bob - Architectural pattern" → "Bob" (if mapped)
+ *   "Alice: Prefers non-invasive instrumentation" → "Alice" (if mapped)
+ *   "Unknown Developer - Process decision" → "Unknown Developer" (passthrough)
  */
 export function normalizePersonaLabel(raw: string): string {
   // Strip contextual suffix after " - " or ": "
@@ -89,12 +80,12 @@ export function normalizePersonaLabel(raw: string): string {
   return canonical || name;
 }
 
-/** Set of canonical persona names (Orchestra team members + human). */
+/** Set of canonical persona names (team members). */
 const KNOWN_PERSONAS = new Set(Object.values(CANONICAL_PERSONA_NAMES));
 
 /**
- * Determine if a name refers to an Orchestra persona vs an agent.
- * Returns true for Elena, Marcus, Reiko, Jax, Chris Crawford.
+ * Determine if a name refers to a known persona vs an agent.
+ * Returns true for names in the CANONICAL_PERSONA_NAMES map.
  */
 function isPersonaName(name: string): boolean {
   return KNOWN_PERSONAS.has(normalizePersonaLabel(name));

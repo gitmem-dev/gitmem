@@ -16,7 +16,7 @@ import { globSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTENT_DIR = join(__dirname, "../content/docs");
 const PUBLIC_DIR = join(__dirname, "../public");
-const BASE_URL = "https://docs.gitmem.ai";
+const BASE_URL = "https://gitmem.ai";
 
 interface Page {
   path: string;

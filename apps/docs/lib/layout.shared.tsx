@@ -12,6 +12,11 @@ export function baseOptions(): BaseLayoutProps {
         active: "nested-url",
       },
       {
+        text: "Home",
+        url: "https://gitmem.ai",
+        external: true,
+      },
+      {
         text: "GitHub",
         url: "https://github.com/nTEG-Labs/gitmem",
         external: true,

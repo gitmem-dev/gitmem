@@ -7,7 +7,7 @@ description: "Persist session with compliance validation."
 
 **Tier:** Free · **Aliases:** `gitmem-sc`, `gm-close`
 
-Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to `{gitmem_dir}/closing-payload.json` using your file write tool — the `gitmem_dir` path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Echo it verbatim to the user instead of formatting your own close summary.
+Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to `gitmem_dir`/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Output the display field verbatim as your response — tool results are collapsed in the CLI.
 
 ## Parameters
 

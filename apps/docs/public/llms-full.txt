@@ -1,15 +1,30 @@
 # GitMem Documentation (Full)
 
 > Complete documentation for GitMem — institutional memory for AI agents.
-> Source: https://docs.gitmem.ai
+> Source: https://gitmem.ai
 
 ========================================================================
 # Changelog
-URL: https://docs.gitmem.ai/docs/changelog
+URL: https://gitmem.ai/docs/changelog
 Description: GitMem release history.
 ========================================================================
 
 # Changelog
+
+## v1.0.2 (2026-02-15)
+
+### Features
+
+- **`npx gitmem init`** — Interactive setup wizard that detects existing config, prompts, and merges without destroying anything. Replaces the multi-step manual setup.
+  - 6 steps: memory store, MCP server, CLAUDE.md, permissions, hooks, gitignore
+  - Flags: `--yes` (non-interactive), `--dry-run` (preview), `--project <name>`
+  - Idempotent — re-running safely skips completed steps
+- **`npx gitmem uninstall`** — Clean reversal of everything init did. Memory data (`.gitmem/`) preserved by default, `--all` to also delete.
+
+### Docs
+
+- Updated README to feature one-command setup, added gitmem.dev link
+- Updated docs site installation and getting-started pages
 
 ## v1.0.1 (2026-02-16)
 
@@ -42,7 +57,7 @@ Description: GitMem release history.
 
 ========================================================================
 # Core Concepts
-URL: https://docs.gitmem.ai/docs/concepts
+URL: https://gitmem.ai/docs/concepts
 Description: Understand the building blocks of GitMem's institutional memory system.
 ========================================================================
 
@@ -71,7 +86,7 @@ recall → work → learn → close → recall → ...
 
 ========================================================================
 # Learning Types
-URL: https://docs.gitmem.ai/docs/concepts/learning-types
+URL: https://gitmem.ai/docs/concepts/learning-types
 Description: The four types of institutional memory in GitMem.
 ========================================================================
 
@@ -152,7 +167,7 @@ Severity applies to scars and determines surfacing priority:
 
 ========================================================================
 # Scars
-URL: https://docs.gitmem.ai/docs/concepts/scars
+URL: https://gitmem.ai/docs/concepts/scars
 Description: How GitMem captures and surfaces mistakes as institutional memory.
 ========================================================================
 
@@ -220,7 +235,7 @@ This ensures scars are actively considered, not just passively displayed.
 
 ========================================================================
 # Sessions
-URL: https://docs.gitmem.ai/docs/concepts/sessions
+URL: https://gitmem.ai/docs/concepts/sessions
 Description: How GitMem tracks bounded work periods with context loading and closing ceremonies.
 ========================================================================
 
@@ -294,7 +309,7 @@ These reflections become context for the next session.
 
 ========================================================================
 # Threads
-URL: https://docs.gitmem.ai/docs/concepts/threads
+URL: https://gitmem.ai/docs/concepts/threads
 Description: Track unresolved work across sessions with GitMem threads.
 ========================================================================
 
@@ -352,7 +367,7 @@ create → surface at session_start → resolve
 
 ========================================================================
 # Tiers
-URL: https://docs.gitmem.ai/docs/concepts/tiers
+URL: https://gitmem.ai/docs/concepts/tiers
 Description: GitMem's tier system and how it affects available features.
 ========================================================================
 
@@ -404,7 +419,7 @@ Set via: `GITMEM_TIER=dev` + Supabase credentials
 
 ========================================================================
 # Contributing
-URL: https://docs.gitmem.ai/docs/contributing
+URL: https://gitmem.ai/docs/contributing
 Description: How to contribute to GitMem.
 ========================================================================
 
@@ -478,7 +493,7 @@ gitmem/
 
 ========================================================================
 # Testing
-URL: https://docs.gitmem.ai/docs/contributing/testing
+URL: https://gitmem.ai/docs/contributing/testing
 Description: GitMem's test pyramid and how to run each tier.
 ========================================================================
 
@@ -565,7 +580,7 @@ This covers 670+ tests in under 10 seconds.
 
 ========================================================================
 # Configuration
-URL: https://docs.gitmem.ai/docs/getting-started/configuration
+URL: https://gitmem.ai/docs/getting-started/configuration
 Description: Configure GitMem with environment variables and config files.
 ========================================================================
 
@@ -618,7 +633,7 @@ Projects are free-form strings. Use them to separate concerns when working acros
 
 ========================================================================
 # Your First Session
-URL: https://docs.gitmem.ai/docs/getting-started/first-session
+URL: https://gitmem.ai/docs/getting-started/first-session
 Description: Walk through a complete GitMem session from start to close.
 ========================================================================
 
@@ -697,7 +712,7 @@ After a few sessions, GitMem builds a knowledge base of:
 
 ========================================================================
 # Free vs Pro
-URL: https://docs.gitmem.ai/docs/getting-started/free-vs-pro
+URL: https://gitmem.ai/docs/getting-started/free-vs-pro
 Description: Compare GitMem tiers and choose the right one for your workflow.
 ========================================================================
 
@@ -759,7 +774,7 @@ See [Supabase Setup](/docs/guides/supabase-setup) for detailed instructions.
 
 ========================================================================
 # Getting Started
-URL: https://docs.gitmem.ai/docs/getting-started
+URL: https://gitmem.ai/docs/getting-started
 Description: Get GitMem running in under 5 minutes.
 ========================================================================
 
@@ -775,14 +790,18 @@ GitMem gives your AI coding agents institutional memory — the ability to learn
 ## Quick Start (30 seconds)
 
 ```bash
-# In any git repository
-npx gitmem-mcp init
+# In any project directory
+npx gitmem init
 ```
 
-This creates:
-- `.gitmem/` directory with local storage and starter scars
-- `.claude/settings.json` with hooks configuration
-- `CLAUDE.md` additions with session ceremony instructions
+The interactive wizard detects your existing config and sets up everything:
+- `.gitmem/` directory with 12 starter scars
+- `.mcp.json` with gitmem server entry
+- `CLAUDE.md` with memory protocol instructions
+- `.claude/settings.json` with lifecycle hooks and tool permissions
+- `.gitignore` updated to exclude `.gitmem/`
+
+Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destroying your existing config. Re-running is safe — completed steps are skipped.
 
 ## What Happens Next
 
@@ -800,24 +819,57 @@ This creates:
 
 ========================================================================
 # Installation
-URL: https://docs.gitmem.ai/docs/getting-started/installation
+URL: https://gitmem.ai/docs/getting-started/installation
 Description: Install GitMem via npx, global install, or MCP configuration.
 ========================================================================
 
 # Installation
 
-## Option 1: Quick Init (Recommended)
+## Option 1: Init Wizard (Recommended)
 
 ```bash
 cd your-project
-npx gitmem-mcp init
+npx gitmem init
 ```
 
-This is the fastest path. It:
-- Creates `.gitmem/` with local storage
-- Loads 12 starter scars covering common AI agent mistakes
-- Configures Claude Code hooks for automatic session management
-- Adds GitMem instructions to your `CLAUDE.md`
+The interactive wizard walks you through 6 steps:
+
+1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
+2. **MCP Server** — Adds gitmem to `.mcp.json` (auto-detects free vs pro tier)
+3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
+4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
+5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
+6. **Gitignore** — Adds `.gitmem/` to `.gitignore`
+
+### Flags
+
+```bash
+# Accept all defaults (non-interactive)
+npx gitmem init --yes
+
+# Preview what would change (no files written)
+npx gitmem init --dry-run
+
+# Set a project namespace
+npx gitmem init --project my-app
+```
+
+### Idempotent
+
+Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+
+### Uninstall
+
+```bash
+npx gitmem uninstall
+```
+
+Cleanly reverses everything init did. Your `.gitmem/` data is preserved by default.
+
+```bash
+# Also delete .gitmem/ memory data
+npx gitmem uninstall --all
+```
 
 ## Option 2: MCP Server Only
 
@@ -900,7 +952,7 @@ See [Configuration](/docs/getting-started/configuration) for full details.
 
 ========================================================================
 # Closing Ceremony
-URL: https://docs.gitmem.ai/docs/guides/closing-ceremony
+URL: https://gitmem.ai/docs/guides/closing-ceremony
 Description: How to properly close a GitMem session with reflection and persistence.
 ========================================================================
 
@@ -969,7 +1021,7 @@ For standard closes, write heavy data to `.gitmem/closing-payload.json` before c
 
 ========================================================================
 # Error Handling
-URL: https://docs.gitmem.ai/docs/guides/error-handling
+URL: https://gitmem.ai/docs/guides/error-handling
 Description: Understanding and debugging GitMem errors.
 ========================================================================
 
@@ -1042,7 +1094,7 @@ Check that no other tools are writing to stdout in the same process.
 
 ========================================================================
 # Multi-Agent Workflows
-URL: https://docs.gitmem.ai/docs/guides/multi-agent
+URL: https://gitmem.ai/docs/guides/multi-agent
 Description: Share institutional memory across teams of AI agents.
 ========================================================================
 
@@ -1103,8 +1155,8 @@ Severity levels:
 
 ========================================================================
 # GitMem
-URL: https://docs.gitmem.ai/docs
-Description: Institutional memory for AI coding agents. Never repeat the same mistake.
+URL: https://gitmem.ai/docs
+Description: Institutional memory for AI coding agents. Memory that compounds.
 ========================================================================
 
 # GitMem
@@ -1126,16 +1178,16 @@ Every time an AI agent makes a mistake, fixes a bug, or discovers a better appro
 ## Quick Start
 
 ```bash
-npx gitmem-mcp init
+npx gitmem init
 ```
 
-This initializes GitMem in your project with starter scars and a ready-to-use MCP configuration.
+One command sets up everything: `.gitmem/` directory, `.mcp.json`, `CLAUDE.md`, hooks, and permissions. Already have existing config? The wizard merges without destroying anything.
 
 [Get Started](/docs/getting-started) | [Concepts](/docs/concepts) | [Tool Reference](/docs/tools)
 
 ========================================================================
 # absorb_observations
-URL: https://docs.gitmem.ai/docs/tools/absorb-observations
+URL: https://gitmem.ai/docs/tools/absorb-observations
 Description: Capture observations from sub-agents and teammates.
 ========================================================================
 
@@ -1163,7 +1215,7 @@ Capture observations from sub-agents and teammates. The lead agent parses findin
 
 ========================================================================
 # analyze
-URL: https://docs.gitmem.ai/docs/tools/analyze
+URL: https://gitmem.ai/docs/tools/analyze
 Description: Session analytics and insights engine.
 ========================================================================
 
@@ -1185,7 +1237,7 @@ Session analytics and insights engine. Returns formatted markdown by default. Us
 
 ========================================================================
 # archive_learning
-URL: https://docs.gitmem.ai/docs/tools/archive-learning
+URL: https://gitmem.ai/docs/tools/archive-learning
 Description: Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp.
 ========================================================================
 
@@ -1204,7 +1256,7 @@ Archives a learning (scar/win/pattern) by setting is_active=false and recording 
 
 ========================================================================
 # gitmem-cache-flush
-URL: https://docs.gitmem.ai/docs/tools/cache-flush
+URL: https://gitmem.ai/docs/tools/cache-flush
 Description: gitmem-cache-flush - Force reload cache from Supabase (use when out of sync).
 ========================================================================
 
@@ -1222,7 +1274,7 @@ gitmem-cache-flush - Force reload cache from Supabase (use when out of sync)
 
 ========================================================================
 # gitmem-cache-health
-URL: https://docs.gitmem.ai/docs/tools/cache-health
+URL: https://gitmem.ai/docs/tools/cache-health
 Description: gitmem-cache-health - Compare local cache against remote Supabase (detect out-of-sync).
 ========================================================================
 
@@ -1240,7 +1292,7 @@ gitmem-cache-health - Compare local cache against remote Supabase (detect out-of
 
 ========================================================================
 # gitmem-cache-status
-URL: https://docs.gitmem.ai/docs/tools/cache-status
+URL: https://gitmem.ai/docs/tools/cache-status
 Description: gitmem-cache-status - Show local search cache status (scar count, age, staleness).
 ========================================================================
 
@@ -1258,7 +1310,7 @@ gitmem-cache-status - Show local search cache status (scar count, age, staleness
 
 ========================================================================
 # cleanup_threads
-URL: https://docs.gitmem.ai/docs/tools/cleanup-threads
+URL: https://gitmem.ai/docs/tools/cleanup-threads
 Description: Triage open threads by lifecycle health.
 ========================================================================
 
@@ -1277,7 +1329,7 @@ Triage open threads by lifecycle health. Groups threads as active/cooling/dorman
 
 ========================================================================
 # confirm_scars
-URL: https://docs.gitmem.ai/docs/tools/confirm-scars
+URL: https://gitmem.ai/docs/tools/confirm-scars
 Description: Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence.
 ========================================================================
 
@@ -1303,7 +1355,7 @@ Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence. REQUIRE
 
 ========================================================================
 # create_decision
-URL: https://docs.gitmem.ai/docs/tools/create-decision
+URL: https://gitmem.ai/docs/tools/create-decision
 Description: Log architectural/operational decision to institutional memory.
 ========================================================================
 
@@ -1329,7 +1381,7 @@ Log architectural/operational decision to institutional memory
 
 ========================================================================
 # create_learning
-URL: https://docs.gitmem.ai/docs/tools/create-learning
+URL: https://gitmem.ai/docs/tools/create-learning
 Description: Create scar, win, or pattern entry in institutional memory.
 ========================================================================
 
@@ -1359,7 +1411,7 @@ Create scar, win, or pattern entry in institutional memory
 
 ========================================================================
 # create_thread
-URL: https://docs.gitmem.ai/docs/tools/create-thread
+URL: https://gitmem.ai/docs/tools/create-thread
 Description: Create an open thread to track unresolved work across sessions.
 ========================================================================
 
@@ -1378,7 +1430,7 @@ Create an open thread to track unresolved work across sessions. Includes semanti
 
 ========================================================================
 # dismiss_suggestion
-URL: https://docs.gitmem.ai/docs/tools/dismiss-suggestion
+URL: https://gitmem.ai/docs/tools/dismiss-suggestion
 Description: Dismiss a suggested thread.
 ========================================================================
 
@@ -1396,7 +1448,7 @@ Dismiss a suggested thread. Incremented dismiss count — suggestions dismissed 
 
 ========================================================================
 # get_transcript
-URL: https://docs.gitmem.ai/docs/tools/get-transcript
+URL: https://gitmem.ai/docs/tools/get-transcript
 Description: Retrieve a session transcript from storage (OD-467).
 ========================================================================
 
@@ -1414,7 +1466,7 @@ Retrieve a session transcript from storage (OD-467)
 
 ========================================================================
 # graph_traverse
-URL: https://docs.gitmem.ai/docs/tools/graph-traverse
+URL: https://gitmem.ai/docs/tools/graph-traverse
 Description: Traverse the knowledge graph over institutional memory triples.
 ========================================================================
 
@@ -1437,7 +1489,7 @@ Traverse the knowledge graph over institutional memory triples. Answers: 'show m
 
 ========================================================================
 # health
-URL: https://docs.gitmem.ai/docs/tools/health
+URL: https://gitmem.ai/docs/tools/health
 Description: Show write health for the current session.
 ========================================================================
 
@@ -1455,7 +1507,7 @@ Show write health for the current session. Reports success/failure rates for all
 
 ========================================================================
 # gitmem-help
-URL: https://docs.gitmem.ai/docs/tools/help
+URL: https://gitmem.ai/docs/tools/help
 Description: gitmem-help - Show available commands with ASCII art header.
 ========================================================================
 
@@ -1467,7 +1519,7 @@ gitmem-help - Show available commands with ASCII art header
 
 ========================================================================
 # Tool Reference
-URL: https://docs.gitmem.ai/docs/tools
+URL: https://gitmem.ai/docs/tools
 Description: Complete reference for all GitMem MCP tools.
 ========================================================================
 
@@ -1544,7 +1596,7 @@ GitMem exposes tools via the [Model Context Protocol](https://modelcontextprotoc
 
 ========================================================================
 # list_threads
-URL: https://docs.gitmem.ai/docs/tools/list-threads
+URL: https://gitmem.ai/docs/tools/list-threads
 Description: List open threads across recent sessions.
 ========================================================================
 
@@ -1564,7 +1616,7 @@ List open threads across recent sessions. Shows unresolved work items that carry
 
 ========================================================================
 # log
-URL: https://docs.gitmem.ai/docs/tools/log
+URL: https://gitmem.ai/docs/tools/log
 Description: List recent learnings chronologically (like git log).
 ========================================================================
 
@@ -1586,7 +1638,7 @@ List recent learnings chronologically (like git log). Shows scars, wins, and pat
 
 ========================================================================
 # prepare_context
-URL: https://docs.gitmem.ai/docs/tools/prepare-context
+URL: https://gitmem.ai/docs/tools/prepare-context
 Description: Generate portable memory payload for sub-agent injection.
 ========================================================================
 
@@ -1608,7 +1660,7 @@ Generate portable memory payload for sub-agent injection. Formats institutional 
 
 ========================================================================
 # promote_suggestion
-URL: https://docs.gitmem.ai/docs/tools/promote-suggestion
+URL: https://gitmem.ai/docs/tools/promote-suggestion
 Description: Promote a suggested thread to an open thread.
 ========================================================================
 
@@ -1627,7 +1679,7 @@ Promote a suggested thread to an open thread. Takes a suggestion_id from session
 
 ========================================================================
 # recall
-URL: https://docs.gitmem.ai/docs/tools/recall
+URL: https://gitmem.ai/docs/tools/recall
 Description: Check institutional memory for relevant scars before taking action.
 ========================================================================
 
@@ -1648,7 +1700,7 @@ Check institutional memory for relevant scars before taking action. Returns matc
 
 ========================================================================
 # record_scar_usage_batch
-URL: https://docs.gitmem.ai/docs/tools/record-scar-usage-batch
+URL: https://gitmem.ai/docs/tools/record-scar-usage-batch
 Description: Track multiple scar applications in a single batch operation (reduces session close latency).
 ========================================================================
 
@@ -1682,7 +1734,7 @@ Track multiple scar applications in a single batch operation (reduces session cl
 
 ========================================================================
 # record_scar_usage
-URL: https://docs.gitmem.ai/docs/tools/record-scar-usage
+URL: https://gitmem.ai/docs/tools/record-scar-usage
 Description: Track scar application for effectiveness measurement.
 ========================================================================
 
@@ -1710,7 +1762,7 @@ Track scar application for effectiveness measurement
 
 ========================================================================
 # resolve_thread
-URL: https://docs.gitmem.ai/docs/tools/resolve-thread
+URL: https://gitmem.ai/docs/tools/resolve-thread
 Description: Mark an open thread as resolved.
 ========================================================================
 
@@ -1730,7 +1782,7 @@ Mark an open thread as resolved. Use thread_id for exact match or text_match for
 
 ========================================================================
 # save_transcript
-URL: https://docs.gitmem.ai/docs/tools/save-transcript
+URL: https://gitmem.ai/docs/tools/save-transcript
 Description: Save full session transcript to storage for training data and post-mortems (OD-467).
 ========================================================================
 
@@ -1751,7 +1803,7 @@ Save full session transcript to storage for training data and post-mortems (OD-4
 
 ========================================================================
 # search_transcripts
-URL: https://docs.gitmem.ai/docs/tools/search-transcripts
+URL: https://gitmem.ai/docs/tools/search-transcripts
 Description: Semantic search over session transcript chunks.
 ========================================================================
 
@@ -1772,7 +1824,7 @@ Semantic search over session transcript chunks. Generates embedding for query an
 
 ========================================================================
 # search
-URL: https://docs.gitmem.ai/docs/tools/search
+URL: https://gitmem.ai/docs/tools/search
 Description: Search institutional memory by query.
 ========================================================================
 
@@ -1794,7 +1846,7 @@ Search institutional memory by query. Unlike recall (which is action-oriented), 
 
 ========================================================================
 # session_close
-URL: https://docs.gitmem.ai/docs/tools/session-close
+URL: https://gitmem.ai/docs/tools/session-close
 Description: Persist session with compliance validation.
 ========================================================================
 
@@ -1802,7 +1854,7 @@ Description: Persist session with compliance validation.
 
 **Tier:** Free · **Aliases:** `gitmem-sc`, `gm-close`
 
-Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Echo it verbatim to the user instead of formatting your own close summary.
+Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to `gitmem_dir`/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Output the display field verbatim as your response — tool results are collapsed in the CLI.
 
 ## Parameters
 
@@ -1815,7 +1867,7 @@ Persist session with compliance validation. IMPORTANT: Before calling this tool,
 
 ========================================================================
 # session_refresh
-URL: https://docs.gitmem.ai/docs/tools/session-refresh
+URL: https://gitmem.ai/docs/tools/session-refresh
 Description: Re-surface institutional context (threads, decisions) for the current active session without creating a new session.
 ========================================================================
 
@@ -1823,7 +1875,7 @@ Description: Re-surface institutional context (threads, decisions) for the curre
 
 **Tier:** Free · **Aliases:** `gitmem-sr`, `gm-refresh`
 
-Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. Echo it verbatim to the user instead of formatting your own session summary.
+Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. Output the display field verbatim as your response — tool results are collapsed in the CLI.
 
 ## Parameters
 
@@ -1833,7 +1885,7 @@ Re-surface institutional context (threads, decisions) for the current active ses
 
 ========================================================================
 # session_start
-URL: https://docs.gitmem.ai/docs/tools/session-start
+URL: https://gitmem.ai/docs/tools/session-start
 Description: Initialize session, detect agent, load institutional context (last session, recent decisions, open threads).
 ========================================================================
 
@@ -1841,7 +1893,7 @@ Description: Initialize session, detect agent, load institutional context (last 
 
 **Tier:** Free · **Aliases:** `gitmem-ss`, `gm-open`
 
-Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). Echo it verbatim to the user instead of formatting your own session summary.
+Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). Output the display field verbatim as your response — tool results are collapsed in the CLI.
 
 ## Parameters
 

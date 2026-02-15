@@ -102,6 +102,7 @@ function cleanDescription(desc: string): string {
   return desc
     .replace(/\s*OD-\d+:[^.]+\./g, "")
     .replace(/\s*DISPLAY:[^.]+\./g, "")
+    .replace(/\{(\w+)\}/g, "`$1`")
     .trim();
 }
 

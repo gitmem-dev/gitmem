@@ -1,4 +1,4 @@
-name: Deploy Site
+name: Deploy Docs
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
     paths:
       - 'apps/docs/**'
       - 'src/tools/definitions.ts'
-  repository_dispatch:
-    types: [landing-updated]
   workflow_dispatch:
 
 jobs:
@@ -15,24 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      deployments: write
 
     steps:
       - name: Checkout gitmem repo
         uses: actions/checkout@v4
-
-      - name: Checkout landing page repo
-        uses: actions/checkout@v4
-        with:
-          repository: nTEG-dev/GitMem.ai-Landing
-          path: _landing
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      # Build docs site
       - name: Install root dependencies
         run: npm ci
 
@@ -45,26 +35,28 @@ jobs:
       - name: Build docs site
         run: cd apps/docs && npm run build
 
-      # Build landing page
-      - name: Install landing dependencies
-        run: cd _landing && npm ci
-
-      - name: Build landing page
-        run: cd _landing && npm run build
-
-      # Merge outputs: landing at root, docs at /docs
-      - name: Merge build outputs
-        run: |
-          mkdir -p _site
-          cp -r _landing/build/* _site/
-          cp -r apps/docs/out/docs _site/docs
-          cp -r apps/docs/out/_next _site/_next
-          cp apps/docs/out/llms.txt _site/llms.txt
-          cp apps/docs/out/llms-full.txt _site/llms-full.txt
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      # Push built docs to landing page repo (Cloudways serves it)
+      - name: Checkout landing page repo
+        uses: actions/checkout@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy _site --project-name=gitmem-landing
+          repository: nTEG-dev/GitMem.ai-Landing
+          token: ${{ secrets.LANDING_DEPLOY_TOKEN }}
+          path: _landing
+
+      - name: Copy docs build to landing repo
+        run: |
+          rm -rf _landing/docs _landing/_next _landing/llms.txt _landing/llms-full.txt
+          cp -r apps/docs/out/docs _landing/docs
+          cp -r apps/docs/out/_next _landing/_next
+          cp apps/docs/out/llms.txt _landing/llms.txt
+          cp apps/docs/out/llms-full.txt _landing/llms-full.txt
+
+      - name: Push to landing repo
+        run: |
+          cd _landing
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs _next llms.txt llms-full.txt
+          git diff --staged --quiet && echo "No changes to deploy" && exit 0
+          git commit -m "docs: update from gitmem repo ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push

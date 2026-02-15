@@ -47,6 +47,23 @@ import type {
 } from "../types/index.js";
 
 /**
+ * Count scars applied from closing_reflection.scars_applied.
+ * Handles both string (prose answer from agents) and string[] (schema-correct array).
+ * When agents write Q6 as prose, we count comma/semicolon-separated items or 1 if no delimiters.
+ */
+function countScarsApplied(scarsApplied: string | string[] | undefined | null): number {
+  if (!scarsApplied) return 0;
+  if (Array.isArray(scarsApplied)) return scarsApplied.length;
+  // It's a string — agents write prose like "Scar A, Scar B, also applied Scar C"
+  // Split on common delimiters: periods followed by space, semicolons, or " — " (em-dash separator)
+  const trimmed = scarsApplied.trim();
+  if (!trimmed) return 0;
+  // Count sentences/items separated by ". " or "; " or " — "
+  const parts = trimmed.split(/(?:\.\s+|\;\s*|\s+—\s+)/).filter(p => p.trim().length > 0);
+  return Math.max(1, parts.length);
+}
+
+/**
  * Find the most recently modified transcript file in Claude Code projects directory
  * OD-538: Search by recency, not by filename matching (supports post-compaction)
  */
@@ -156,7 +173,7 @@ async function sessionCloseFree(
     questions_answered_by_agent: !!params.closing_reflection,
     human_asked_for_corrections: !!params.human_corrections || params.human_corrections === "",
     learnings_stored: learningsCount,
-    scars_applied: params.closing_reflection?.scars_applied?.length || 0,
+    scars_applied: countScarsApplied(params.closing_reflection?.scars_applied),
   };
 
   try {
@@ -261,13 +278,22 @@ async function sessionCloseFree(
  * Build a pre-formatted display string for consistent CLI output.
  * Agents echo this string directly instead of formatting ad-hoc.
  */
+interface TranscriptStatus {
+  saved: boolean;
+  path?: string;
+  size_kb?: number;
+  error?: string;
+  patch_warning?: string;
+}
+
 function formatCloseDisplay(
   sessionId: string,
   compliance: CloseCompliance,
   params: SessionCloseParams,
   learningsCount: number,
   success: boolean,
-  errors?: string[]
+  errors?: string[],
+  transcriptStatus?: TranscriptStatus
 ): string {
   const lines: string[] = [];
 
@@ -299,6 +325,21 @@ function formatCloseDisplay(
   } else {
     lines.push(`- [${check(success)}] Session persisted`);
     lines.push(`- Agent: ${compliance.agent} | Close type: ${compliance.close_type}`);
+  }
+
+  // Transcript status
+  if (transcriptStatus) {
+    lines.push("");
+    lines.push(`### Transcript`);
+    if (transcriptStatus.saved) {
+      let line = `- [done] Saved (${transcriptStatus.size_kb}KB) -> ${transcriptStatus.path}`;
+      if (transcriptStatus.patch_warning) {
+        line += ` (warning: session record not updated)`;
+      }
+      lines.push(line);
+    } else {
+      lines.push(`- [FAILED] ${transcriptStatus.error || "Unknown error"}`);
+    }
   }
 
   // Threads summary
@@ -775,6 +816,7 @@ export async function sessionClose(
   }
 
   // OD-538: Capture transcript if enabled (default true for CLI/DAC)
+  let transcriptStatus: TranscriptStatus | undefined;
   const shouldCaptureTranscript = params.capture_transcript !== false &&
     (agentIdentity === "CLI" || agentIdentity === "DAC");
 
@@ -819,39 +861,52 @@ export async function sessionClose(
           console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
         }
 
-        // OD-646: Fire-and-forget transcript save + chunking (was blocking ~1-2s)
+        // Deterministic transcript save — await to guarantee persistence
         // saveTranscript does its own directUpsert to set transcript_path on the session
         const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
-        saveTranscript({
+        const saveResult = await saveTranscript({
           session_id: sessionId,
           transcript: transcriptContent,
           format: "json",
           project: transcriptProject,
-        }).then(saveResult => {
-          if (saveResult.success && saveResult.transcript_path) {
-            console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
-
-            // OD-540: Process transcript for semantic search
-            processTranscript(sessionId, transcriptContent, transcriptProject)
-              .then(result => {
-                if (result.success) {
-                  console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
-                } else {
-                  console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
-                }
-              }).catch(err => {
-                console.error("[session_close] Transcript chunking error:", err);
-              });
-          } else {
-            console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
-          }
-        }).catch(err => {
-          console.error("[session_close] Transcript save error:", err);
         });
+
+        if (saveResult.success && saveResult.transcript_path) {
+          transcriptStatus = {
+            saved: true,
+            path: saveResult.transcript_path,
+            size_kb: saveResult.size_kb,
+            patch_warning: saveResult.patch_warning,
+          };
+          console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
+
+          // OD-540: Process transcript for semantic search (fire-and-forget — chunking is expensive)
+          processTranscript(sessionId, transcriptContent, transcriptProject)
+            .then(result => {
+              if (result.success) {
+                console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
+              } else {
+                console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
+              }
+            }).catch(err => {
+              console.error("[session_close] Transcript chunking error:", err);
+            });
+        } else {
+          transcriptStatus = {
+            saved: false,
+            error: saveResult.error || "Unknown save error",
+          };
+          console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
+        }
       }
     } catch (error) {
       // Don't fail session close if transcript capture fails
-      console.error("[session_close] Exception during transcript capture:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[session_close] Exception during transcript capture:", msg);
+      transcriptStatus = {
+        saved: false,
+        error: `Exception during transcript capture: ${msg}`,
+      };
     }
   }
 
@@ -1033,7 +1088,7 @@ export async function sessionClose(
     // GIT-21: Clean up session files (registry, per-session dir, legacy file)
     cleanupSessionFiles(sessionId);
 
-    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined);
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined, transcriptStatus);
 
     return {
       success: true,
@@ -1051,7 +1106,7 @@ export async function sessionClose(
     // OD-547: Clear session state even on error (session is done either way)
     clearCurrentSession();
 
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus);
 
     return {
       success: false,

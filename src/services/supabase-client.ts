@@ -677,7 +677,7 @@ export async function saveTranscript(
     agent?: string;
     format?: "json" | "markdown";
   } = {}
-): Promise<{ transcript_path: string; size_bytes: number }> {
+): Promise<{ transcript_path: string; size_bytes: number; patch_warning?: string }> {
   const { project = "default", agent = "unknown", format = "json" } = metadata;
   const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
   const extension = format === "markdown" ? "md" : "json";
@@ -689,19 +689,23 @@ export async function saveTranscript(
   await uploadFile(TRANSCRIPT_BUCKET, path, content, contentType);
 
   // Update the session record with transcript_path (direct REST API)
+  let patch_warning: string | undefined;
   try {
     await directPatch("orchestra_sessions",
       { id: sessionId },
       { transcript_path: path }
     );
   } catch (error) {
-    // Log but don't fail - transcript is saved even if session update fails
-    console.error("Failed to update session with transcript_path:", error);
+    // File is saved; session record update failed — warn, don't fail
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Failed to update session with transcript_path:", msg);
+    patch_warning = `Session record not updated with transcript_path: ${msg}`;
   }
 
   return {
     transcript_path: path,
     size_bytes: Buffer.byteLength(content, "utf8"),
+    patch_warning,
   };
 }
 

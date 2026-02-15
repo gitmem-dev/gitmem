@@ -15,7 +15,7 @@ export const ClosingReflectionSchema = z.object({
   do_differently: z.string(),
   what_worked: z.string(),
   wrong_assumption: z.string(),
-  scars_applied: z.array(z.string()),
+  scars_applied: z.union([z.string(), z.array(z.string())]),
   /** Q7: What from this session should be captured as institutional memory? */
   institutional_memory_items: z.string().optional(),
   /** Q8: How did the human prefer to work this session? */

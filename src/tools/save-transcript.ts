@@ -27,6 +27,7 @@ export interface SaveTranscriptResult {
   size_kb?: number;
   estimated_tokens?: number;
   error?: string;
+  patch_warning?: string;
   performance: PerformanceData;
 }
 
@@ -112,6 +113,7 @@ export async function saveTranscript(
       size_bytes: result.size_bytes,
       size_kb: Math.round(result.size_bytes / 1024 * 10) / 10,
       estimated_tokens: estimatedTokens,
+      patch_warning: result.patch_warning,
       performance: buildPerformanceData("save_transcript", latencyMs, 1, {
         breakdown,
       }),

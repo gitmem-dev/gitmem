@@ -1,0 +1,29 @@
+---
+title: "create_learning"
+description: "Create scar, win, or pattern entry in institutional memory."
+---
+
+# create_learning
+
+**Tier:** Free · **Aliases:** `gitmem-cl`, `gm-scar`
+
+Create scar, win, or pattern entry in institutional memory
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | Yes | Type of learning |
+| `title` | string | Yes | Learning title |
+| `description` | string | Yes | Detailed description |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Severity level (required for scars) |
+| `scar_type` | `"process"` \| `"incident"` \| `"context"` | No | Scar type (process, incident, or context). Defaults to 'process'. |
+| `counter_arguments` | string[] | No | Counter-arguments for scars (min 2 required) |
+| `problem_context` | string | No | Problem context (for wins) |
+| `solution_approach` | string | No | Solution approach (for wins) |
+| `applies_when` | string[] | No | When this pattern applies |
+| `domain` | string[] | No | Domain tags |
+| `keywords` | string[] | No | Search keywords |
+| `source_linear_issue` | string | No | Source Linear issue |
+| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+

@@ -1,0 +1,21 @@
+---
+title: "prepare_context"
+description: "Generate portable memory payload for sub-agent injection."
+---
+
+# prepare_context
+
+**Tier:** Free · **Aliases:** `gitmem-pc`, `gm-pc`
+
+Generate portable memory payload for sub-agent injection. Formats institutional memory into compact or gate payloads that fit in Task tool prompts.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `plan` | string | Yes | What the team is about to do (e.g., 'review auth middleware', 'deploy edge function') |
+| `format` | `"full"` \| `"compact"` \| `"gate"` | Yes | Output format: full (rich markdown), compact (~500 tokens, one-line per scar), gate (~100 tokens, blocking scars only) |
+| `max_tokens` | number | No | Token budget for payload (default: 500 for compact, 100 for gate, unlimited for full) |
+| `agent_role` | string | No | Sub-agent role for relevance filtering (e.g., 'reviewer', 'deployer') — reserved for Phase 3 |
+| `project` | string | No | Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches. |
+

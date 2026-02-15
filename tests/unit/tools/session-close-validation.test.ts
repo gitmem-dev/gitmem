@@ -209,6 +209,80 @@ describe("OD-548: session_close UUID validation", () => {
   });
 });
 
+describe("scars_applied string vs array handling", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("does not crash when scars_applied is prose string", async () => {
+    const result = await sessionClose({
+      session_id: "393adb34-a80c-4c3a-b71a-bc0053b7a7ea",
+      close_type: "quick",
+      closing_reflection: {
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: "Scar A — APPLIED. Scar B — N/A; Scar C — APPLIED",
+      },
+    });
+
+    // Should not crash — that was the bug
+    expect(result).toBeDefined();
+  });
+
+  it("does not crash when scars_applied is a single string without delimiters", async () => {
+    const result = await sessionClose({
+      session_id: "393adb34-a80c-4c3a-b71a-bc0053b7a7ea",
+      close_type: "quick",
+      closing_reflection: {
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: "Applied the Done != Deployed scar",
+      },
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("does not crash when scars_applied is an array", async () => {
+    const result = await sessionClose({
+      session_id: "393adb34-a80c-4c3a-b71a-bc0053b7a7ea",
+      close_type: "quick",
+      closing_reflection: {
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: ["scar-1", "scar-2"],
+      },
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("does not crash when scars_applied is undefined", async () => {
+    const result = await sessionClose({
+      session_id: "393adb34-a80c-4c3a-b71a-bc0053b7a7ea",
+      close_type: "quick",
+      closing_reflection: {
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+      },
+    });
+
+    expect(result).toBeDefined();
+  });
+});
+
 describe("OD-640: project parameter accepts arbitrary strings", () => {
   it("definitions.ts project fields have no enum restriction", async () => {
     // Import tool definitions and verify no project field has an enum

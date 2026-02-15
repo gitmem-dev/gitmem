@@ -230,6 +230,60 @@ describe("ClosingReflectionSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts scars_applied as string (prose format)", () => {
+    const result = ClosingReflectionSchema.safeParse({
+      what_broke: "Nothing",
+      what_took_longer: "Tests",
+      do_differently: "Plan better",
+      what_worked: "Communication",
+      wrong_assumption: "None",
+      scars_applied: "Applied Done != Deployed. Applied trace execution path; Refuted over-engineering",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts scars_applied as single string without delimiters", () => {
+    const result = ClosingReflectionSchema.safeParse({
+      what_broke: "Nothing",
+      what_took_longer: "Tests",
+      do_differently: "Plan better",
+      what_worked: "Communication",
+      wrong_assumption: "None",
+      scars_applied: "Applied Done != Deployed scar",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts learnings_created as array of objects (agent reality)", () => {
+    const result = SessionCloseParamsSchema.safeParse({
+      session_id: "test",
+      close_type: "quick",
+      learnings_created: [
+        { id: "abc", title: "test scar", type: "scar" },
+        { id: "def", title: "test win", type: "win" },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts learnings_created as array of strings (schema original)", () => {
+    const result = SessionCloseParamsSchema.safeParse({
+      session_id: "test",
+      close_type: "quick",
+      learnings_created: ["learning-1", "learning-2"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts learnings_created as mixed array", () => {
+    const result = SessionCloseParamsSchema.safeParse({
+      session_id: "test",
+      close_type: "quick",
+      learnings_created: ["learning-1", { id: "abc", title: "scar", type: "scar" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
   // OD-666: Rapport fields (Q8/Q9)
   describe("rapport fields (OD-666)", () => {
     it("accepts Q8 collaborative_dynamic", () => {

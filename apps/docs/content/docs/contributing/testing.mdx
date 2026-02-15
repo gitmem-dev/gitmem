@@ -1,0 +1,85 @@
+---
+title: Testing
+description: GitMem's test pyramid and how to run each tier.
+---
+
+# Testing
+
+GitMem uses a 6-tier test pyramid. All runnable tests must pass before shipping.
+
+## Test Tiers
+
+### Tier 1: Unit Tests
+
+```bash
+npm run test:unit
+```
+
+- **Count:** 660+ tests
+- **Speed:** ~3 seconds
+- **Dependencies:** None
+- **Coverage:** Schema validation, pure functions, golden regressions
+
+### Tier 2: Smoke Tests
+
+```bash
+npx vitest run --config vitest.smoke.config.ts
+```
+
+- **Count:** 9 tests (4 free + 5 pro)
+- **Speed:** ~5 seconds
+- **Dependencies:** None (free) / Supabase (pro)
+- **Coverage:** MCP server boot, tool registration, basic stdio calls
+
+### Tier 3: Integration Tests
+
+```bash
+npx vitest run --config vitest.integration.config.ts
+```
+
+- **Count:** 63 tests
+- **Speed:** ~30 seconds
+- **Dependencies:** Docker (Supabase PostgreSQL)
+- **Coverage:** Database operations, session lifecycle, cache, query plans
+
+### Tier 4: E2E Tests
+
+```bash
+npx vitest run --config vitest.e2e.config.ts
+```
+
+- **Count:** 60 tests
+- **Speed:** ~75 seconds
+- **Dependencies:** Varies by suite
+- **Coverage:** Full install flow, hooks, MCP via stdio
+
+### Tier 5: User Journey
+
+```bash
+npx vitest run tests/e2e/user-journey.test.ts --config vitest.e2e.config.ts
+```
+
+- **Count:** 6 tests
+- **Speed:** ~60 seconds
+- **Dependencies:** Claude API key
+- **Coverage:** Real Claude session verifying hooks, tools, and ceremony
+
+### Tier 6: Performance
+
+```bash
+npx vitest bench --config vitest.perf.config.ts
+```
+
+- **Count:** 4 benchmark files
+- **Speed:** ~30 seconds
+- **Coverage:** Cold start latency, recall speed, cache performance
+
+## Quick Run (No Docker)
+
+For development, run the tests that don't need Docker:
+
+```bash
+npm run test:unit && npx vitest run --config vitest.smoke.config.ts
+```
+
+This covers 670+ tests in under 10 seconds.

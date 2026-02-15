@@ -99,10 +99,18 @@ function writeRegistry(registry: ActiveSessionsRegistry): void {
 /**
  * Register a new session in the active-sessions registry.
  * Idempotent: re-registering the same session_id replaces the entry.
+ * Returns session IDs that were displaced (different session_id, same hostname+pid).
  */
-export function registerSession(entry: ActiveSessionEntry): void {
+export function registerSession(entry: ActiveSessionEntry): string[] {
+  const displaced: string[] = [];
   withLockSync(getLockPath(), () => {
     const registry = readRegistry();
+    // Collect displaced session IDs (same hostname+pid, different session_id)
+    for (const s of registry.sessions) {
+      if (s.session_id !== entry.session_id && s.hostname === entry.hostname && s.pid === entry.pid) {
+        displaced.push(s.session_id);
+      }
+    }
     // Remove by session_id AND by hostname+pid to prevent duplicates
     registry.sessions = registry.sessions.filter((s) =>
       s.session_id !== entry.session_id &&
@@ -111,9 +119,16 @@ export function registerSession(entry: ActiveSessionEntry): void {
     registry.sessions.push(entry);
     writeRegistry(registry);
   });
-  console.error(
-    `[active-sessions] Registered session ${entry.session_id.slice(0, 8)} (agent: ${entry.agent}, pid: ${entry.pid})`
-  );
+  if (displaced.length > 0) {
+    console.error(
+      `[active-sessions] Registered session ${entry.session_id.slice(0, 8)} — displaced ${displaced.length} prior session(s): ${displaced.map(id => id.slice(0, 8)).join(", ")}`
+    );
+  } else {
+    console.error(
+      `[active-sessions] Registered session ${entry.session_id.slice(0, 8)} (agent: ${entry.agent}, pid: ${entry.pid})`
+    );
+  }
+  return displaced;
 }
 
 /**

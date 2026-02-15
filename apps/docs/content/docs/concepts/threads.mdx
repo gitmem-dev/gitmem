@@ -1,0 +1,56 @@
+---
+title: Threads
+description: Track unresolved work across sessions with GitMem threads.
+---
+
+# Threads
+
+**Threads** track unresolved work that carries across sessions. When you can't finish something in the current session, create a thread so the next session picks it up.
+
+## Creating Threads
+
+```
+create_thread({ text: "Auth middleware needs rate limiting before production deploy" })
+```
+
+Threads include:
+- A unique thread ID (e.g., `t-a1b2c3d4`)
+- Description text
+- Creation timestamp
+- Optional Linear issue link
+
+## Semantic Deduplication
+
+GitMem uses cosine similarity (threshold > 0.85) to prevent duplicate threads. If you try to create a thread that's semantically identical to an existing one, GitMem returns the existing thread instead.
+
+## Thread Lifecycle
+
+```
+create → surface at session_start → resolve
+```
+
+1. **Create** — `create_thread` during a session
+2. **Surface** — Open threads appear in the next `session_start` banner
+3. **Resolve** — `resolve_thread` with a resolution note when complete
+
+## Managing Threads
+
+| Tool | Purpose |
+|------|---------|
+| `list_threads` | See all open threads |
+| `resolve_thread` | Mark a thread as done |
+| `cleanup_threads` | Triage by health (active/cooling/dormant) |
+
+### Thread Health
+
+`cleanup_threads` categorizes threads by vitality:
+
+- **Active** — Recently created or referenced
+- **Cooling** — Not referenced in a while
+- **Dormant** — Untouched for 30+ days (auto-archivable)
+
+### Suggested Threads
+
+`session_start` may suggest threads based on session context. You can:
+- **Promote** — `promote_suggestion` converts it to a real thread
+- **Dismiss** — `dismiss_suggestion` suppresses it (3 dismissals = permanent suppression)

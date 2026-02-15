@@ -355,6 +355,38 @@ async function createSessionRecord(
 }
 
 /**
+ * Mark a displaced session as superseded in Supabase.
+ * Fire-and-forget — failures logged but don't block session_start.
+ * Only sets close_compliance if it's currently null (truly abandoned).
+ */
+async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
+  try {
+    // Check if session already has close_compliance (was properly closed)
+    const existing = await supabase.directQuery<{ close_compliance: unknown }>(
+      "orchestra_sessions",
+      { filters: { id: oldSessionId }, select: "close_compliance" }
+    );
+    if (existing.length > 0 && existing[0].close_compliance != null) {
+      // Already closed — don't overwrite
+      return;
+    }
+    await supabase.directPatch("orchestra_sessions",
+      { id: oldSessionId },
+      {
+        close_compliance: {
+          close_type: "superseded",
+          superseded_by: newSessionId,
+          superseded_at: new Date().toISOString(),
+        },
+      }
+    );
+    console.error(`[session_start] Marked session ${oldSessionId.slice(0, 8)} as superseded by ${newSessionId.slice(0, 8)}`);
+  } catch (error) {
+    console.error(`[session_start] Failed to mark session ${oldSessionId.slice(0, 8)} as superseded:`, error);
+  }
+}
+
+/**
  * Free tier session_start — all-local, no Supabase
  */
 async function sessionStartFree(
@@ -664,7 +696,7 @@ function writeSessionFiles(
 
   // 3. Register in active-sessions registry (skip on refresh — already registered)
   if (!isRefresh) {
-    registerSession({
+    const displaced = registerSession({
       session_id: sessionId,
       agent,
       started_at: data.started_at,
@@ -672,6 +704,10 @@ function writeSessionFiles(
       pid: process.pid,
       project,
     });
+    // Mark displaced sessions as superseded in Supabase (fire-and-forget)
+    for (const oldId of displaced) {
+      markSessionSuperseded(oldId, sessionId).catch(() => {});
+    }
   }
 
   // 4. Threads file — when Supabase is authoritative, REPLACE file contents with Supabase
@@ -856,6 +892,12 @@ export async function sessionStart(
     sessionId = uuidv4();
     // Fire-and-forget: don't await the Supabase write
     createSessionRecord(agent, project, params.linear_issue, sessionId).catch(() => {});
+    // Mark prior in-memory session as superseded (force=true path)
+    // Registry displacement in writeSessionFiles handles the registry case,
+    // but priorSession may not be in the registry (e.g., after MCP restart)
+    if (priorSession && priorSession.sessionId !== sessionId) {
+      markSessionSuperseded(priorSession.sessionId, sessionId).catch(() => {});
+    }
   }
 
   // Warm local scar cache for this project (fire-and-forget, non-blocking)

@@ -15,7 +15,7 @@ export const ClosingReflectionSchema = z.object({
   do_differently: z.string(),
   what_worked: z.string(),
   wrong_assumption: z.string(),
-  scars_applied: z.array(z.string()),
+  scars_applied: z.union([z.string(), z.array(z.string())]),
   /** Q7: What from this session should be captured as institutional memory? */
   institutional_memory_items: z.string().optional(),
   /** Q8: How did the human prefer to work this session? */
@@ -82,7 +82,7 @@ export const SessionCloseParamsSchema = z.object({
   decisions: z.array(SessionDecisionSchema).optional(),
   open_threads: z.array(z.union([z.string(), ThreadObjectSchema])).optional(),
   project_state: z.string().optional(),
-  learnings_created: z.array(z.string()).optional(),
+  learnings_created: z.array(z.union([z.string(), z.record(z.unknown())])).optional(),
   linear_issue: z.string().optional(),
   ceremony_duration_ms: z.number().nonnegative().optional(),
   scars_to_record: z.array(ScarUsageEntrySchema).optional(),

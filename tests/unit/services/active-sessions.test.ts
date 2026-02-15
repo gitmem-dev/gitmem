@@ -88,6 +88,33 @@ describe("registerSession", () => {
     expect(sessions[0].pid).toBe(1002);
   });
 
+  it("returns displaced session IDs when same hostname+pid registers new session", () => {
+    const old = makeEntry({ session_id: "11111111-1111-1111-1111-111111111111", hostname: "host-a", pid: 100 });
+    registerSession(old);
+
+    const newer = makeEntry({ session_id: "22222222-2222-2222-2222-222222222222", hostname: "host-a", pid: 100 });
+    const displaced = registerSession(newer);
+
+    expect(displaced).toEqual(["11111111-1111-1111-1111-111111111111"]);
+    expect(listActiveSessions()).toHaveLength(1);
+    expect(listActiveSessions()[0].session_id).toBe("22222222-2222-2222-2222-222222222222");
+  });
+
+  it("returns empty array when no sessions displaced", () => {
+    const entry = makeEntry();
+    const displaced = registerSession(entry);
+    expect(displaced).toEqual([]);
+  });
+
+  it("returns empty array when re-registering same session_id", () => {
+    const entry = makeEntry({ pid: 1001 });
+    registerSession(entry);
+
+    const updated = makeEntry({ pid: 1002 }); // same session_id
+    const displaced = registerSession(updated);
+    expect(displaced).toEqual([]); // same session_id = update, not displacement
+  });
+
   it("creates registry file in existing .gitmem directory", () => {
     // The .gitmem dir must exist first (session_start creates it)
     const nestedDir = path.join(tmpDir, "sub", "deep");

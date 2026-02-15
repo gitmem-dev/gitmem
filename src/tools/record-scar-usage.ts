@@ -46,6 +46,7 @@ export async function recordScarUsage(
     reference_type: params.reference_type,
     reference_context: params.reference_context,
     execution_successful: params.execution_successful ?? null,
+    variant_id: params.variant_id || null,
     created_at: new Date().toISOString(),
   };
 

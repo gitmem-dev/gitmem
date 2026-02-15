@@ -228,6 +228,7 @@ export async function queryRepeatMistakes(
     repeat_mistake: "eq.true",
     project: `eq.${project}`,
     created_at: `gte.${startDate}`,
+    is_active: "eq.true",
   };
 
   const repeats = await directQuery<RepeatMistakeRecord>("orchestra_learnings", {

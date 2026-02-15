@@ -326,6 +326,10 @@ export const TOOLS = [
           type: "string",
           description: "Agent identity (CLI, DAC, CODA-1, etc.)",
         },
+        variant_id: {
+          type: "string",
+          description: "UUID of the assigned variant from scar_enforcement_variants (for A/B testing)",
+        },
       },
       required: ["scar_id", "surfaced_at", "reference_type", "reference_context"],
     },
@@ -1046,6 +1050,10 @@ export const TOOLS = [
         agent: {
           type: "string",
           description: "Agent identity (CLI, DAC, CODA-1, etc.)",
+        },
+        variant_id: {
+          type: "string",
+          description: "UUID of the assigned variant from scar_enforcement_variants (for A/B testing)",
         },
       },
       required: ["scar_id", "surfaced_at", "reference_type", "reference_context"],

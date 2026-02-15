@@ -125,6 +125,7 @@ export async function recordScarUsageBatch(
           reference_type: entry.reference_type,
           reference_context: entry.reference_context,
           execution_successful: entry.execution_successful ?? null,
+          variant_id: entry.variant_id || null,
           created_at: new Date().toISOString(),
         };
       });

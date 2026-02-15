@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
+import { clearCurrentSession, getSurfacedScars, getConfirmations, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js"; // OD-624
@@ -27,6 +27,7 @@ import {
   buildPerformanceData,
   updateRelevanceData,
 } from "../services/metrics.js";
+import { wrapDisplay, truncate } from "../services/display-protocol.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
@@ -42,6 +43,7 @@ import type {
   SessionCloseResult,
   CloseCompliance,
   SurfacedScar,
+  ScarConfirmation,
   ScarUsageEntry,
   ThreadObject,
 } from "../types/index.js";
@@ -258,6 +260,40 @@ async function sessionCloseFree(
 }
 
 /**
+ * Stoic closing statements — deterministic by day-of-year.
+ * Funny, encouraging, brief. Rotates daily so same session day = same quote.
+ */
+const CLOSING_STATEMENTS = [
+  "The obstacle is the way. The bug is the feature request. See you soon.",
+  "We suffered. We shipped. Seneca would approve. Until next time.",
+  "What stands in the way becomes the way. What stands in the deploy becomes the rollback. Later.",
+  "You could leave life right now. Let that determine what you commit. See you soon.",
+  "The best revenge is not to be like your previous codebase. Until next time.",
+  "It is not death a coder should fear, but never beginning to refactor. See you soon.",
+  "Waste no time arguing about what good code should be. Ship it. Later.",
+  "The impediment to action advances action. The failing test writes the fix. Until next time.",
+  "How long are you going to wait before you demand the best of your test suite? See you soon.",
+  "No man is free who is not master of his git history. Until next time.",
+  "First say to yourself what you would ship; then do what you have to do. See you soon.",
+  "Difficulties strengthen the mind as labor does the body. And rebases do both. Later.",
+  "He who fears failure limits his activities. Ship small, ship often. See you soon.",
+  "The soul becomes dyed with the color of its thoughts. Ours is terminal green. Until next time.",
+  "Begin at once to live, and count each separate deploy as a separate life. See you soon.",
+  "We are more often frightened than hurt; our merge conflicts are more in imagination than reality. Later.",
+  "Man is not worried by real problems so much as by his imagined race conditions. Until next time.",
+  "If it is not right do not do it; if it is not true do not commit it. See you soon.",
+  "The happiness of your life depends upon the quality of your abstractions. Until next time.",
+  "Luck is what happens when preparation meets a green CI pipeline. See you soon.",
+];
+
+function getClosingStatement(): string {
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  return CLOSING_STATEMENTS[dayOfYear % CLOSING_STATEMENTS.length];
+}
+
+/**
  * Build a pre-formatted display string for consistent CLI output.
  * Agents echo this string directly instead of formatting ad-hoc.
  */
@@ -271,72 +307,103 @@ function formatCloseDisplay(
 ): string {
   const lines: string[] = [];
 
-  if (!success) {
-    lines.push("**Session close FAILED.**");
-    if (errors?.length) {
-      for (const e of errors) lines.push(`- Error: ${e}`);
-    }
+  // Header
+  const B = "\x1b[1m"; // bold on
+  const D = "\x1b[2m"; // dim on
+  const R = "\x1b[0m"; // reset
+  const closeLabel = compliance.close_type.toUpperCase();
+  const status = success ? "COMPLETE" : "FAILED";
+  lines.push(`${B}${closeLabel} CLOSE — ${status}${R}`);
+  lines.push(`Session ${sessionId.slice(0, 8)} · ${compliance.agent}`);
+
+  if (!success && errors?.length) {
     lines.push("");
+    for (const e of errors) lines.push(`  !! ${e}`);
   }
 
-  // Header
-  const closeLabel = compliance.close_type.toUpperCase();
-  lines.push(`## ${closeLabel} CLOSE — ${success ? "COMPLETE" : "FAILED"}`);
-  lines.push(`**Session:** \`${sessionId.slice(0, 8)}\` | **Agent:** ${compliance.agent}`);
-
-  // Checklist
-  const check = (ok: boolean) => ok ? "done" : "missing";
-
+  // Checklist (compact)
   lines.push("");
-  lines.push(`### Checklist`);
+  const ok = "\u2713";
+  const no = "\u2717";
   if (compliance.close_type === "standard") {
-    lines.push(`- [${check(compliance.checklist_displayed)}] Read active-session.json`);
-    lines.push(`- [${check(compliance.questions_answered_by_agent)}] Agent answered 7 questions`);
-    lines.push(`- [${check(compliance.human_asked_for_corrections)}] Human asked for corrections`);
-    lines.push(`- [${check(learningsCount > 0)}] Created learning entries (${learningsCount})`);
-    lines.push(`- [${check(compliance.scars_applied > 0)}] Recorded scar usage (${compliance.scars_applied})`);
-    lines.push(`- [${check(success)}] Session persisted`);
+    lines.push(`  ${ok} Session state read`);
+    lines.push(`  ${compliance.questions_answered_by_agent ? ok : no} Reflection (9 questions)`);
+    lines.push(`  ${compliance.human_asked_for_corrections ? ok : no} Human corrections`);
+    lines.push(`  ${success ? ok : no} Persisted`);
   } else {
-    lines.push(`- [${check(success)}] Session persisted`);
-    lines.push(`- Agent: ${compliance.agent} | Close type: ${compliance.close_type}`);
+    lines.push(`  ${success ? ok : no} Persisted (${compliance.close_type})`);
+  }
+
+  // Decisions table
+  if (params.decisions?.length) {
+    lines.push("");
+    lines.push(`${B}Decisions${R}`);
+    for (const d of params.decisions) {
+      lines.push(`  ${truncate(d.title, 60)}`);
+      lines.push(`    ${truncate(d.decision, 70)}`);
+    }
+  }
+
+  // Learnings created
+  if (params.learnings_created?.length) {
+    lines.push("");
+    lines.push(`${B}Learnings (${params.learnings_created.length})${R}`);
+    for (const l of params.learnings_created) {
+      // learnings_created is string[] of IDs — show truncated
+      lines.push(`  ${l.length > 12 ? l.slice(0, 8) : l}`);
+    }
+  }
+
+  // Scars applied
+  if (params.scars_to_record?.length) {
+    const acknowledged = params.scars_to_record.filter(s => s.reference_type !== "none");
+    const ignored = params.scars_to_record.length - acknowledged.length;
+    lines.push("");
+    lines.push(`${B}Scars (${acknowledged.length} applied${ignored > 0 ? `, ${ignored} surfaced-only` : ""})${R}`);
+    for (const s of acknowledged) {
+      const ref = s.reference_type === "explicit" ? "applied" :
+                  s.reference_type === "implicit" ? "implicit" :
+                  s.reference_type === "acknowledged" ? "ack'd" :
+                  s.reference_type === "refuted" ? "REFUTED" : s.reference_type;
+      const id = s.scar_identifier.length > 12 ? s.scar_identifier.slice(0, 8) : s.scar_identifier;
+      lines.push(`  ${id}  ${ref.padEnd(8)}  ${truncate(s.reference_context, 50)}`);
+    }
   }
 
   // Threads summary
   const threads = params.open_threads || [];
   if (threads.length > 0) {
-    const openCount = threads.filter(t => {
-      if (typeof t === "string") return true;
-      return t.status === "open";
-    }).length;
+    const openCount = threads.filter(t => typeof t === "string" || t.status === "open").length;
     const resolvedCount = threads.length - openCount;
     lines.push("");
-    lines.push(`### Threads`);
-    lines.push(`${openCount} open, ${resolvedCount} resolved, ${threads.length} total`);
+    lines.push(`${B}Threads${R}: ${openCount} open${resolvedCount > 0 ? `, ${resolvedCount} resolved` : ""}`);
   }
 
-  // Decisions
-  if (params.decisions?.length) {
-    lines.push("");
-    lines.push(`### Decisions`);
-    lines.push(`${params.decisions.length} captured`);
-  }
-
-  // Learnings
-  if (learningsCount > 0) {
-    lines.push("");
-    lines.push(`### Learnings`);
-    lines.push(`${learningsCount} created`);
-  }
-
-  // Write health (Effect Tracker)
+  // Write health (compact)
   const healthSummary = getEffectTracker().formatSummary();
   if (healthSummary && healthSummary !== "No tracked effects this session.") {
     lines.push("");
-    lines.push(`### Write Health`);
+    lines.push(`${B}Write Health${R}`);
     lines.push(healthSummary);
   }
 
-  return lines.join("\n");
+  // Reflection highlights (Q4 what worked, Q3 do differently)
+  if (params.closing_reflection) {
+    const r = params.closing_reflection;
+    if (r.what_worked) {
+      lines.push("");
+      lines.push(`${B}What worked${R}: ${truncate(r.what_worked, 80)}`);
+    }
+    if (r.do_differently) {
+      lines.push(`${B}Next time${R}: ${truncate(r.do_differently, 80)}`);
+    }
+  }
+
+  // Stoic closing
+  lines.push("");
+  lines.push(`${D}— ${getClosingStatement()}${R}`);
+
+  return wrapDisplay(lines.join("\n"));
 }
 
 /**
@@ -884,17 +951,50 @@ export async function sessionClose(
         const autoBridgedScars: ScarUsageEntry[] = [];
         const matchedScarIds = new Set<string>();
 
-        // For each Q6 answer, try to match against surfaced scars
+        // Load structured confirmations from confirm_scars (preferred source)
+        const confirmations: ScarConfirmation[] = getConfirmations();
+        const confirmationMap = new Map<string, ScarConfirmation>();
+        for (const conf of confirmations) {
+          confirmationMap.set(conf.scar_id, conf);
+        }
+
+        // Map confirmation decisions to reference_type
+        const decisionToRefType = (decision: string): "explicit" | "acknowledged" | "refuted" => {
+          switch (decision) {
+            case "APPLYING": return "explicit";
+            case "N_A": return "acknowledged";
+            case "REFUTED": return "refuted";
+            default: return "acknowledged";
+          }
+        };
+
+        // First pass: match surfaced scars against structured confirmations
+        for (const scar of surfacedScars) {
+          const confirmation = confirmationMap.get(scar.scar_id);
+          if (confirmation) {
+            matchedScarIds.add(scar.scar_id);
+            autoBridgedScars.push({
+              scar_identifier: scar.scar_id,
+              session_id: sessionId,
+              agent: agentIdentity,
+              surfaced_at: scar.surfaced_at,
+              reference_type: decisionToRefType(confirmation.decision),
+              reference_context: `Confirmed via confirm_scars: ${confirmation.decision} — ${confirmation.evidence.slice(0, 100)}`,
+              variant_id: scar.variant_id,
+            });
+          }
+        }
+
+        // Second pass: fallback to Q6 text matching for scars without confirmations
         for (const scarApplied of params.closing_reflection.scars_applied) {
           const lowerApplied = scarApplied.toLowerCase();
 
-          // Match by UUID or title substring
           const match = surfacedScars.find((s) => {
-            if (matchedScarIds.has(s.scar_id)) return false; // Don't double-match
+            if (matchedScarIds.has(s.scar_id)) return false;
             return (
-              s.scar_id === scarApplied || // Exact UUID match
-              s.scar_title.toLowerCase().includes(lowerApplied) || // Title contains answer
-              lowerApplied.includes(s.scar_title.toLowerCase()) // Answer contains title
+              s.scar_id === scarApplied ||
+              s.scar_title.toLowerCase().includes(lowerApplied) ||
+              lowerApplied.includes(s.scar_title.toLowerCase())
             );
           });
 
@@ -907,11 +1007,12 @@ export async function sessionClose(
               surfaced_at: match.surfaced_at,
               reference_type: "acknowledged",
               reference_context: `Auto-bridged from Q6 answer: "${scarApplied}"`,
+              variant_id: match.variant_id,
             });
           }
         }
 
-        // For surfaced scars NOT mentioned in Q6, record as "none" (surfaced but ignored)
+        // For surfaced scars NOT matched by either method, record as "none"
         for (const scar of surfacedScars) {
           if (!matchedScarIds.has(scar.scar_id)) {
             autoBridgedScars.push({
@@ -921,6 +1022,7 @@ export async function sessionClose(
               surfaced_at: scar.surfaced_at,
               reference_type: "none",
               reference_context: `Surfaced during ${scar.source} but not mentioned in closing reflection`,
+              variant_id: scar.variant_id,
             });
           }
         }

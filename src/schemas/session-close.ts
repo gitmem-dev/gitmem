@@ -65,6 +65,7 @@ export const ScarUsageEntrySchema = z.object({
   reference_type: ReferenceTypeSchema,
   reference_context: z.string(),
   execution_successful: z.boolean().optional(),
+  variant_id: z.string().uuid().optional(),
 });
 
 export type ScarUsageEntry = z.infer<typeof ScarUsageEntrySchema>;

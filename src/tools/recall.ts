@@ -485,6 +485,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       scar_severity: scar.severity || "medium",
       surfaced_at: recallSurfacedAt,
       source: "recall" as const,
+      variant_id: variantResults.get(scar.id)?.assignment?.variant_id,
     }));
     addSurfacedScars(recallSurfacedScars);
 

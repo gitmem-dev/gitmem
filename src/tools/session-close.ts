@@ -282,40 +282,6 @@ async function sessionCloseFree(
 }
 
 /**
- * Stoic closing statements — deterministic by day-of-year.
- * Funny, encouraging, brief. Rotates daily so same session day = same quote.
- */
-const CLOSING_STATEMENTS = [
-  "The obstacle is the way. The bug is the feature request. See you soon.",
-  "We suffered. We shipped. Seneca would approve. Until next time.",
-  "What stands in the way becomes the way. What stands in the deploy becomes the rollback. Later.",
-  "You could leave life right now. Let that determine what you commit. See you soon.",
-  "The best revenge is not to be like your previous codebase. Until next time.",
-  "It is not death a coder should fear, but never beginning to refactor. See you soon.",
-  "Waste no time arguing about what good code should be. Ship it. Later.",
-  "The impediment to action advances action. The failing test writes the fix. Until next time.",
-  "How long are you going to wait before you demand the best of your test suite? See you soon.",
-  "No man is free who is not master of his git history. Until next time.",
-  "First say to yourself what you would ship; then do what you have to do. See you soon.",
-  "Difficulties strengthen the mind as labor does the body. And rebases do both. Later.",
-  "He who fears failure limits his activities. Ship small, ship often. See you soon.",
-  "The soul becomes dyed with the color of its thoughts. Ours is terminal green. Until next time.",
-  "Begin at once to live, and count each separate deploy as a separate life. See you soon.",
-  "We are more often frightened than hurt; our merge conflicts are more in imagination than reality. Later.",
-  "Man is not worried by real problems so much as by his imagined race conditions. Until next time.",
-  "If it is not right do not do it; if it is not true do not commit it. See you soon.",
-  "The happiness of your life depends upon the quality of your abstractions. Until next time.",
-  "Luck is what happens when preparation meets a green CI pipeline. See you soon.",
-];
-
-function getClosingStatement(): string {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
-  );
-  return CLOSING_STATEMENTS[dayOfYear % CLOSING_STATEMENTS.length];
-}
-
-/**
  * Build a pre-formatted display string for consistent CLI output.
  * Agents echo this string directly instead of formatting ad-hoc.
  */
@@ -445,10 +411,6 @@ function formatCloseDisplay(
       lines.push(`${B}Next time${R}: ${truncate(r.do_differently, 80)}`);
     }
   }
-
-  // Stoic closing
-  lines.push("");
-  lines.push(`${D}— ${getClosingStatement()}${R}`);
 
   return wrapDisplay(lines.join("\n"));
 }

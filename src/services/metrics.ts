@@ -8,6 +8,7 @@
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "./supabase-client.js";
 import { getEffectTracker } from "./effect-tracker.js";
+import { hasSupabase } from "./tier.js";
 
 /**
  * Tool names that can be tracked
@@ -138,6 +139,7 @@ export class Timer {
  * Callers can still use `.catch(() => {})` but failures will appear in health reports.
  */
 export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
+  if (!hasSupabase()) return; // No-op on free tier — don't record failures
   const record: Record<string, unknown> = {
     id: metrics.id,
     session_id: metrics.session_id || null,

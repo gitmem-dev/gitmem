@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-02-15
+
+### Fixed
+- **Free tier crash**: `markSessionSuperseded` called Supabase without `hasSupabase()` guard
+- **Session close UX**: Write health block only shown when failures exist (was always visible)
+- **E2E test suite**: Updated for display protocol changes (session_id extraction, display format assertions, recall display text, CLAUDE.md template wording)
+
 ## [1.0.0] - 2026-02-10
 
 ### Added

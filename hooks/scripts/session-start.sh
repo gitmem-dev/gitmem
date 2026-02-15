@@ -218,40 +218,10 @@ IMPORTANT:
 - Do NOT diagnose tool availability — gitmem tools are loaded via --mcp-config.
 - If session_start fails, report the error directly instead of investigating.
 
-## GitMem Protocol (active for this session)
-
-**Before any task:** Call `recall` with a brief description of what you're about to do. Review surfaced scars before proceeding.
-
-**When mistakes happen:** Suggest creating a scar with `create_learning`. Include counter_arguments.
-
-**When things go well:** Capture wins with `create_learning` (type: "win").
-
-**At session end** ("closing", "done for now", "wrapping up"):
-
-Run the standard closing ceremony:
-
-1. YOU (the agent) ANSWER these 7 reflection questions based on the session. Display your answers to the human:
-   - what_broke: What broke that you didn't expect?
-   - what_took_longer: What took longer than it should have?
-   - do_differently: What would you do differently next time?
-   - what_worked: What pattern or approach worked well?
-   - wrong_assumption: What assumption was wrong?
-   - scars_applied: Which scars or institutional knowledge did you apply?
-   - institutional_memory: What from this session should be captured?
-
-2. ASK the human: "Any corrections or additions to my answers?"
-   WAIT for their response before proceeding.
-
-3. WRITE structured payload to .gitmem/closing-payload.json (incorporating human corrections):
-   {
-     "closing_reflection": { "what_broke": "...", "what_took_longer": "...", "do_differently": "...", "what_worked": "...", "wrong_assumption": "...", "scars_applied": "...", "institutional_memory": "..." },
-     "task_completion": { "started_at": "ISO", "completed_at": "ISO", "questions_displayed_at": "ISO", "reflection_completed_at": "ISO", "human_asked_at": "ISO", "human_response_at": "ISO", "human_response": "" },
-     "human_corrections": ""
-   }
-
-4. CALL session_close with session_id and close_type: "standard"
-
-For short exploratory sessions (< 30 min, no real work), use close_type: "quick" — no questions needed.
+You have persistent memory. session_start just loaded context from your last
+session — open threads, recent decisions, what was learned. This compounds
+every session. Use recall before tasks to see what past sessions discovered.
+The more you use it, the better it gets.
 HOOK_MSG2
 else
     echo "[$(date)] Gitmem NOT detected (checked: project .mcp.json, mcp-config, ~/.claude.json, disk)" >> "$PLUGIN_LOG"

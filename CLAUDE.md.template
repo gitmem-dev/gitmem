@@ -1,51 +1,44 @@
 <!-- gitmem:start -->
-# GitMem — Institutional Memory
+# GitMem — Persistent Memory
 
-## What is this?
-GitMem gives your AI coding agent persistent memory across sessions. It remembers mistakes (scars), successes (wins), and decisions — so you never repeat the same mistake twice.
+You have a persistent memory layer called gitmem. Every session starts from
+zero — but gitmem carries forward lessons, mistakes, wins, decisions, and
+open threads across sessions and projects. Search it. Test it. You might be
+amazed at what's already there. If convinced, make it your own — update your
+MEMORY.md with how you want to use it.
 
-## Automatic behaviors
+## Tools
 
-When working on this project, follow these memory protocols:
+| Tool | When to use |
+|------|-------------|
+| `recall` | Before any task — surfaces relevant warnings from past experience |
+| `confirm_scars` | After recall — acknowledge each scar as APPLYING, N_A, or REFUTED |
+| `search` | Explore institutional knowledge by topic |
+| `log` | Browse recent learnings chronologically |
+| `session_start` | Beginning of session — loads last session context and open threads |
+| `session_close` | End of session — persists what you learned |
+| `create_learning` | Capture a mistake (scar), success (win), or pattern |
+| `create_decision` | Log an architectural or operational decision with rationale |
+| `list_threads` | See unresolved work carrying over between sessions |
+| `create_thread` | Track something that needs follow-up in a future session |
+| `help` | Show all available commands |
 
-### Before any task
-- Call `recall` with a brief description of what you're about to do
-- Review any scars that surface — they're warnings from past experience
-- Acknowledge relevant scars before proceeding
+## Session end
 
-### At session start
-- Call `session_start` to load context from the last session
-- Review open threads from the previous session
+On "closing", "done for now", or "wrapping up":
 
-### When mistakes happen
-- If something breaks unexpectedly, suggest creating a scar with `create_learning`
-- Include counter-arguments (why someone might think the mistake is OK)
-- Scars need: title, description, severity, and at least 2 counter_arguments
+1. **Answer these reflection questions** and display to the human:
+   - What broke that you didn't expect?
+   - What took longer than it should have?
+   - What would you do differently next time?
+   - What pattern or approach worked well?
+   - What assumption was wrong?
+   - Which scars did you apply?
+   - What should be captured as institutional memory?
 
-### When things go well
-- If a pattern or approach works particularly well, capture it as a win
-- Wins help replicate success across sessions
+2. **Ask the human**: "Any corrections or additions?" Wait for their response.
 
-### When making decisions
-- For architectural or significant operational decisions, log them with `create_decision`
-- Include what alternatives were considered and why they were rejected
-
-### At session end (closing ceremony)
-
-On "closing", "done for now", or "wrapping up", run the **standard closing ceremony**:
-
-1. **You (the agent) answer these 7 reflection questions** based on the session. Display your answers to the human:
-   - Q1 `what_broke`: What broke that you didn't expect?
-   - Q2 `what_took_longer`: What took longer than it should have?
-   - Q3 `do_differently`: What would you do differently next time?
-   - Q4 `what_worked`: What pattern or approach worked well?
-   - Q5 `wrong_assumption`: What assumption was wrong?
-   - Q6 `scars_applied`: Which scars or institutional knowledge did you apply?
-   - Q7 `institutional_memory`: What from this session should be captured as institutional memory?
-
-2. **Ask the human for corrections**: "Any corrections or additions to my answers?" **Wait for their response before proceeding.**
-
-3. **Write structured payload** to `.gitmem/closing-payload.json`:
+3. **Write payload** to `.gitmem/closing-payload.json`:
    ```json
    {
      "closing_reflection": {
@@ -74,57 +67,7 @@ On "closing", "done for now", or "wrapping up", run the **standard closing cerem
    }
    ```
 
-4. **Call `session_close`** with only `session_id` and `close_type: "standard"`
+4. **Call `session_close`** with `session_id` and `close_type: "standard"`
 
-**Do NOT** skip the questions or write freeform text. The ceremony is the same regardless of tier.
-
-For short exploratory sessions (< 30 min, no real work), use `close_type: "quick"` instead — no questions needed.
-
-- **Run tests before pushing** — `npm run test:unit` at minimum
-
-## Tool quick reference
-
-| Tool | Alias | When to use |
-|------|-------|-------------|
-| `recall` | `gitmem-r` | Before any task — check for relevant warnings |
-| `session_start` | `gitmem-ss` | Beginning of session — load context |
-| `session_close` | `gitmem-sc` | End of session — persist learnings |
-| `create_learning` | `gitmem-cl` | After mistakes or successes — capture knowledge |
-| `create_decision` | `gitmem-cd` | When making choices — log the reasoning |
-| `record_scar_usage` | `gitmem-rs` | Track which scars helped |
-| `help` | `gitmem-help` | Show all commands |
-
-## Development Commands
-
-When contributing to GitMem itself:
-
-| Command | Purpose |
-|---------|---------|
-| `npm run build` | Build + run unit tests (fails if tests fail) |
-| `npm run test:unit` | Run Tier 1 unit tests (~2s) |
-| `npm run test:integration` | Run Tier 2 integration tests (requires Docker) |
-| `npm run test:perf` | Run Tier 3 performance benchmarks |
-| `npm run test:e2e` | Run Tier 4 E2E smoke tests (requires Docker) |
-| `npm run test:all` | Run all test tiers |
-| `npx gitmem check` | Quick health check (~5s) |
-| `npx gitmem check --full` | Full diagnostic with benchmarks (~30s) |
-
-**Before pushing:** Always run `npm run test:unit` at minimum.
-
-### Definition of Done
-
-Before marking any feature or fix as complete:
-
-- [ ] Code committed and pushed
-- [ ] **Tests exist for the change** — not just "tests pass", but new/modified tests covering the feature or fix
-- [ ] **Test count delta noted** in PR or completion comment (e.g., "+10 tests: 7 unit, 3 E2E")
-
-| Change Type | Required Tests |
-|-------------|---------------|
-| New schema/field | Unit tests for validation, defaults, backwards compat |
-| New tool behavior | E2E tests through MCP protocol |
-| Bug fix | Regression test that would have caught the bug |
-| Refactor | Existing tests still pass (no new tests needed if behavior unchanged) |
-
-⚠️ **"Tests pass" ≠ "Tests exist."** Passing a suite that doesn't cover your change proves nothing.
+For short exploratory sessions (< 30 min, no real work), use `close_type: "quick"` — no questions needed.
 <!-- gitmem:end -->

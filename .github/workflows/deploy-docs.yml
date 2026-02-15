@@ -6,6 +6,8 @@ on:
     paths:
       - 'apps/docs/**'
       - 'src/tools/definitions.ts'
+  repository_dispatch:
+    types: [landing-updated]
   workflow_dispatch:
 
 jobs:

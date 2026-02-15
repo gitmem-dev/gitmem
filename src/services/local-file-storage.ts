@@ -9,6 +9,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { bm25Search, type BM25Document } from "./bm25.js";
 import type { RelevantScar } from "../types/index.js";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -147,49 +148,43 @@ export class LocalFileStorage {
   }
 
   /**
-   * Keyword-based search for scars (free tier alternative to semantic search)
+   * BM25-ranked search for scars (free tier alternative to semantic search)
    *
-   * Scores by: title match (3x), keyword match (2x), description match (1x)
+   * Field boosts: title (3x), keywords (2x), description (1x)
+   * Uses stemming, IDF weighting, and document length normalization.
    */
   async keywordSearch(query: string, k = 5): Promise<RelevantScar[]> {
     const learnings = this.readCollection<Record<string, unknown>>("learnings");
-    const queryTokens = tokenize(query.toLowerCase());
+    if (learnings.length === 0) return [];
 
-    if (queryTokens.length === 0) return [];
+    // Build BM25 documents with field boosting
+    const docs: BM25Document[] = learnings.map((l) => ({
+      id: String(l.id),
+      fields: [
+        { text: String(l.title || ""), boost: 3 },
+        { text: ((l.keywords as string[]) || []).join(" "), boost: 2 },
+        { text: String(l.description || ""), boost: 1 },
+      ],
+    }));
 
-    const maxScore = queryTokens.length * 6; // max possible per token: 3+2+1
+    const results = bm25Search(query, docs, k);
 
-    const scored = learnings.map((l) => {
-      let score = 0;
-      const titleTokens = tokenize(String(l.title || "").toLowerCase());
-      const descTokens = tokenize(String(l.description || "").toLowerCase());
-      const kwTokens = ((l.keywords as string[]) || []).map((k) => k.toLowerCase());
-
-      for (const qt of queryTokens) {
-        if (titleTokens.some((t) => t.includes(qt) || qt.includes(t))) score += 3;
-        if (kwTokens.some((k) => k.includes(qt) || qt.includes(k))) score += 2;
-        if (descTokens.some((t) => t.includes(qt) || qt.includes(t))) score += 1;
-      }
-
-      return {
-        learning: l,
-        score,
-        similarity: Math.round((score / maxScore) * 1000) / 1000,
-      };
-    });
-
-    return scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, k)
-      .map((s) => ({
-        id: String(s.learning.id),
-        title: String(s.learning.title),
-        description: String(s.learning.description),
-        severity: String(s.learning.severity || "medium"),
-        counter_arguments: (s.learning.counter_arguments as string[]) || [],
-        similarity: s.similarity,
-      }));
+    // Map back to RelevantScar
+    const byId = new Map(learnings.map((l) => [String(l.id), l]));
+    return results
+      .map((r) => {
+        const l = byId.get(r.id);
+        if (!l) return null;
+        return {
+          id: r.id,
+          title: String(l.title),
+          description: String(l.description),
+          severity: String(l.severity || "medium"),
+          counter_arguments: (l.counter_arguments as string[]) || [],
+          similarity: r.similarity,
+        };
+      })
+      .filter((r): r is RelevantScar => r !== null);
   }
 
   /**
@@ -227,16 +222,6 @@ export class LocalFileStorage {
       return 0;
     }
   }
-}
-
-/**
- * Tokenize text into words, stripping punctuation
- */
-function tokenize(text: string): string[] {
-  return text
-    .replace(/[^\w\s-]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t.length > 1);
 }
 
 // Singleton instance

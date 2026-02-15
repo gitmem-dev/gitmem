@@ -21,6 +21,7 @@ import * as path from "path";
 import { getStorage } from "../services/storage.js";
 import { hasSupabase } from "../services/tier.js";
 import { isLocalSearchReady, localScarSearch } from "../services/local-vector-search.js";
+import { bm25Search, type BM25Document } from "../services/bm25.js";
 import { formatCompact, estimateTokens } from "./format-utils.js";
 import type { FormattableScar } from "./format-utils.js";
 import type { RelevantScar } from "../types/index.js";
@@ -86,7 +87,7 @@ export async function quickRetrieve(
 
 /**
  * Search the disk cache written by the MCP server's startup.ts.
- * Uses keyword matching (same algorithm as LocalFileStorage.keywordSearch).
+ * Uses BM25 ranking with field boosting (title 3x, keywords 2x, description 1x).
  */
 function searchDiskCache(query: string, k: number): FormattableScar[] {
   const cachePath = path.join(process.cwd(), ".gitmem", "cache", "hook-scars.json");
@@ -97,52 +98,39 @@ function searchDiskCache(query: string, k: number): FormattableScar[] {
   try {
     const raw = fs.readFileSync(cachePath, "utf-8");
     const scars = JSON.parse(raw) as Array<Record<string, unknown>>;
-    const queryTokens = tokenize(query.toLowerCase());
 
-    if (queryTokens.length === 0) return [];
+    const docs: BM25Document[] = scars.map((s) => ({
+      id: String(s.id),
+      fields: [
+        { text: String(s.title || ""), boost: 3 },
+        { text: ((s.keywords as string[]) || []).join(" "), boost: 2 },
+        { text: String(s.description || ""), boost: 1 },
+      ],
+    }));
 
-    const maxScore = queryTokens.length * 6; // max per token: title(3) + keyword(2) + desc(1)
+    const results = bm25Search(query, docs, k);
+    const byId = new Map(scars.map((s) => [String(s.id), s]));
 
-    const scored = scars.map((s) => {
-      let score = 0;
-      const titleTokens = tokenize(String(s.title || "").toLowerCase());
-      const descTokens = tokenize(String(s.description || "").toLowerCase());
-      const kwTokens = ((s.keywords as string[]) || []).map((k: string) => k.toLowerCase());
-
-      for (const qt of queryTokens) {
-        if (titleTokens.some((t) => t.includes(qt) || qt.includes(t))) score += 3;
-        if (kwTokens.some((kw) => kw.includes(qt) || qt.includes(kw))) score += 2;
-        if (descTokens.some((t) => t.includes(qt) || qt.includes(t))) score += 1;
-      }
-
-      return { scar: s, score, similarity: maxScore > 0 ? Math.round((score / maxScore) * 1000) / 1000 : 0 };
-    });
-
-    return scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, k)
-      .map((s) => ({
-        id: String(s.scar.id),
-        title: String(s.scar.title),
-        description: String(s.scar.description || ""),
-        severity: String(s.scar.severity || "medium"),
-        counter_arguments: (s.scar.counter_arguments as string[]) || [],
-        similarity: s.similarity,
-        why_this_matters: s.scar.why_this_matters as string | undefined,
-        action_protocol: s.scar.action_protocol as string[] | undefined,
-        self_check_criteria: s.scar.self_check_criteria as string[] | undefined,
-      }));
+    const mapped: FormattableScar[] = [];
+    for (const r of results) {
+      const s = byId.get(r.id);
+      if (!s) continue;
+      mapped.push({
+        id: r.id,
+        title: String(s.title),
+        description: String(s.description || ""),
+        severity: String(s.severity || "medium"),
+        counter_arguments: (s.counter_arguments as string[]) || [],
+        similarity: r.similarity,
+        why_this_matters: s.why_this_matters as string | undefined,
+        action_protocol: s.action_protocol as string[] | undefined,
+        self_check_criteria: s.self_check_criteria as string[] | undefined,
+      });
+    }
+    return mapped;
   } catch {
     return [];
   }
-}
-
-function tokenize(text: string): string[] {
-  return text
-    .replace(/[^\w\s-]/g, " ")
-    .split(/\s+/)
-    .filter((t) => t.length > 1);
 }
 
 function toFormattable(scar: RelevantScar): FormattableScar {

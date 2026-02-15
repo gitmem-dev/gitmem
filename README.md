@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <a href="https://gitmem.dev/docs"><strong>Documentation</strong></a> &middot;
+  <a href="https://gitmem.ai/docs"><strong>Documentation</strong></a> &middot;
   <a href="https://www.npmjs.com/package/gitmem-mcp"><strong>npm</strong></a> &middot;
-  <a href="https://gitmem.dev/docs/getting-started"><strong>Getting Started</strong></a> &middot;
-  <a href="https://gitmem.dev/docs/tools"><strong>Tool Reference</strong></a>
+  <a href="https://gitmem.ai/docs/getting-started"><strong>Getting Started</strong></a> &middot;
+  <a href="https://gitmem.ai/docs/tools"><strong>Tool Reference</strong></a>
 </p>
 
 ---
@@ -116,7 +116,7 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 
 The free tier gives you everything you need for solo projects. **Pro** will add cloud storage (Supabase), semantic vector search, cross-machine sync, team shared memory, and session transcripts.
 
-[Join the mailing list](https://gitmem.dev) to get notified when Pro launches.
+[Join the mailing list](https://gitmem.ai) to get notified when Pro launches.
 
 ## Development
 

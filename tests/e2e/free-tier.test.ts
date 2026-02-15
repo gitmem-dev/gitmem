@@ -30,6 +30,11 @@ import { tmpdir } from "os";
 // Test-specific .gitmem directory
 const TEST_GITMEM_DIR = join(tmpdir(), `gitmem-e2e-free-${Date.now()}`);
 
+/** Extract session UUID from session_start display text */
+function extractSessionId(text: string): string | undefined {
+  return text.split("\n").find(l => /^[0-9a-f]{8}-/.test(l))?.split(" ")[0];
+}
+
 describe("Free Tier E2E", () => {
   let mcpClient: McpTestClient;
 
@@ -117,22 +122,26 @@ describe("Free Tier E2E", () => {
   describe("Session Lifecycle", () => {
     it("can start a session", async () => {
       const result = await callTool(mcpClient.client, "session_start", {
-        agent: "CLI",
+        agent_identity: "CLI",
+        force: true,
       });
 
       expect(isToolError(result)).toBe(false);
-      const text = getToolResultText(result);
-      expect(text.toLowerCase()).toContain("session");
+      const text = getToolResultText(result).toLowerCase();
+      expect(text.includes("active") || text.includes("resumed")).toBe(true);
     });
 
     it("can close a session", async () => {
       // First start a session
-      await callTool(mcpClient.client, "session_start", {
-        agent: "CLI",
+      const startResult = await callTool(mcpClient.client, "session_start", {
+        agent_identity: "CLI",
+        force: true,
       });
+      const sessionId = extractSessionId(getToolResultText(startResult));
 
       // Then close it
       const result = await callTool(mcpClient.client, "session_close", {
+        session_id: sessionId,
         close_type: "quick",
       });
 
@@ -223,12 +232,15 @@ describe("Free Tier E2E", () => {
   describe("Rapport Memory (OD-666)", () => {
     it("accepts closing_reflection with Q8/Q9 rapport fields", async () => {
       // Start a session first
-      await callTool(mcpClient.client, "session_start", {
+      const startResult = await callTool(mcpClient.client, "session_start", {
         agent_identity: "CLI",
+        force: true,
       });
+      const sessionId = extractSessionId(getToolResultText(startResult));
 
       // Close with rapport fields in closing_reflection
       const result = await callTool(mcpClient.client, "session_close", {
+        session_id: sessionId,
         close_type: "standard",
         closing_reflection: {
           what_broke: "Nothing",
@@ -256,13 +268,15 @@ describe("Free Tier E2E", () => {
 
     it("session_close without rapport fields still works (backwards compatible)", async () => {
       // Start a session
-      await callTool(mcpClient.client, "session_start", {
+      const startResult = await callTool(mcpClient.client, "session_start", {
         agent_identity: "CLI",
         force: true,
       });
+      const sessionId = extractSessionId(getToolResultText(startResult));
 
       // Close without Q8/Q9
       const result = await callTool(mcpClient.client, "session_close", {
+        session_id: sessionId,
         close_type: "standard",
         closing_reflection: {
           what_broke: "Nothing",
@@ -286,12 +300,14 @@ describe("Free Tier E2E", () => {
 
     it("session_start output contains rapport section when rapport exists", async () => {
       // First: close a session WITH rapport to populate local storage
-      await callTool(mcpClient.client, "session_start", {
+      const s1 = await callTool(mcpClient.client, "session_start", {
         agent_identity: "CLI",
         force: true,
       });
+      const s1Id = extractSessionId(getToolResultText(s1));
 
       await callTool(mcpClient.client, "session_close", {
+        session_id: s1Id,
         close_type: "standard",
         closing_reflection: {
           what_broke: "Nothing",
@@ -324,7 +340,7 @@ describe("Free Tier E2E", () => {
       // Free tier uses local storage — rapport surfacing depends on
       // whether the local session store persists rapport_summary.
       // At minimum, the start should succeed without error.
-      expect(text.toLowerCase()).toContain("session");
+      expect(text.toLowerCase().includes("active") || text.toLowerCase().includes("resumed")).toBe(true);
     });
   });
 });

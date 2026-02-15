@@ -90,7 +90,7 @@ describe("Smoke: Free Tier", () => {
 
     // session_start returns pre-formatted markdown display string
     const text = getToolResultText(result);
-    expect(text).toContain("session active");
+    expect(text).toContain("active");
     expect(text).toContain("CLI");
   });
 

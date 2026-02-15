@@ -373,6 +373,7 @@ async function createSessionRecord(
  * Only sets close_compliance if it's currently null (truly abandoned).
  */
 async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
+  if (!hasSupabase()) return; // Free tier: no remote session tracking
   try {
     // Check if session already has close_compliance (was properly closed)
     const existing = await supabase.directQuery<{ close_compliance: unknown }>(

@@ -822,8 +822,8 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
     visualBlock,
     "",
     "───────────────────────────────────────────────────",
-    "DISPLAY PROTOCOL: The content above is already visible to the user in the tool result.",
-    "Do NOT echo or repeat it. Respond briefly and naturally to the user's request.",
+    "DISPLAY PROTOCOL: Output the content above verbatim as your response text.",
+    "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.",
   ].join("\n");
 }
 

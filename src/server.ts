@@ -308,8 +308,8 @@ export function createServer(): Server {
             "**For detailed documentation and help, visit https://gitmem.ai/docs**",
             "",
             "───────────────────────────────────────────────────",
-            "DISPLAY PROTOCOL: Echo the content above as your complete response.",
-            "Do not add preamble, commentary, or reformat. Output it exactly as-is.",
+            "DISPLAY PROTOCOL: Output the content above verbatim as your response text.",
+            "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.",
           ].join("\n");
 
           result = {

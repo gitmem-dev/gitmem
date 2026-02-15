@@ -79,7 +79,7 @@ export const TOOLS = [
   },
   {
     name: "session_start",
-    description: "Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
+    description: "Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). DISPLAY: The result includes a pre-formatted 'display' field visible in the tool result. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -119,7 +119,7 @@ export const TOOLS = [
   },
   {
     name: "session_refresh",
-    description: "Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own session summary.",
+    description: "Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. DISPLAY: The result includes a pre-formatted 'display' field visible in the tool result. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -133,7 +133,7 @@ export const TOOLS = [
   },
   {
     name: "session_close",
-    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
+    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -804,7 +804,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-ss",
-    description: "gitmem-ss (session_start) - Initialize session with institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
+    description: "gitmem-ss (session_start) - Initialize session with institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -844,7 +844,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sr",
-    description: "gitmem-sr (session_refresh) - Refresh institutional context for the active session without creating a new session. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
+    description: "gitmem-sr (session_refresh) - Refresh institutional context for the active session without creating a new session. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -858,7 +858,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sc",
-    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
+    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1439,7 +1439,7 @@ export const TOOLS = [
   // ============================================================================
   {
     name: "gm-open",
-    description: "gm-open (session_start) - Open a GitMem session and load institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
+    description: "gm-open (session_start) - Open a GitMem session and load institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1502,7 +1502,7 @@ export const TOOLS = [
   },
   {
     name: "gm-refresh",
-    description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user.",
+    description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1516,7 +1516,7 @@ export const TOOLS = [
   },
   {
     name: "gm-close",
-    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Echo it verbatim to the user instead of formatting your own close summary.",
+    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {

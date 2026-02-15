@@ -28,7 +28,7 @@ Description: GitMem release history.
 - Updated README to feature one-command setup, added gitmem.dev link
 - Updated docs site installation and getting-started pages
 
-## v1.0.1 (2026-02-16)
+## v1.0.1 (2026-02-14)
 
 ### Bug Fixes
 
@@ -387,27 +387,18 @@ GitMem has three tiers that control which tools and storage backends are availab
 
 Set via: `GITMEM_TIER=free` (default)
 
-## Pro
+## Pro (Coming Soon)
 
 - **Storage:** Supabase PostgreSQL with pgvector
 - **Search:** Semantic search via embeddings
 - **Tools:** 29 tools (adds batch, transcripts, cache management)
-- **Cost:** Supabase hosting (~$25/mo for starter)
 - **Best for:** Teams, multi-machine workflows, production use
 
-Set via: `GITMEM_TIER=pro` + Supabase credentials
+Pro is currently in development. [Join the mailing list](https://gitmem.dev) to get notified when it launches.
 
-## Dev
+## Additional Tools (Pro)
 
-- **Storage:** Same as Pro
-- **Tools:** Same as Pro
-- **Purpose:** Development and testing of GitMem itself
-
-Set via: `GITMEM_TIER=dev` + Supabase credentials
-
-## Additional Tools by Tier
-
-### Pro/Dev Only
+These tools will be available when Pro launches:
 
 | Tool | Purpose |
 |------|---------|
@@ -432,7 +423,7 @@ GitMem is open source. Contributions are welcome.
 ## Development Setup
 
 ```bash
-git clone https://github.com/nTEG-Labs/gitmem
+git clone https://github.com/nTEG-dev/gitmem
 cd gitmem
 npm install
 npm run build
@@ -592,13 +583,10 @@ GitMem works out of the box with zero configuration on the free tier. For Pro ti
 
 ## Environment Variables
 
-| Variable | Default | Tier | Purpose |
-|----------|---------|------|---------|
-| `GITMEM_TIER` | `free` | All | Set to `pro` or `dev` to enable Supabase features |
-| `GITMEM_DIR` | `.gitmem/` | All | Override the storage directory location |
-| `GITMEM_DEFAULT_PROJECT` | `default` | All | Default project namespace for scoping |
-| `SUPABASE_URL` | — | Pro | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Pro | Supabase service role key (not anon key) |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Override the storage directory location |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Default project namespace for scoping |
 
 ## Storage
 
@@ -618,9 +606,9 @@ All data stored in `.gitmem/` relative to your project root:
 
 Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
 
-### Pro Tier (Supabase)
+### Pro Tier (Coming Soon)
 
-Data stored in Supabase PostgreSQL with pgvector for semantic search. Local `.gitmem/` serves as a cache layer for fast recall.
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.dev) to get notified.
 
 ## Project Namespaces
 
@@ -715,64 +703,50 @@ After a few sessions, GitMem builds a knowledge base of:
 ========================================================================
 # Free vs Pro
 URL: https://gitmem.ai/docs/getting-started/free-vs-pro
-Description: Compare GitMem tiers and choose the right one for your workflow.
+Description: What you get today with the free tier and what's coming with Pro.
 ========================================================================
 
 # Free vs Pro
 
-GitMem ships with a fully functional free tier. Pro adds cloud storage and advanced features.
+GitMem ships with a fully functional free tier — everything you need to give your AI agents institutional memory. Pro will add cloud storage and team features.
 
-## Feature Comparison
+## What's Included (Free Tier)
 
-| Feature | Free | Pro |
-|---------|------|-----|
-| **Session Management** | Local `.gitmem/` | Supabase PostgreSQL |
-| **Recall (scar surfacing)** | Local vector search | Supabase pgvector |
-| **Create scars/wins/patterns** | Local JSON files | Supabase with embeddings |
-| **Threads** | Local tracking | Persistent across machines |
-| **Session history** | Last session only | Full history with search |
-| **Semantic search** | Local cache | Supabase pgvector |
-| **Multi-agent** | Single machine | Shared cloud storage |
-| **Batch operations** | — | Batch scar recording |
-| **Transcripts** | — | Save/search session transcripts |
-| **Cache management** | — | Status, health, flush tools |
-| **Knowledge graph** | — | Triple-based graph traversal |
-| **Analytics** | Basic | Full session analytics |
+| Feature | How It Works |
+|---------|-------------|
+| **Session Management** | Local `.gitmem/` directory |
+| **Recall (scar surfacing)** | BM25 text search over local scars |
+| **Create scars/wins/patterns** | Local JSON files |
+| **Threads** | Local tracking across sessions |
+| **Session history** | Last session context loaded on start |
+| **Semantic search** | Local search over learnings |
+| **Multi-agent** | Context injection for agents on the same machine |
+| **Analytics** | Basic session analytics |
+| **Tools** | 23 core tools |
 
-## Tool Count by Tier
+## Pro Tier — Coming Soon
 
-| Tier | Tools Available |
-|------|----------------|
-| Free | 23 core tools |
-| Pro | 29 tools (+ batch, transcripts, cache) |
-| Dev | 29 tools (same as Pro, for development) |
+Pro adds cloud-powered features for teams and power users:
 
-## When to Upgrade
+| Feature | What Pro Adds |
+|---------|--------------|
+| **Storage** | Supabase PostgreSQL (persistent, cross-machine) |
+| **Search** | pgvector semantic search with embeddings |
+| **Multi-agent** | Shared cloud memory across machines |
+| **Session history** | Full history with search |
+| **Transcripts** | Save and search session transcripts |
+| **Batch operations** | Batch scar recording |
+| **Knowledge graph** | Triple-based graph traversal |
+| **Cache management** | Status, health, and flush tools |
+| **Tools** | 29 tools (6 additional) |
 
-**Stay on Free if:**
-- You're a solo developer
-- Your projects are single-machine
-- You don't need cross-session semantic search
-
-**Upgrade to Pro if:**
+**Pro will be for you if:**
 - You need shared memory across machines or teams
-- You want full semantic search over learnings
+- You want full semantic search with embeddings
 - You need session transcript storage
-- You're running multi-agent workflows
+- You're running multi-agent workflows across environments
 
-## Setting Up Pro
-
-1. Create a [Supabase](https://supabase.com) project
-2. Run the GitMem migration to set up tables
-3. Set environment variables:
-
-```bash
-export GITMEM_TIER=pro
-export SUPABASE_URL=https://your-project.supabase.co
-export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-See [Supabase Setup](/docs/guides/supabase-setup) for detailed instructions.
+[Join the mailing list](https://gitmem.dev) to get notified when Pro launches.
 
 ========================================================================
 # Overview
@@ -837,7 +811,7 @@ npx gitmem init
 The interactive wizard walks you through 6 steps:
 
 1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
-2. **MCP Server** — Adds gitmem to `.mcp.json` (auto-detects free vs pro tier)
+2. **MCP Server** — Adds gitmem to `.mcp.json`
 3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
 4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
 5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
@@ -946,9 +920,7 @@ You should see a list of available commands with your current tier and tool coun
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `GITMEM_DIR` | `.gitmem/` | Storage directory |
-| `GITMEM_TIER` | `free` | Tier: `free`, `pro`, or `dev` |
-| `SUPABASE_URL` | — | Pro tier: Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Pro tier: Supabase service key |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Project namespace for scoping |
 
 See [Configuration](/docs/getting-started/configuration) for full details.
 
@@ -1097,12 +1069,14 @@ Check that no other tools are writing to stdout in the same process.
 ========================================================================
 # Multi-Agent Workflows
 URL: https://gitmem.ai/docs/guides/multi-agent
-Description: Share institutional memory across teams of AI agents.
+Description: Inject institutional memory into sub-agents and capture their findings.
 ========================================================================
 
 # Multi-Agent Workflows
 
-GitMem supports teams of agents sharing the same institutional memory. The lead agent can inject context into sub-agents and absorb their findings.
+GitMem helps coordinate teams of agents on a single machine. The lead agent can inject context into sub-agents and absorb their findings back into institutional memory.
+
+> **Note:** Cross-machine shared memory requires the Pro tier (coming soon). The workflows below work on the free tier for agents running on the same machine.
 
 ## Context Injection
 
@@ -1584,14 +1558,16 @@ GitMem exposes tools via the [Model Context Protocol](https://modelcontextprotoc
 | [health](/docs/tools/health) | `gitmem-health`, `gm-health` | Write health report |
 | `gitmem-help` | — | Show available commands |
 
-## Pro-Only Tools
+## Pro-Only Tools (Coming Soon)
+
+These tools will be available when the Pro tier launches:
 
 | Tool | Aliases | Purpose |
 |------|---------|---------|
-| [record_scar_usage_batch](/docs/tools/record-scar-usage-batch) | `gitmem-rsb` | Batch scar recording |
-| [save_transcript](/docs/tools/save-transcript) | `gitmem-st` | Save session transcript |
-| [get_transcript](/docs/tools/get-transcript) | `gitmem-gt` | Retrieve transcript |
-| [search_transcripts](/docs/tools/search-transcripts) | `gitmem-stx`, `gm-stx` | Search transcripts |
+| record_scar_usage_batch | `gitmem-rsb` | Batch scar recording |
+| save_transcript | `gitmem-st` | Save session transcript |
+| get_transcript | `gitmem-gt` | Retrieve transcript |
+| search_transcripts | `gitmem-stx`, `gm-stx` | Search transcripts |
 | cache_status | `gitmem-cache-status`, `gm-cache-s` | Cache status |
 | cache_health | `gitmem-cache-health`, `gm-cache-h` | Cache vs remote comparison |
 | cache_flush | `gitmem-cache-flush`, `gm-cache-f` | Force cache reload |

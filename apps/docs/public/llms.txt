@@ -54,12 +54,12 @@ Full docs: https://gitmem.ai/llms-full.txt
 - [Testing](https://gitmem.ai/docs/contributing/testing): GitMem's test pyramid and how to run each tier.
 - [Configuration](https://gitmem.ai/docs/getting-started/configuration): Configure GitMem with environment variables and config files.
 - [Your First Session](https://gitmem.ai/docs/getting-started/first-session): Walk through a complete GitMem session from start to close.
-- [Free vs Pro](https://gitmem.ai/docs/getting-started/free-vs-pro): Compare GitMem tiers and choose the right one for your workflow.
+- [Free vs Pro](https://gitmem.ai/docs/getting-started/free-vs-pro): What you get today with the free tier and what's coming with Pro.
 - [Overview](https://gitmem.ai/docs/getting-started): Get GitMem running in under 5 minutes.
 - [Installation](https://gitmem.ai/docs/getting-started/installation): Install GitMem via npx, global install, or MCP configuration.
 - [Closing Ceremony](https://gitmem.ai/docs/guides/closing-ceremony): How to properly close a GitMem session with reflection and persistence.
 - [Error Handling](https://gitmem.ai/docs/guides/error-handling): Understanding and debugging GitMem errors.
-- [Multi-Agent Workflows](https://gitmem.ai/docs/guides/multi-agent): Share institutional memory across teams of AI agents.
+- [Multi-Agent Workflows](https://gitmem.ai/docs/guides/multi-agent): Inject institutional memory into sub-agents and capture their findings.
 - [GitMem](https://gitmem.ai/docs): Institutional memory for AI coding agents. Memory that compounds.
 - [absorb_observations](https://gitmem.ai/docs/tools/absorb-observations): Capture observations from sub-agents and teammates.
 - [analyze](https://gitmem.ai/docs/tools/analyze): Session analytics and insights engine.

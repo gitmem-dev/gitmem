@@ -109,6 +109,61 @@ if [ "$GITMEM_DETECTED" = "false" ]; then
 fi
 
 # ============================================================================
+# MCP Server Readiness Gate
+# ============================================================================
+#
+# Problem: MCP servers start asynchronously when Claude Code launches.
+# If the user types fast, their first message is processed before gitmem's
+# MCP server finishes connecting. This hook acts as a gate — by waiting here,
+# we force Claude Code to delay processing the first user message until
+# the gitmem server is likely ready.
+#
+# Strategy: Poll for the gitmem node process, then wait a buffer for
+# MCP handshake completion. Total budget: ~8s (within 10s hook timeout).
+
+if [ "$GITMEM_DETECTED" = "true" ]; then
+    GATE_START=$(date +%s%N 2>/dev/null || date +%s)
+    MAX_WAIT_SECS=7
+    POLL_INTERVAL=0.3
+    HANDSHAKE_BUFFER=0.5
+    SERVER_FOUND=false
+
+    echo "[$(date)] MCP readiness gate: waiting up to ${MAX_WAIT_SECS}s for gitmem server process..." >> "$PLUGIN_LOG"
+
+    # Build list of patterns to match the gitmem server process
+    # Covers: direct node invocation, npx, and symlinked binaries
+    GITMEM_PATTERNS=(
+        "gitmem/dist/index.js"
+        "gitmem-mcp"
+    )
+
+    # Poll every 0.3s. Max iterations = MAX_WAIT_SECS / 0.3 ≈ 23
+    MAX_POLLS=$(( MAX_WAIT_SECS * 10 / 3 ))
+    POLL=0
+    while [ "$POLL" -lt "$MAX_POLLS" ]; do
+        for PATTERN in "${GITMEM_PATTERNS[@]}"; do
+            if pgrep -f "$PATTERN" > /dev/null 2>&1; then
+                SERVER_FOUND=true
+                WAIT_SECS=$(( POLL * 3 / 10 ))
+                echo "[$(date)] MCP readiness gate: gitmem process found (pattern: $PATTERN) after ~${WAIT_SECS}.$(( POLL * 3 % 10 ))s" >> "$PLUGIN_LOG"
+                # Buffer for MCP protocol handshake to complete
+                sleep "$HANDSHAKE_BUFFER"
+                break 2
+            fi
+        done
+        sleep "$POLL_INTERVAL"
+        POLL=$((POLL + 1))
+    done
+
+    if [ "$SERVER_FOUND" = "false" ]; then
+        echo "[$(date)] MCP readiness gate: gitmem process NOT found after ${MAX_WAIT_SECS}s — proceeding anyway (config detected, server may use different process name)" >> "$PLUGIN_LOG"
+    fi
+
+    GATE_END=$(date +%s%N 2>/dev/null || date +%s)
+    echo "[$(date)] MCP readiness gate completed" >> "$PLUGIN_LOG"
+fi
+
+# ============================================================================
 # Create session state directory
 # ============================================================================
 

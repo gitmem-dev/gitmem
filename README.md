@@ -1,103 +1,93 @@
-# GitMem
+<p align="center">
+  <img src="assets/banner.svg" alt="GitMem — Institutional memory for AI coding agents" width="700" />
+</p>
 
-Institutional memory for AI coding agents. Memory that compounds.
+<p align="center">
+  <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/v/gitmem-mcp?style=flat-square&color=38bdf8&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/dm/gitmem-mcp?style=flat-square&color=818cf8&label=downloads" alt="npm downloads" /></a>
+  <a href="https://github.com/nTEG-dev/gitmem/blob/main/LICENSE"><img src="https://img.shields.io/github/license/nTEG-dev/gitmem?style=flat-square&color=38bdf8" alt="MIT License" /></a>
+  <a href="https://github.com/nTEG-dev/gitmem/actions"><img src="https://img.shields.io/github/actions/workflow/status/nTEG-dev/gitmem/deploy-docs.yml?style=flat-square&color=22c55e&label=build" alt="Build" /></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D22-38bdf8?style=flat-square" alt="Node.js >= 22" />
+</p>
 
-GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent persistent memory across sessions. It remembers mistakes (scars), successes (wins), and architectural decisions — so your agent learns from experience instead of starting from scratch every time.
+<p align="center">
+  <a href="https://gitmem.dev/docs"><strong>Documentation</strong></a> &middot;
+  <a href="https://www.npmjs.com/package/gitmem-mcp"><strong>npm</strong></a> &middot;
+  <a href="https://gitmem.dev/docs/getting-started"><strong>Getting Started</strong></a> &middot;
+  <a href="https://gitmem.dev/docs/tools"><strong>Tool Reference</strong></a>
+</p>
 
-**[Documentation](https://gitmem.dev)** · **[npm](https://www.npmjs.com/package/gitmem-mcp)** · **[GitHub](https://github.com/nTEG-dev/gitmem)**
+---
 
-## How It Works
+GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent **persistent memory across sessions**. It remembers mistakes (scars), successes (wins), and decisions — so your agent learns from experience instead of starting from scratch every time.
 
-1. **Before each task**, the agent calls `recall` with a plan — GitMem surfaces relevant warnings from past sessions
-2. **When mistakes happen**, the agent captures them as "scars" — failures with context and counter-arguments
-3. **When things go well**, the agent captures wins and patterns to replicate
-4. **At session close**, the agent reflects on what worked, what broke, and what to do differently
-
-Over time, your agent builds institutional memory that prevents repeated mistakes and reinforces good patterns.
-
-### Two Tiers
-
-| | Free Tier | Pro Tier |
-|---|-----------|----------|
-| **Storage** | Local `.gitmem/` directory | Supabase (PostgreSQL + pgvector) |
-| **Search** | Keyword matching | Semantic vector search |
-| **Setup** | Zero config | Supabase project + embedding API key |
-| **Best for** | Solo projects | Teams, cross-project memory |
+Works with **Claude Code**, **Claude Desktop**, **Cursor**, and any MCP-compatible client.
 
 ## Quick Start
 
-### One command setup
-
 ```bash
 npx gitmem init
 ```
 
-The interactive wizard detects your existing config and sets up everything:
+One command. The wizard sets up everything:
+- `.gitmem/` directory with 12 starter scars
+- `.mcp.json` with gitmem server entry
+- `CLAUDE.md` with memory protocol instructions
+- `.claude/settings.json` with tool permissions
+- Lifecycle hooks for automatic session management
+- `.gitignore` updated
 
-1. Creates `.gitmem/` with 12 starter scars
-2. Adds gitmem to `.mcp.json`
-3. Adds memory instructions to `CLAUDE.md`
-4. Configures tool permissions in `.claude/settings.json`
-5. Installs lifecycle hooks
-6. Updates `.gitignore`
-
-Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destroying your existing config.
-
-```bash
-# Non-interactive (accept all defaults)
-npx gitmem init --yes
-
-# Preview what would change
-npx gitmem init --dry-run
-
-# Set project name
-npx gitmem init --project my-app
-```
-
-Start Claude Code — memory is active.
-
-### Pro Tier (with Supabase)
-
-For semantic search and cloud persistence:
-
-1. Create a free Supabase project at [database.new](https://database.new)
-2. `npx gitmem setup` — copy the SQL output into Supabase SQL Editor
-3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as environment variables
-4. `npx gitmem init` — auto-detects pro tier from env vars
-
-### Uninstall
+Already have existing config? The wizard merges without destroying anything. Re-running is safe.
 
 ```bash
-npx gitmem uninstall
+npx gitmem init --yes       # Non-interactive
+npx gitmem init --dry-run   # Preview changes
 ```
 
-Cleanly removes gitmem from all config files. Your memory data (`.gitmem/`) is preserved by default.
+## How It Works
 
-```bash
-# Also delete .gitmem/ data
-npx gitmem uninstall --all
+```
+recall  -->  work  -->  learn  -->  close  -->  recall  -->  ...
 ```
 
-## Installation
+1. **Recall** — Before acting, the agent checks memory for relevant lessons from past sessions
+2. **Work** — The agent does the task, applying past lessons automatically
+3. **Learn** — Mistakes become **scars**, successes become **wins**, strategies become **patterns**
+4. **Close** — Session reflection persists context for next time
 
-### npx (no install required)
+Every scar includes **counter-arguments** — reasons why someone might reasonably ignore it. This prevents memory from becoming a pile of rigid rules.
 
-```bash
-npx gitmem init
-```
+## What Gets Remembered
 
-### Global install
+| Type | Purpose | Example |
+|------|---------|---------|
+| **Scars** | Mistakes to avoid | "Always validate UUID format before DB lookup" |
+| **Wins** | Approaches that worked | "Parallel agent spawning cut review time by 60%" |
+| **Patterns** | Reusable strategies | "5-tier test pyramid for MCP servers" |
+| **Decisions** | Architectural choices with rationale | "Chose JWT over session cookies for stateless auth" |
+| **Threads** | Unfinished work that carries across sessions | "Rate limiting still needs implementation" |
 
-```bash
-npm install -g gitmem-mcp
-gitmem init
-```
+## Key Features
 
-### Manual MCP Configuration
+- **Automatic Recall** — Scars surface before the agent takes similar actions
+- **Session Continuity** — Context, threads, and rapport carry across sessions
+- **Closing Ceremony** — Structured reflection captures what broke, what worked, and what to do differently
+- **23 MCP Tools** — Full toolkit for memory management, search, threads, and multi-agent coordination
+- **Zero Config** — `npx gitmem init` and you're running
+- **Non-Destructive** — Merges with your existing `.mcp.json`, `CLAUDE.md`, and hooks
 
-If you prefer to configure manually instead of using `npx gitmem init`:
+## Supported Clients
 
-**Free Tier:**
+| Client | Setup |
+|--------|-------|
+| **Claude Code** | `npx gitmem init` (auto-detected) |
+| **Claude Desktop** | `npx gitmem init` or add to `claude_desktop_config.json` |
+| **Cursor** | `npx gitmem init` or add to `.cursor/mcp.json` |
+| **Any MCP client** | Add `npx -y gitmem-mcp` as an MCP server |
+
+<details>
+<summary><strong>Manual MCP configuration</strong></summary>
+
 ```json
 {
   "mcpServers": {
@@ -109,128 +99,24 @@ If you prefer to configure manually instead of using `npx gitmem init`:
 }
 ```
 
-**Pro Tier:**
-```json
-{
-  "mcpServers": {
-    "gitmem": {
-      "command": "npx",
-      "args": ["-y", "gitmem-mcp"],
-      "env": {
-        "SUPABASE_URL": "https://your-project.supabase.co",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJ...",
-        "OPENAI_API_KEY": "sk-..."
-      }
-    }
-  }
-}
-```
-
-Alternative embedding providers (set instead of `OPENAI_API_KEY`):
-- `OPENROUTER_API_KEY` — OpenRouter (multiple models)
-- `OLLAMA_URL` — Local Ollama instance (no API key needed)
-
-### Verify
-
-```bash
-# Claude Code
-claude mcp list
-# Should show: gitmem: connected
-```
+</details>
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `gitmem init` | Interactive setup wizard — detects, prompts, merges |
-| `gitmem init --yes` | Non-interactive setup (accept all defaults) |
-| `gitmem init --dry-run` | Preview what would be configured |
-| `gitmem uninstall` | Clean removal of gitmem from project |
-| `gitmem uninstall --all` | Also delete `.gitmem/` data directory |
-| `gitmem setup` | Output SQL for Supabase schema setup (Pro tier) |
-| `gitmem configure` | Generate MCP config for your editor |
-| `gitmem check` | Run diagnostic health check |
-| `gitmem check --full` | Full diagnostic with benchmarks |
-| `gitmem install-hooks` | Install Claude Code hooks (standalone) |
-| `gitmem uninstall-hooks` | Remove Claude Code hooks (standalone) |
-| `gitmem server` | Start MCP server (default when no command given) |
-| `gitmem help` | Show help |
+| `npx gitmem init` | Interactive setup wizard |
+| `npx gitmem init --yes` | Non-interactive setup |
+| `npx gitmem init --dry-run` | Preview changes |
+| `npx gitmem uninstall` | Clean removal (preserves `.gitmem/` data) |
+| `npx gitmem uninstall --all` | Full removal including data |
+| `npx gitmem check` | Diagnostic health check |
 
-## MCP Tools
+## Pro Tier — Coming Soon
 
-GitMem exposes tools via the Model Context Protocol. Your AI agent calls these automatically based on the instructions in `CLAUDE.md`.
+The free tier gives you everything you need for solo projects. **Pro** will add cloud storage (Supabase), semantic vector search, cross-machine sync, team shared memory, and session transcripts.
 
-### Core Tools
-
-| Tool | Purpose |
-|------|---------|
-| `recall` | Check memory for relevant warnings before taking action |
-| `session_start` | Initialize session, load context from last session |
-| `session_close` | Persist session with reflection |
-| `create_learning` | Capture scars (failures), wins (successes), or patterns |
-| `create_decision` | Log architectural/operational decisions |
-| `record_scar_usage` | Track which scars were applied |
-| `search` | Search institutional memory (exploration, no side effects) |
-| `log` | List recent learnings chronologically |
-
-### Thread Tools
-
-Threads are persistent work items that carry across sessions.
-
-| Tool | Purpose |
-|------|---------|
-| `list_threads` | List open threads |
-| `create_thread` | Create a new thread |
-| `resolve_thread` | Mark a thread as resolved |
-
-### Pro Tier Tools
-
-Available when Supabase is configured:
-
-| Tool | Purpose |
-|------|---------|
-| `analyze` | Session analytics and pattern detection |
-| `prepare_context` | Multi-agent context preparation |
-| `absorb_observations` | Multi-agent observation absorption |
-| Cache tools | `cache_status`, `cache_flush`, `cache_health` |
-
-## Learning Types
-
-GitMem tracks four types of institutional knowledge:
-
-- **Scars** — Failures to avoid. Include severity and counter-arguments (why someone might think the mistake is OK). These are the core of GitMem.
-- **Wins** — Successes to replicate. Capture what worked and why.
-- **Patterns** — Neutral observations and recurring approaches.
-- **Anti-patterns** — Known bad approaches to flag.
-
-All types are searched together when `recall` is called, giving the agent comprehensive context.
-
-## Lifecycle Hooks
-
-GitMem includes Claude Code hooks that automate memory protocols. These are installed automatically by `npx gitmem init`.
-
-- **SessionStart** — Automatically calls `session_start` when a session begins
-- **PreToolUse** — Reminds the agent to call `recall` before consequential actions
-- **PostToolUse** — Tracks scar acknowledgment
-- **Stop** — Reminds the agent to close sessions properly
-
-To install hooks standalone (without the full wizard):
-```bash
-npx gitmem install-hooks
-```
-
-## Agent Detection
-
-GitMem automatically detects the AI agent identity based on environment:
-
-| Environment | Identity |
-|-------------|----------|
-| Claude Code in Docker | CLI |
-| Claude Desktop app | DAC |
-| Claude.ai with filesystem | Brain_Local |
-| Claude.ai without filesystem | Brain_Cloud |
-
-Override with `agent_identity` parameter in `session_start`.
+[Join the mailing list](https://gitmem.dev) to get notified when Pro launches.
 
 ## Development
 
@@ -238,12 +124,11 @@ Override with `agent_identity` parameter in `session_start`.
 git clone https://github.com/nTEG-dev/gitmem.git
 cd gitmem
 npm install
-npm run build    # Compile TypeScript + run unit tests
-npm run dev      # Watch mode
-npm test         # Run unit tests
+npm run build
+npm test
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing tiers, and PR guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full development setup.
 
 ## License
 

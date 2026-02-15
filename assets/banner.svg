@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="300">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#818cf8" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="300" rx="12" fill="url(#bg)"/>
+
+  <!-- Subtle glow -->
+  <ellipse cx="450" cy="150" rx="350" ry="120" fill="url(#glow)"/>
+
+  <!-- Memory icon (brain/circuit) -->
+  <g transform="translate(260, 70)">
+    <!-- Outer ring -->
+    <circle cx="40" cy="40" r="36" stroke="url(#accent)" stroke-width="2.5" fill="none" opacity="0.8"/>
+    <!-- Inner nodes -->
+    <circle cx="40" cy="25" r="4" fill="#38bdf8"/>
+    <circle cx="25" cy="45" r="4" fill="#818cf8"/>
+    <circle cx="55" cy="45" r="4" fill="#38bdf8"/>
+    <circle cx="40" cy="55" r="3" fill="#818cf8" opacity="0.7"/>
+    <circle cx="40" cy="40" r="5" fill="#38bdf8"/>
+    <!-- Connections -->
+    <line x1="40" y1="25" x2="40" y2="40" stroke="#38bdf8" stroke-width="1.5" opacity="0.6"/>
+    <line x1="25" y1="45" x2="40" y2="40" stroke="#818cf8" stroke-width="1.5" opacity="0.6"/>
+    <line x1="55" y1="45" x2="40" y2="40" stroke="#38bdf8" stroke-width="1.5" opacity="0.6"/>
+    <line x1="40" y1="55" x2="40" y2="40" stroke="#818cf8" stroke-width="1.5" opacity="0.4"/>
+  </g>
+
+  <!-- Title -->
+  <text x="340" y="120" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="56" font-weight="700" fill="white" letter-spacing="-1">GitMem</text>
+
+  <!-- Tagline -->
+  <text x="260" y="170" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#94a3b8" letter-spacing="0.5">Institutional memory for AI coding agents</text>
+
+  <!-- Subtitle -->
+  <text x="260" y="210" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="15" fill="#64748b">Memory that compounds.</text>
+
+  <!-- Bottom accent line -->
+  <rect x="260" y="235" width="380" height="2" rx="1" fill="url(#accent)" opacity="0.4"/>
+</svg>

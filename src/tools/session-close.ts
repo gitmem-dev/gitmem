@@ -47,20 +47,24 @@ import type {
 } from "../types/index.js";
 
 /**
- * Count scars applied from closing_reflection.scars_applied.
+ * Normalize scars_applied to string[].
  * Handles both string (prose answer from agents) and string[] (schema-correct array).
- * When agents write Q6 as prose, we count comma/semicolon-separated items or 1 if no delimiters.
+ * When agents write Q6 as prose, splits on common delimiters.
+ */
+function normalizeScarsApplied(scarsApplied: string | string[] | undefined | null): string[] {
+  if (!scarsApplied) return [];
+  if (Array.isArray(scarsApplied)) return scarsApplied;
+  const trimmed = scarsApplied.trim();
+  if (!trimmed) return [];
+  const parts = trimmed.split(/(?:\.\s+|\;\s*|\s+—\s+)/).filter(p => p.trim().length > 0);
+  return parts.length > 0 ? parts : [trimmed];
+}
+
+/**
+ * Count scars applied from closing_reflection.scars_applied.
  */
 function countScarsApplied(scarsApplied: string | string[] | undefined | null): number {
-  if (!scarsApplied) return 0;
-  if (Array.isArray(scarsApplied)) return scarsApplied.length;
-  // It's a string — agents write prose like "Scar A, Scar B, also applied Scar C"
-  // Split on common delimiters: periods followed by space, semicolons, or " — " (em-dash separator)
-  const trimmed = scarsApplied.trim();
-  if (!trimmed) return 0;
-  // Count sentences/items separated by ". " or "; " or " — "
-  const parts = trimmed.split(/(?:\.\s+|\;\s*|\s+—\s+)/).filter(p => p.trim().length > 0);
-  return Math.max(1, parts.length);
+  return normalizeScarsApplied(scarsApplied).length;
 }
 
 /**
@@ -415,6 +419,304 @@ function isValidSessionId(id: string): boolean {
 }
 
 /**
+ * Build the session data record from params and existing session state.
+ * Handles retroactive vs normal mode, reflection, decisions, threads,
+ * observations, children, linear_issue, and title updates.
+ */
+function buildSessionRecord(
+  params: SessionCloseParams,
+  existingSession: Record<string, unknown> | null,
+  isRetroactive: boolean,
+  agentIdentity: string,
+  closeCompliance: CloseCompliance,
+  sessionId: string,
+): Record<string, unknown> {
+  let sessionData: Record<string, unknown>;
+
+  if (isRetroactive) {
+    const now = new Date().toISOString();
+    sessionData = {
+      id: sessionId,
+      agent: agentIdentity,
+      project: "default",
+      session_title: "Retroactive Session",
+      session_date: now,
+      created_at: now,
+      close_compliance: closeCompliance,
+    };
+  } else {
+    // Remove embedding from existing to avoid re-embedding unchanged text
+    const { embedding: _embedding, ...existingWithoutEmbedding } = existingSession!;
+    sessionData = {
+      ...existingWithoutEmbedding,
+      close_compliance: closeCompliance,
+    };
+  }
+
+  // Add closing reflection if provided
+  if (params.closing_reflection) {
+    const reflection: Record<string, unknown> = { ...params.closing_reflection };
+    if (params.human_corrections) {
+      reflection.human_additions = params.human_corrections;
+    }
+    sessionData.closing_reflection = reflection;
+
+    // OD-666: Distill Q8+Q9 into rapport_summary for cross-agent surfacing
+    const q8 = params.closing_reflection.collaborative_dynamic;
+    const q9 = params.closing_reflection.rapport_notes;
+    if (q8 || q9) {
+      const parts = [q8, q9].filter(Boolean);
+      sessionData.rapport_summary = parts.join(" | ");
+    }
+  }
+
+  // Add decisions if provided
+  if (params.decisions && params.decisions.length > 0) {
+    sessionData.decisions = params.decisions.map((d) => d.title);
+  }
+
+  // OD-thread-lifecycle: Normalize and merge open threads
+  const sessionThreads = getThreads();
+  if (params.open_threads && params.open_threads.length > 0) {
+    const normalized = normalizeThreads(params.open_threads, params.session_id);
+    const merged = sessionThreads.length > 0
+      ? deduplicateThreadList(mergeThreadStates(normalized, sessionThreads))
+      : deduplicateThreadList(normalized);
+    sessionData.open_threads = merged;
+  } else if (sessionThreads.length > 0) {
+    sessionData.open_threads = sessionThreads;
+  }
+
+  // OD-534: If project_state provided, prepend it to open_threads as a ThreadObject
+  if (params.project_state) {
+    const projectStateText = `PROJECT STATE: ${params.project_state}`;
+    const existing = (sessionData.open_threads || []) as ThreadObject[];
+    const filtered = existing.filter(t => {
+      const text = typeof t === "string" ? t : t.text;
+      return !text.startsWith("PROJECT STATE:");
+    });
+    sessionData.open_threads = [migrateStringThread(projectStateText, params.session_id), ...filtered];
+  }
+
+  // v2 Phase 2: Persist observations and children from multi-agent work
+  const observations = getObservations();
+  if (observations.length > 0) {
+    sessionData.task_observations = observations;
+  }
+  const sessionChildren = getChildren();
+  if (sessionChildren.length > 0) {
+    sessionData.children = sessionChildren;
+  }
+
+  // Add linear issue if provided
+  if (params.linear_issue) {
+    sessionData.linear_issue = params.linear_issue;
+  }
+
+  // Update session title if we have meaningful content
+  if (params.closing_reflection?.what_worked || params.decisions?.length) {
+    const titleParts: string[] = [];
+    if (params.linear_issue) {
+      titleParts.push(params.linear_issue);
+    }
+    if (params.decisions?.length) {
+      titleParts.push(params.decisions[0].title);
+    } else if (params.closing_reflection?.what_worked) {
+      titleParts.push(params.closing_reflection.what_worked.slice(0, 50));
+    }
+    if (
+      titleParts.length > 0 &&
+      (sessionData.session_title === "Interactive Session" ||
+       sessionData.session_title === "Retroactive Session")
+    ) {
+      sessionData.session_title = titleParts.join(" - ");
+    }
+  }
+
+  return sessionData;
+}
+
+/**
+ * Capture and save the conversation transcript for a session.
+ * Returns transcript status and optionally the Claude Code session ID.
+ */
+async function captureSessionTranscript(
+  sessionId: string,
+  params: SessionCloseParams,
+  existingSession: Record<string, unknown> | null,
+  isRetroactive: boolean,
+): Promise<{ status?: TranscriptStatus; claudeSessionId?: string }> {
+  try {
+    let transcriptFilePath: string | null = null;
+
+    // Option 1: Explicit transcript path provided
+    if (params.transcript_path) {
+      if (fs.existsSync(params.transcript_path)) {
+        transcriptFilePath = params.transcript_path;
+        console.error(`[session_close] Using explicit transcript path: ${transcriptFilePath}`);
+      } else {
+        console.warn(`[session_close] Explicit transcript path does not exist: ${params.transcript_path}`);
+      }
+    }
+
+    // Option 2: Auto-detect by searching for most recent transcript
+    if (!transcriptFilePath) {
+      const homeDir = os.homedir();
+      const projectsDir = path.join(homeDir, ".claude", "projects");
+      const cwd = process.cwd();
+      const projectDirName = path.basename(cwd);
+      transcriptFilePath = findMostRecentTranscript(projectsDir, projectDirName, cwd);
+      if (transcriptFilePath) {
+        console.error(`[session_close] Auto-detected transcript: ${transcriptFilePath}`);
+      } else {
+        console.error(`[session_close] No transcript file found in ${projectsDir}`);
+      }
+    }
+
+    if (!transcriptFilePath) return {};
+
+    const transcriptContent = fs.readFileSync(transcriptFilePath, "utf-8");
+
+    // Extract Claude Code session ID for traceability (sync, fast)
+    const claudeSessionId = extractClaudeSessionId(transcriptContent, transcriptFilePath) || undefined;
+    if (claudeSessionId) {
+      console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
+    }
+
+    // Deterministic transcript save — await to guarantee persistence
+    const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
+    const saveResult = await saveTranscript({
+      session_id: sessionId,
+      transcript: transcriptContent,
+      format: "json",
+      project: transcriptProject,
+    });
+
+    if (saveResult.success && saveResult.transcript_path) {
+      const status: TranscriptStatus = {
+        saved: true,
+        path: saveResult.transcript_path,
+        size_kb: saveResult.size_kb,
+        patch_warning: saveResult.patch_warning,
+      };
+      console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
+
+      // OD-540: Process transcript for semantic search (fire-and-forget — chunking is expensive)
+      processTranscript(sessionId, transcriptContent, transcriptProject)
+        .then(result => {
+          if (result.success) {
+            console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
+          } else {
+            console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
+          }
+        }).catch(err => {
+          console.error("[session_close] Transcript chunking error:", err);
+        });
+
+      return { status, claudeSessionId };
+    } else {
+      console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
+      return {
+        status: { saved: false, error: saveResult.error || "Unknown save error" },
+        claudeSessionId,
+      };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[session_close] Exception during transcript capture:", msg);
+    return {
+      status: { saved: false, error: `Exception during transcript capture: ${msg}` },
+    };
+  }
+}
+
+/**
+ * Auto-bridge Q6 answers (closing_reflection.scars_applied) to scar_usage records.
+ * Matches Q6 prose answers against surfaced scars from the session.
+ * Returns empty array if no matches or no surfaced scars available.
+ */
+function bridgeScarsToUsageRecords(
+  normalizedScarsApplied: string[],
+  sessionId: string,
+  agentIdentity: string,
+): ScarUsageEntry[] {
+  try {
+    // Load surfaced scars: prefer in-memory, fall back to per-session dir
+    let surfacedScars: SurfacedScar[] = getSurfacedScars();
+
+    if (surfacedScars.length === 0 && sessionId) {
+      try {
+        const sessionFilePath = getSessionPath(sessionId, "session.json");
+        if (fs.existsSync(sessionFilePath)) {
+          const fileData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+          if (fileData.surfaced_scars && Array.isArray(fileData.surfaced_scars)) {
+            surfacedScars = fileData.surfaced_scars;
+            console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from per-session file`);
+          }
+        }
+      } catch { /* per-session file read failed */ }
+    }
+
+    if (surfacedScars.length === 0) {
+      console.error("[session_close] No surfaced scars available for auto-bridge");
+      return [];
+    }
+
+    const autoBridgedScars: ScarUsageEntry[] = [];
+    const matchedScarIds = new Set<string>();
+
+    // For each Q6 answer, try to match against surfaced scars
+    for (const scarApplied of normalizedScarsApplied) {
+      const lowerApplied = scarApplied.toLowerCase();
+
+      const match = surfacedScars.find((s) => {
+        if (matchedScarIds.has(s.scar_id)) return false;
+        return (
+          s.scar_id === scarApplied ||
+          s.scar_title.toLowerCase().includes(lowerApplied) ||
+          lowerApplied.includes(s.scar_title.toLowerCase())
+        );
+      });
+
+      if (match) {
+        matchedScarIds.add(match.scar_id);
+        autoBridgedScars.push({
+          scar_identifier: match.scar_id,
+          session_id: sessionId,
+          agent: agentIdentity,
+          surfaced_at: match.surfaced_at,
+          reference_type: "acknowledged",
+          reference_context: `Auto-bridged from Q6 answer: "${scarApplied}"`,
+        });
+      }
+    }
+
+    // For surfaced scars NOT mentioned in Q6, record as "none" (surfaced but ignored)
+    for (const scar of surfacedScars) {
+      if (!matchedScarIds.has(scar.scar_id)) {
+        autoBridgedScars.push({
+          scar_identifier: scar.scar_id,
+          session_id: sessionId,
+          agent: agentIdentity,
+          surfaced_at: scar.surfaced_at,
+          reference_type: "none",
+          reference_context: `Surfaced during ${scar.source} but not mentioned in closing reflection`,
+        });
+      }
+    }
+
+    if (autoBridgedScars.length > 0) {
+      console.error(`[session_close] Auto-bridged ${autoBridgedScars.length} scar usage records (${matchedScarIds.size} acknowledged, ${autoBridgedScars.length - matchedScarIds.size} unmentioned)`);
+    }
+
+    return autoBridgedScars;
+  } catch (bridgeError) {
+    console.error("[session_close] Auto-bridge failed (non-fatal):", bridgeError);
+    return [];
+  }
+}
+
+/**
  * Execute session_close tool
  */
 export async function sessionClose(
@@ -466,14 +768,16 @@ export async function sessionClose(
   // merge it with inline params (inline params take precedence).
   // This keeps the visible MCP tool call small: just session_id + close_type.
   const payloadPath = getGitmemPath("closing-payload.json");
+  let payloadConsumed = false;
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
       // File provides defaults; inline params override
       params = { ...filePayload, ...params };
+      payloadConsumed = true;
       console.error(`[session_close] Loaded closing payload from ${payloadPath}`);
-      // Clean up payload file
-      try { fs.unlinkSync(payloadPath); } catch { /* ignore */ }
+      // Payload file is cleaned up AFTER successful close (see end of function).
+      // If the tool crashes, the payload survives for retry.
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
@@ -684,83 +988,11 @@ export async function sessionClose(
   }
 
   // 5. Build session data (merge with existing or create from scratch)
-  let sessionData: Record<string, unknown>;
+  const sessionData = buildSessionRecord(
+    params, existingSession, isRetroactive, agentIdentity, closeCompliance, sessionId
+  );
 
-  if (isRetroactive) {
-    // Retroactive mode: create minimal session from scratch
-    const now = new Date().toISOString();
-    sessionData = {
-      id: sessionId,
-      agent: agentIdentity,
-      project: "default", // Default for retroactive
-      session_title: "Retroactive Session", // Will be updated below if we have content
-      session_date: now,
-      created_at: now,
-      close_compliance: closeCompliance,
-    };
-  } else {
-    // Normal mode: merge with existing session
-    // Remove embedding from existing to avoid re-embedding unchanged text
-    const { embedding: _embedding, ...existingWithoutEmbedding } = existingSession!;
-    sessionData = {
-      ...existingWithoutEmbedding,
-      close_compliance: closeCompliance,
-    };
-  }
-
-  // Add closing reflection if provided
-  if (params.closing_reflection) {
-    const reflection: Record<string, unknown> = { ...params.closing_reflection };
-
-    // Add human corrections to reflection if provided
-    if (params.human_corrections) {
-      reflection.human_additions = params.human_corrections;
-    }
-    sessionData.closing_reflection = reflection;
-
-    // OD-666: Distill Q8+Q9 into rapport_summary for cross-agent surfacing
-    const q8 = params.closing_reflection.collaborative_dynamic;
-    const q9 = params.closing_reflection.rapport_notes;
-    if (q8 || q9) {
-      const parts = [q8, q9].filter(Boolean);
-      sessionData.rapport_summary = parts.join(" | ");
-    }
-  }
-
-  // Add decisions if provided
-  if (params.decisions && params.decisions.length > 0) {
-    sessionData.decisions = params.decisions.map((d) => d.title);
-  }
-
-  // OD-thread-lifecycle: Normalize and merge open threads
-  const sessionThreads = getThreads(); // Mid-session thread state (may have resolutions)
-  if (params.open_threads && params.open_threads.length > 0) {
-    const normalized = normalizeThreads(params.open_threads, params.session_id);
-    // Merge incoming with mid-session state (preserves resolutions from resolve_thread calls)
-    const merged = sessionThreads.length > 0
-      ? deduplicateThreadList(mergeThreadStates(normalized, sessionThreads))
-      : deduplicateThreadList(normalized);
-    sessionData.open_threads = merged;
-  } else if (sessionThreads.length > 0) {
-    // No new threads from close payload, but we have mid-session state (e.g., resolutions)
-    sessionData.open_threads = sessionThreads;
-  }
-
-  // OD-534: If project_state provided, prepend it to open_threads as a ThreadObject
-  if (params.project_state) {
-    const projectStateText = `PROJECT STATE: ${params.project_state}`;
-    const existing = (sessionData.open_threads || []) as ThreadObject[];
-    // Replace existing PROJECT STATE if present, otherwise prepend
-    const filtered = existing.filter(t => {
-      const text = typeof t === "string" ? t : t.text;
-      return !text.startsWith("PROJECT STATE:");
-    });
-    sessionData.open_threads = [migrateStringThread(projectStateText, params.session_id), ...filtered];
-  }
-
-  // OD-624: Sync threads to Supabase (source of truth)
-  // New threads get created, resolved threads get updated, existing threads get touched.
-  // This runs async — does not block session close on failure.
+  // OD-624: Sync threads to Supabase (fire-and-forget, non-blocking)
   const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
   if (closeThreads.length > 0) {
     const closeProject = isRetroactive ? "default" : (existingSession?.project as string | undefined) || "default";
@@ -769,8 +1001,7 @@ export async function sessionClose(
     });
   }
 
-  // Prune threads.json: only keep open threads to prevent accumulation of resolved/archived
-  // threads that inflate session_start's thread count on the next session.
+  // Prune threads.json: only keep open threads
   try {
     const openThreadsOnly = closeThreads.filter(t => t.status === "open" || !t.status);
     saveThreadsFile(openThreadsOnly);
@@ -779,216 +1010,28 @@ export async function sessionClose(
     console.error("[session_close] Failed to prune threads.json (non-fatal):", err);
   }
 
-  // v2 Phase 2: Persist observations and children from multi-agent work
-  const observations = getObservations();
-  if (observations.length > 0) {
-    sessionData.task_observations = observations;
-  }
-  const sessionChildren = getChildren();
-  if (sessionChildren.length > 0) {
-    sessionData.children = sessionChildren;
-  }
-
-  // Add linear issue if provided
-  if (params.linear_issue) {
-    sessionData.linear_issue = params.linear_issue;
-  }
-
-  // Update session title if we have meaningful content
-  if (params.closing_reflection?.what_worked || params.decisions?.length) {
-    const titleParts: string[] = [];
-    if (params.linear_issue) {
-      titleParts.push(params.linear_issue);
-    }
-    if (params.decisions?.length) {
-      titleParts.push(params.decisions[0].title);
-    } else if (params.closing_reflection?.what_worked) {
-      // Use first 50 chars of what_worked as title hint
-      titleParts.push(params.closing_reflection.what_worked.slice(0, 50));
-    }
-    if (
-      titleParts.length > 0 &&
-      (sessionData.session_title === "Interactive Session" ||
-       sessionData.session_title === "Retroactive Session")
-    ) {
-      sessionData.session_title = titleParts.join(" - ");
-    }
-  }
-
   // OD-538: Capture transcript if enabled (default true for CLI/DAC)
   let transcriptStatus: TranscriptStatus | undefined;
   const shouldCaptureTranscript = params.capture_transcript !== false &&
     (agentIdentity === "CLI" || agentIdentity === "DAC");
 
   if (shouldCaptureTranscript) {
-    try {
-      let transcriptFilePath: string | null = null;
-
-      // Option 1: Explicit transcript path provided (overrides auto-detection)
-      if (params.transcript_path) {
-        if (fs.existsSync(params.transcript_path)) {
-          transcriptFilePath = params.transcript_path;
-          console.error(`[session_close] Using explicit transcript path: ${transcriptFilePath}`);
-        } else {
-          console.warn(`[session_close] Explicit transcript path does not exist: ${params.transcript_path}`);
-        }
-      }
-
-      // Option 2: Auto-detect by searching for most recent transcript
-      if (!transcriptFilePath) {
-        const homeDir = os.homedir();
-        const projectsDir = path.join(homeDir, ".claude", "projects");
-        const cwd = process.cwd();
-        const projectDirName = path.basename(cwd);
-
-        transcriptFilePath = findMostRecentTranscript(projectsDir, projectDirName, cwd);
-
-        if (transcriptFilePath) {
-          console.error(`[session_close] Auto-detected transcript: ${transcriptFilePath}`);
-        } else {
-          console.error(`[session_close] No transcript file found in ${projectsDir}`);
-        }
-      }
-
-      // If we found a transcript, capture it
-      if (transcriptFilePath) {
-        const transcriptContent = fs.readFileSync(transcriptFilePath, "utf-8");
-
-        // Extract Claude Code session ID for traceability (sync, fast)
-        const claudeSessionId = extractClaudeSessionId(transcriptContent, transcriptFilePath);
-        if (claudeSessionId) {
-          sessionData.claude_code_session_id = claudeSessionId;
-          console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
-        }
-
-        // Deterministic transcript save — await to guarantee persistence
-        // saveTranscript does its own directUpsert to set transcript_path on the session
-        const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
-        const saveResult = await saveTranscript({
-          session_id: sessionId,
-          transcript: transcriptContent,
-          format: "json",
-          project: transcriptProject,
-        });
-
-        if (saveResult.success && saveResult.transcript_path) {
-          transcriptStatus = {
-            saved: true,
-            path: saveResult.transcript_path,
-            size_kb: saveResult.size_kb,
-            patch_warning: saveResult.patch_warning,
-          };
-          console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
-
-          // OD-540: Process transcript for semantic search (fire-and-forget — chunking is expensive)
-          processTranscript(sessionId, transcriptContent, transcriptProject)
-            .then(result => {
-              if (result.success) {
-                console.error(`[session_close] Transcript chunking completed: ${result.chunksCreated} chunks created`);
-              } else {
-                console.warn(`[session_close] Transcript chunking failed: ${result.error}`);
-              }
-            }).catch(err => {
-              console.error("[session_close] Transcript chunking error:", err);
-            });
-        } else {
-          transcriptStatus = {
-            saved: false,
-            error: saveResult.error || "Unknown save error",
-          };
-          console.warn(`[session_close] Failed to save transcript: ${saveResult.error}`);
-        }
-      }
-    } catch (error) {
-      // Don't fail session close if transcript capture fails
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("[session_close] Exception during transcript capture:", msg);
-      transcriptStatus = {
-        saved: false,
-        error: `Exception during transcript capture: ${msg}`,
-      };
+    const transcriptResult = await captureSessionTranscript(sessionId, params, existingSession, isRetroactive);
+    transcriptStatus = transcriptResult.status;
+    if (transcriptResult.claudeSessionId) {
+      sessionData.claude_code_session_id = transcriptResult.claudeSessionId;
     }
   }
 
-  // OD-552: Auto-bridge Q6 answers (closing_reflection.scars_applied) to scar_usage records
-  // This is the core fix: CLI/DAC sessions answer Q6 with scar names but these never
-  // became structured scar_usage records. Now we match Q6 answers against surfaced scars.
+  // OD-552: Auto-bridge Q6 answers to scar_usage records
+  const normalizedScarsApplied = normalizeScarsApplied(params.closing_reflection?.scars_applied);
   if (
     (!params.scars_to_record || params.scars_to_record.length === 0) &&
-    params.closing_reflection?.scars_applied?.length
+    normalizedScarsApplied.length > 0
   ) {
-    try {
-      // Load surfaced scars: prefer in-memory, fall back to per-session dir, then legacy file
-      let surfacedScars: SurfacedScar[] = getSurfacedScars();
-
-      if (surfacedScars.length === 0 && params.session_id) {
-        // GIT-21: Try per-session directory first
-        try {
-          const sessionFilePath = getSessionPath(params.session_id, "session.json");
-          if (fs.existsSync(sessionFilePath)) {
-            const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-            if (sessionData.surfaced_scars && Array.isArray(sessionData.surfaced_scars)) {
-              surfacedScars = sessionData.surfaced_scars;
-              console.error(`[session_close] Loaded ${surfacedScars.length} surfaced scars from per-session file`);
-            }
-          }
-        } catch { /* per-session file read failed */ }
-      }
-
-      if (surfacedScars.length > 0) {
-        const autoBridgedScars: ScarUsageEntry[] = [];
-        const matchedScarIds = new Set<string>();
-
-        // For each Q6 answer, try to match against surfaced scars
-        for (const scarApplied of params.closing_reflection.scars_applied) {
-          const lowerApplied = scarApplied.toLowerCase();
-
-          // Match by UUID or title substring
-          const match = surfacedScars.find((s) => {
-            if (matchedScarIds.has(s.scar_id)) return false; // Don't double-match
-            return (
-              s.scar_id === scarApplied || // Exact UUID match
-              s.scar_title.toLowerCase().includes(lowerApplied) || // Title contains answer
-              lowerApplied.includes(s.scar_title.toLowerCase()) // Answer contains title
-            );
-          });
-
-          if (match) {
-            matchedScarIds.add(match.scar_id);
-            autoBridgedScars.push({
-              scar_identifier: match.scar_id,
-              session_id: sessionId,
-              agent: agentIdentity,
-              surfaced_at: match.surfaced_at,
-              reference_type: "acknowledged",
-              reference_context: `Auto-bridged from Q6 answer: "${scarApplied}"`,
-            });
-          }
-        }
-
-        // For surfaced scars NOT mentioned in Q6, record as "none" (surfaced but ignored)
-        for (const scar of surfacedScars) {
-          if (!matchedScarIds.has(scar.scar_id)) {
-            autoBridgedScars.push({
-              scar_identifier: scar.scar_id,
-              session_id: sessionId,
-              agent: agentIdentity,
-              surfaced_at: scar.surfaced_at,
-              reference_type: "none",
-              reference_context: `Surfaced during ${scar.source} but not mentioned in closing reflection`,
-            });
-          }
-        }
-
-        if (autoBridgedScars.length > 0) {
-          params = { ...params, scars_to_record: autoBridgedScars };
-          console.error(`[session_close] Auto-bridged ${autoBridgedScars.length} scar usage records (${matchedScarIds.size} acknowledged, ${autoBridgedScars.length - matchedScarIds.size} unmentioned)`);
-        }
-      } else {
-        console.error("[session_close] No surfaced scars available for auto-bridge");
-      }
-    } catch (bridgeError) {
-      console.error("[session_close] Auto-bridge failed (non-fatal):", bridgeError);
+    const bridgedScars = bridgeScarsToUsageRecords(normalizedScarsApplied, sessionId, agentIdentity);
+    if (bridgedScars.length > 0) {
+      params = { ...params, scars_to_record: bridgedScars };
     }
   }
 
@@ -1056,8 +1099,8 @@ export async function sessionClose(
     const perfData = buildPerformanceData("session_close", latencyMs, 1);
 
     // Update relevance data for memories applied during session
-    if (params.closing_reflection?.scars_applied?.length) {
-      updateRelevanceData(sessionId, params.closing_reflection.scars_applied).catch(() => {});
+    if (normalizedScarsApplied.length > 0) {
+      updateRelevanceData(sessionId, normalizedScarsApplied).catch(() => {});
     }
 
     // Record metrics
@@ -1087,6 +1130,11 @@ export async function sessionClose(
 
     // GIT-21: Clean up session files (registry, per-session dir, legacy file)
     cleanupSessionFiles(sessionId);
+
+    // Clean up payload file AFTER successful close (not before — crash safety)
+    if (payloadConsumed) {
+      try { fs.unlinkSync(payloadPath); } catch { /* already gone */ }
+    }
 
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined, transcriptStatus);
 

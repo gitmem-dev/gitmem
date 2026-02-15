@@ -287,7 +287,17 @@ export function buildCloseCompliance(
   learningsCount: number
 ): CloseCompliance {
   const closeType = params.close_type || "standard";
-  const scarsApplied = params.closing_reflection?.scars_applied?.length || 0;
+  // scars_applied can be string (prose) or string[] — count items, not characters
+  const rawScars = params.closing_reflection?.scars_applied as string | string[] | undefined;
+  let scarsApplied = 0;
+  if (rawScars) {
+    if (Array.isArray(rawScars)) {
+      scarsApplied = rawScars.length;
+    } else {
+      const parts = rawScars.trim().split(/(?:\.\s+|\;\s*|\s+—\s+)/).filter((p: string) => p.trim().length > 0);
+      scarsApplied = Math.max(1, parts.length);
+    }
+  }
 
   const compliance: CloseCompliance = {
     close_type: closeType,

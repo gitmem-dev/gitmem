@@ -81,7 +81,7 @@ export const SessionCloseParamsSchema = z.object({
   decisions: z.array(SessionDecisionSchema).optional(),
   open_threads: z.array(z.union([z.string(), ThreadObjectSchema])).optional(),
   project_state: z.string().optional(),
-  learnings_created: z.array(z.string()).optional(),
+  learnings_created: z.array(z.union([z.string(), z.record(z.unknown())])).optional(),
   linear_issue: z.string().optional(),
   ceremony_duration_ms: z.number().nonnegative().optional(),
   scars_to_record: z.array(ScarUsageEntrySchema).optional(),

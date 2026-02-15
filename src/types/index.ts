@@ -261,7 +261,7 @@ export interface SessionCloseParams {
   open_threads?: (string | ThreadObject)[];
   /** Optional PROJECT STATE that auto-prepends to open_threads[0] (OD-534) */
   project_state?: string;
-  learnings_created?: string[];
+  learnings_created?: (string | Record<string, unknown>)[];
   linear_issue?: string;
   ceremony_duration_ms?: number; // End-to-end ceremony duration from agent perspective
   scars_to_record?: ScarUsageEntry[]; // Optional: scars to record as part of close

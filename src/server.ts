@@ -63,6 +63,7 @@ import {
   hasTranscripts,
 } from "./services/tier.js";
 import { getRegisteredTools } from "./tools/definitions.js";
+import { validateToolArgs } from "./schemas/registry.js";
 import type { Project } from "./types/index.js";
 
 import type {
@@ -116,6 +117,20 @@ export function createServer(): Server {
           {
             type: "text" as const,
             text: JSON.stringify({ error: `Unknown tool: ${name}. Available tools depend on your GitMem tier (current: ${getTier()}).` }),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Validate tool arguments against registered Zod schemas
+    const validationError = validateToolArgs(name, toolArgs);
+    if (validationError) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ error: validationError }),
           },
         ],
         isError: true,

@@ -115,6 +115,19 @@ async function loadLastSession(
 }> {
   const timer = new Timer();
 
+  if (!hasSupabase()) {
+    // Free tier: no session history from Supabase, use local threads only
+    const fileThreads = loadThreadsFile();
+    return {
+      session: null,
+      aggregated_open_threads: fileThreads.filter(t => t.status === "open"),
+      displayInfo: [],
+      latency_ms: timer.stop(),
+      network_call: false,
+      threadsFromSupabase: false,
+    };
+  }
+
   try {
     // Use _lite view for performance (excludes embedding)
     // OD-460: View now includes decisions/open_threads arrays
@@ -206,6 +219,7 @@ async function loadLastSession(
 async function loadRecentRapport(
   project: Project
 ): Promise<{ agent: string; summary: string; date: string }[]> {
+  if (!hasSupabase()) return [];
   try {
     const sessions = await supabase.listRecords<{
       agent: string;
@@ -313,6 +327,11 @@ async function createSessionRecord(
   const sessionId = preGeneratedId || uuidv4();
   const today = new Date().toISOString().split("T")[0];
   const timer = new Timer();
+
+  if (!hasSupabase()) {
+    // Free tier: session tracked locally only
+    return { session_id: sessionId, latency_ms: timer.stop(), network_call: false };
+  }
 
   try {
     // OD-cast: Capture asciinema recording path from Docker entrypoint

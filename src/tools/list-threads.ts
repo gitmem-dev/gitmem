@@ -12,6 +12,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { hasSupabase } from "../services/tier.js";
 import { getThreads, getProject } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
 import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
@@ -115,7 +116,7 @@ export async function listThreads(
 
   // Fallback: aggregate from recent sessions, merged with local file
   // (same pattern as session_start: aggregation + mergeThreadStates with local file)
-  if (allThreads === null) {
+  if (allThreads === null && hasSupabase()) {
     try {
       const sessions = await supabase.listRecords<SessionRecord>({
         table: "orchestra_sessions_lite",

@@ -352,6 +352,7 @@ export async function updateRelevanceData(
   sessionId: string,
   memoriesApplied: string[]
 ): Promise<void> {
+  if (!hasSupabase()) return;
   const tracker = getEffectTracker();
   await tracker.track("relevance_update", sessionId, async () => {
     // Get all metrics for this session that surfaced memories
@@ -391,6 +392,7 @@ export async function detectRequery(
   currentQuery: string,
   toolName: ToolName
 ): Promise<boolean> {
+  if (!hasSupabase()) return false;
   try {
     // Get recent queries from same session
     const recentMetrics = await supabase.listRecords<{

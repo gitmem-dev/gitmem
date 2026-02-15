@@ -5,6 +5,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
+import { hasSupabase } from "../services/tier.js";
 import { Timer, recordMetrics, buildPerformanceData } from "../services/metrics.js";
 import type {
   RecordScarUsageBatchParams,
@@ -93,6 +94,18 @@ export async function recordScarUsageBatch(
 ): Promise<RecordScarUsageBatchResult> {
   const timer = new Timer();
   const metricsId = uuidv4();
+
+  if (!hasSupabase()) {
+    // Free tier: scar usage tracked locally via record-scar-usage (single), not batch
+    return {
+      success: true,
+      usage_ids: [],
+      resolved_count: 0,
+      failed_count: 0,
+      failed_identifiers: [],
+      performance: buildPerformanceData("record_scar_usage_batch", timer.stop(), 0),
+    };
+  }
 
   const usageIds: string[] = [];
   const failedIdentifiers: string[] = [];

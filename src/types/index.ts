@@ -141,6 +141,7 @@ export interface LastSession {
   title: string;
   date: string;
   key_decisions: string[];
+  /** Used internally for PROJECT STATE extraction — not included in MCP result */
   open_threads: (string | ThreadObject)[];
 }
 
@@ -184,8 +185,7 @@ export interface SessionStartResult {
   project_state?: string;
   /** Aggregated open threads across last 5 sessions (deduplicated, migrated to objects) */
   open_threads?: ThreadObject[];
-  /** Threads resolved since last session (informational) */
-  recently_resolved?: ThreadObject[];
+  // recently_resolved removed — available via list_threads --include-resolved
   /** Phase 5: Suggested threads inferred from recurring session topics */
   suggested_threads?: ThreadSuggestion[];
   relevant_scars?: RelevantScar[];

@@ -272,81 +272,66 @@ export async function listThreadsFromSupabase(
  */
 export async function loadActiveThreadsFromSupabase(
   project: Project = "default"
-): Promise<{ open: ThreadObject[]; recentlyResolved: ThreadObject[]; displayInfo: ThreadDisplayInfo[] } | null> {
+): Promise<{ open: ThreadObject[]; displayInfo: ThreadDisplayInfo[] } | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
   }
 
   try {
-    // Get all non-archived threads (both active and recently resolved)
+    // Get only non-resolved, non-archived threads (open/active only)
     const rows = await supabase.directQuery<ThreadRow>("orchestra_threads_lite", {
       select: "*",
       filters: {
         project,
-        status: "not.in.(archived,dormant)",
+        status: "not.in.(archived,dormant,resolved)",
       },
       order: "vitality_score.desc,last_touched_at.desc",
-      limit: 100,
+      limit: 50,
     });
 
     const now = new Date();
     const open: ThreadObject[] = [];
-    const recentlyResolved: ThreadObject[] = [];
     const displayInfo: ThreadDisplayInfo[] = [];
 
     // Deduplicate by text content (mirrors aggregateThreads logic)
     const seenText = new Set<string>();
     const seenIds = new Set<string>();
 
-    // Recently resolved = resolved in last 14 days
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 14);
-    const cutoffStr = cutoff.toISOString();
-
     for (const row of rows) {
-      // Deduplicate by both thread ID and normalized text
       const key = normalizeText(row.text || "");
       if (seenIds.has(row.id) || (key && seenText.has(key))) continue;
       seenIds.add(row.id);
       if (key) seenText.add(key);
 
-      const thread = rowToThreadObject(row);
-      if (row.status === "resolved") {
-        if (row.resolved_at && row.resolved_at >= cutoffStr) {
-          recentlyResolved.push(thread);
-        }
-        // Older resolved threads are skipped
-      } else {
-        open.push(thread);
+      open.push(rowToThreadObject(row));
 
-        // Phase 6: Compute lifecycle display info for open threads
-        const lastTouched = new Date(row.last_touched_at);
-        const daysSinceTouch = Math.max(
-          (now.getTime() - lastTouched.getTime()) / (1000 * 60 * 60 * 24),
-          0
-        );
-        const { lifecycle_status } = computeLifecycleStatus({
-          last_touched_at: row.last_touched_at,
-          touch_count: row.touch_count,
-          created_at: row.created_at,
-          thread_class: (row.thread_class as ThreadClass) || "backlog",
-          current_status: row.status,
-          dormant_since: (row.metadata as Record<string, unknown>)?.dormant_since as string | undefined,
-        }, now);
+      // Phase 6: Compute lifecycle display info for open threads
+      const lastTouched = new Date(row.last_touched_at);
+      const daysSinceTouch = Math.max(
+        (now.getTime() - lastTouched.getTime()) / (1000 * 60 * 60 * 24),
+        0
+      );
+      const { lifecycle_status } = computeLifecycleStatus({
+        last_touched_at: row.last_touched_at,
+        touch_count: row.touch_count,
+        created_at: row.created_at,
+        thread_class: (row.thread_class as ThreadClass) || "backlog",
+        current_status: row.status,
+        dormant_since: (row.metadata as Record<string, unknown>)?.dormant_since as string | undefined,
+      }, now);
 
-        displayInfo.push({
-          thread,
-          vitality_score: row.vitality_score,
-          lifecycle_status,
-          thread_class: row.thread_class || "backlog",
-          days_since_touch: Math.round(daysSinceTouch),
-        });
-      }
+      displayInfo.push({
+        thread: rowToThreadObject(row),
+        vitality_score: row.vitality_score,
+        lifecycle_status,
+        thread_class: row.thread_class || "backlog",
+        days_since_touch: Math.round(daysSinceTouch),
+      });
     }
 
-    const dupsRemoved = rows.length - open.length - recentlyResolved.length;
-    console.error(`[thread-supabase] Loaded ${open.length} open, ${recentlyResolved.length} recently resolved threads from Supabase (${dupsRemoved} duplicates removed)`);
-    return { open, recentlyResolved, displayInfo };
+    const dupsRemoved = rows.length - open.length;
+    console.error(`[thread-supabase] Loaded ${open.length} open threads from Supabase (${dupsRemoved} duplicates removed)`);
+    return { open, displayInfo };
   } catch (error) {
     console.error("[thread-supabase] Failed to load active threads:", error instanceof Error ? error.message : error);
     return null;

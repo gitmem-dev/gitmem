@@ -1,6 +1,45 @@
-# GitMem Documentation
+# GitMem
 
-> GitMem is institutional memory for AI agents — scars, sessions, threads, and learnings that persist across conversations.
+> Institutional memory for AI coding agents. An MCP server that gives agents persistent memory — scars (mistakes to avoid), sessions, threads, and learnings that compound across conversations.
+
+## Quick Install
+
+Add GitMem to any MCP-compatible AI agent:
+
+```bash
+# Recommended: interactive setup (Claude Code, Cursor, etc.)
+cd your-project && npx gitmem init
+
+# Or add the MCP server directly
+claude mcp add gitmem -- npx -y gitmem-mcp
+```
+
+Manual MCP config (works with any MCP client):
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+```
+
+After install, run `gitmem-help` to see available tools.
+
+## What It Does
+
+- **Recall** — Before acting, surface relevant past mistakes (scars) so you don't repeat them
+- **Sessions** — Bounded work periods with context loading and closing reflection
+- **Threads** — Track unresolved work across sessions
+- **Learnings** — Scars, wins, patterns, and anti-patterns as institutional memory
+- **Multi-agent** — Share memory across teams of AI agents via `prepare_context`
+
+Free tier stores everything locally in `.gitmem/`. Pro tier adds Supabase-backed semantic search.
+
+Full docs: https://gitmem.ai/llms-full.txt
 
 ## Pages
 
@@ -16,7 +55,7 @@
 - [Configuration](https://gitmem.ai/docs/getting-started/configuration): Configure GitMem with environment variables and config files.
 - [Your First Session](https://gitmem.ai/docs/getting-started/first-session): Walk through a complete GitMem session from start to close.
 - [Free vs Pro](https://gitmem.ai/docs/getting-started/free-vs-pro): Compare GitMem tiers and choose the right one for your workflow.
-- [Getting Started](https://gitmem.ai/docs/getting-started): Get GitMem running in under 5 minutes.
+- [Overview](https://gitmem.ai/docs/getting-started): Get GitMem running in under 5 minutes.
 - [Installation](https://gitmem.ai/docs/getting-started/installation): Install GitMem via npx, global install, or MCP configuration.
 - [Closing Ceremony](https://gitmem.ai/docs/guides/closing-ceremony): How to properly close a GitMem session with reflection and persistence.
 - [Error Handling](https://gitmem.ai/docs/guides/error-handling): Understanding and debugging GitMem errors.

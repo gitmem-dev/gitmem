@@ -1,7 +1,9 @@
-# GitMem Documentation (Full)
+# GitMem — Complete Documentation
 
-> Complete documentation for GitMem — institutional memory for AI agents.
+> GitMem is an MCP server that gives AI coding agents persistent institutional memory.
+> Install: `npx gitmem init` or add MCP server `npx -y gitmem-mcp`
 > Source: https://gitmem.ai
+> Index: https://gitmem.ai/llms.txt
 
 ========================================================================
 # Changelog
@@ -773,7 +775,7 @@ export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 See [Supabase Setup](/docs/guides/supabase-setup) for detailed instructions.
 
 ========================================================================
-# Getting Started
+# Overview
 URL: https://gitmem.ai/docs/getting-started
 Description: Get GitMem running in under 5 minutes.
 ========================================================================

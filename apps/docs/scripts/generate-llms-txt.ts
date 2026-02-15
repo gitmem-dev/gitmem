@@ -100,9 +100,48 @@ for (const file of mdxFiles) {
 
 mkdirSync(PUBLIC_DIR, { recursive: true });
 
-let index = `# GitMem Documentation
+let index = `# GitMem
 
-> GitMem is institutional memory for AI agents — scars, sessions, threads, and learnings that persist across conversations.
+> Institutional memory for AI coding agents. An MCP server that gives agents persistent memory — scars (mistakes to avoid), sessions, threads, and learnings that compound across conversations.
+
+## Quick Install
+
+Add GitMem to any MCP-compatible AI agent:
+
+\`\`\`bash
+# Recommended: interactive setup (Claude Code, Cursor, etc.)
+cd your-project && npx gitmem init
+
+# Or add the MCP server directly
+claude mcp add gitmem -- npx -y gitmem-mcp
+\`\`\`
+
+Manual MCP config (works with any MCP client):
+
+\`\`\`json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+\`\`\`
+
+After install, run \`gitmem-help\` to see available tools.
+
+## What It Does
+
+- **Recall** — Before acting, surface relevant past mistakes (scars) so you don't repeat them
+- **Sessions** — Bounded work periods with context loading and closing reflection
+- **Threads** — Track unresolved work across sessions
+- **Learnings** — Scars, wins, patterns, and anti-patterns as institutional memory
+- **Multi-agent** — Share memory across teams of AI agents via \`prepare_context\`
+
+Free tier stores everything locally in \`.gitmem/\`. Pro tier adds Supabase-backed semantic search.
+
+Full docs: ${BASE_URL}/llms-full.txt
 
 ## Pages
 
@@ -123,10 +162,12 @@ console.error(`Generated llms.txt (${pages.length} pages indexed)`);
 // Generate llms-full.txt (full content)
 // ============================================================================
 
-let full = `# GitMem Documentation (Full)
+let full = `# GitMem — Complete Documentation
 
-> Complete documentation for GitMem — institutional memory for AI agents.
+> GitMem is an MCP server that gives AI coding agents persistent institutional memory.
+> Install: \`npx gitmem init\` or add MCP server \`npx -y gitmem-mcp\`
 > Source: ${BASE_URL}
+> Index: ${BASE_URL}/llms.txt
 
 `;
 

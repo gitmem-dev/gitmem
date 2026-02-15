@@ -5,18 +5,51 @@ description: Install GitMem via npx, global install, or MCP configuration.
 
 # Installation
 
-## Option 1: Quick Init (Recommended)
+## Option 1: Init Wizard (Recommended)
 
 ```bash
 cd your-project
-npx gitmem-mcp init
+npx gitmem init
 ```
 
-This is the fastest path. It:
-- Creates `.gitmem/` with local storage
-- Loads 12 starter scars covering common AI agent mistakes
-- Configures Claude Code hooks for automatic session management
-- Adds GitMem instructions to your `CLAUDE.md`
+The interactive wizard walks you through 6 steps:
+
+1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
+2. **MCP Server** — Adds gitmem to `.mcp.json` (auto-detects free vs pro tier)
+3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
+4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
+5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
+6. **Gitignore** — Adds `.gitmem/` to `.gitignore`
+
+### Flags
+
+```bash
+# Accept all defaults (non-interactive)
+npx gitmem init --yes
+
+# Preview what would change (no files written)
+npx gitmem init --dry-run
+
+# Set a project namespace
+npx gitmem init --project my-app
+```
+
+### Idempotent
+
+Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+
+### Uninstall
+
+```bash
+npx gitmem uninstall
+```
+
+Cleanly reverses everything init did. Your `.gitmem/` data is preserved by default.
+
+```bash
+# Also delete .gitmem/ memory data
+npx gitmem uninstall --all
+```
 
 ## Option 2: MCP Server Only
 

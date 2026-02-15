@@ -5,6 +5,21 @@ description: GitMem release history.
 
 # Changelog
 
+## v1.0.2 (2026-02-15)
+
+### Features
+
+- **`npx gitmem init`** — Interactive setup wizard that detects existing config, prompts, and merges without destroying anything. Replaces the multi-step manual setup.
+  - 6 steps: memory store, MCP server, CLAUDE.md, permissions, hooks, gitignore
+  - Flags: `--yes` (non-interactive), `--dry-run` (preview), `--project <name>`
+  - Idempotent — re-running safely skips completed steps
+- **`npx gitmem uninstall`** — Clean reversal of everything init did. Memory data (`.gitmem/`) preserved by default, `--all` to also delete.
+
+### Docs
+
+- Updated README to feature one-command setup, added gitmem.dev link
+- Updated docs site installation and getting-started pages
+
 ## v1.0.1 (2026-02-16)
 
 ### Bug Fixes

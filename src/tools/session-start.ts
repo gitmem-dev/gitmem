@@ -758,7 +758,7 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   visual.push(`gitmem ── ${stateLabel}`);
 
   // Line 2: session ID + agent + project
-  const parts = [result.session_id.slice(0, 8), result.agent];
+  const parts = [result.session_id, result.agent];
   if (result.project) parts.push(result.project);
   visual.push(parts.join(" · "));
 

@@ -1095,16 +1095,55 @@ export async function sessionClose(
     // Only used when explicitly requested (not auto-triggered)
     sessionId = uuidv4();
   } else {
-    // Normal mode: require existing session (guaranteed to exist by step 0 above)
+    // Normal mode: require existing session
     sessionId = params.session_id;
 
+    // Try Supabase first
     try {
       existingSession = await supabase.getRecord<Record<string, unknown>>(
         "orchestra_sessions",
         sessionId
       );
     } catch {
-      // Session might not exist yet, which is fine
+      // Supabase might not be configured (free tier) or session not found
+    }
+
+    // Fall back to local per-session file if Supabase didn't find it
+    if (!existingSession) {
+      try {
+        const localSessionPath = getSessionPath(sessionId, "session.json");
+        if (fs.existsSync(localSessionPath)) {
+          const localData = JSON.parse(fs.readFileSync(localSessionPath, "utf-8"));
+          existingSession = {
+            id: sessionId,
+            session_date: localData.started_at?.split("T")[0] || new Date().toISOString().split("T")[0],
+            agent: localData.agent,
+            project: localData.project,
+            ...localData,
+          };
+          console.error(`[session_close] Session found in local file (not in Supabase)`);
+        }
+      } catch {
+        // Local file read failed
+      }
+    }
+
+    // Fall back to active-sessions registry as last resort
+    if (!existingSession) {
+      try {
+        const mySession = findSessionByHostPid(os.hostname(), process.pid);
+        if (mySession && mySession.session_id === sessionId) {
+          existingSession = {
+            id: sessionId,
+            session_date: mySession.started_at?.split("T")[0] || new Date().toISOString().split("T")[0],
+            agent: mySession.agent,
+            project: mySession.project,
+          };
+          console.error(`[session_close] Session found in registry (not in Supabase or local file)`);
+        }
+      } catch {
+        // Registry lookup failed
+      }
     }
 
     if (!existingSession) {
@@ -1114,7 +1153,7 @@ export async function sessionClose(
         success: false,
         session_id: sessionId,
         close_compliance: closeCompliance,
-        validation_errors: [`Session ${sessionId} not found. Was session_start called?`],
+        validation_errors: [`Session ${sessionId} not found in Supabase, local files, or registry. Was session_start called?`],
         performance: perfData,
       };
     }

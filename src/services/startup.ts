@@ -147,7 +147,8 @@ async function getRemoteScarStats(): Promise<{
       select: "id,updated_at",
       filters: {
         learning_type: "in.(scar,pattern,win,anti_pattern)",
-        embedding: "not.is.null"
+        embedding: "not.is.null",
+        is_active: "eq.true",
       },
       order: "updated_at.desc",
       limit: 500,

@@ -44,6 +44,8 @@ import { dismissSuggestion } from "./tools/dismiss-suggestion.js";
 import type { DismissSuggestionParams } from "./tools/dismiss-suggestion.js";
 import { cleanupThreads } from "./tools/cleanup-threads.js";
 import type { CleanupThreadsParams } from "./tools/cleanup-threads.js";
+import { archiveLearning } from "./tools/archive-learning.js";
+import type { ArchiveLearningParams } from "./tools/archive-learning.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -233,6 +235,11 @@ export function createServer(): Server {
         case "gm-cleanup":
           result = await cleanupThreads(toolArgs as unknown as CleanupThreadsParams);
           break;
+        case "archive_learning":
+        case "gitmem-al":
+        case "gm-archive":
+          result = await archiveLearning(toolArgs as unknown as ArchiveLearningParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -254,6 +261,7 @@ export function createServer(): Server {
             { alias: "gitmem-ds", full: "dismiss_suggestion", description: "Dismiss a suggested thread" },
             { alias: "gitmem-cleanup", full: "cleanup_threads", description: "Triage threads by lifecycle health" },
             { alias: "gitmem-health", full: "health", description: "Show write health for fire-and-forget operations" },
+            { alias: "gitmem-al", full: "archive_learning", description: "Archive a scar/win/pattern (is_active=false)" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });

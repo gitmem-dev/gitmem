@@ -28,6 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
+import { wrapDisplay } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 import {
   estimateTokens,
@@ -53,6 +54,7 @@ export interface PrepareContextParams {
 
 export interface PrepareContextResult {
   memory_payload: string;
+  display?: string;
   scars_included: number;
   blocking_scars: number;
   format: string;
@@ -245,8 +247,13 @@ function buildResult(
     },
   }).catch(() => {});
 
+  const display = wrapDisplay(
+    `prepare_context \u00b7 ${format} \u00b7 ${scars_included} scars (${blocking_scars} blocking) \u00b7 ~${token_estimate} tokens\n\n${memory_payload}`
+  );
+
   return {
     memory_payload,
+    display,
     scars_included,
     blocking_scars,
     format,
@@ -287,8 +294,10 @@ export async function prepareContext(
       return buildResult(scars, plan, format, maxTokens, timer, metricsId, project, "local");
     } catch (error) {
       const latencyMs = timer.stop();
+      const errPayload = "[INSTITUTIONAL MEMORY — error loading scars]";
       return {
-        memory_payload: "[INSTITUTIONAL MEMORY — error loading scars]",
+        memory_payload: errPayload,
+        display: wrapDisplay(`prepare_context \u00b7 ${format} \u00b7 0 scars (0 blocking) \u00b7 ~0 tokens\n\n${errPayload}`),
         scars_included: 0,
         blocking_scars: 0,
         format,
@@ -301,8 +310,10 @@ export async function prepareContext(
   // PRO/DEV TIER: vector search
   if (!supabase.isConfigured()) {
     const latencyMs = timer.stop();
+    const notConfigPayload = "[INSTITUTIONAL MEMORY — not configured]";
     return {
-      memory_payload: "[INSTITUTIONAL MEMORY — not configured]",
+      memory_payload: notConfigPayload,
+      display: wrapDisplay(`prepare_context \u00b7 ${format} \u00b7 0 scars (0 blocking) \u00b7 ~0 tokens\n\n${notConfigPayload}`),
       scars_included: 0,
       blocking_scars: 0,
       format,
@@ -358,8 +369,10 @@ export async function prepareContext(
     const message = error instanceof Error ? error.message : String(error);
     console.error("[prepare_context] Search failed:", message);
     const latencyMs = timer.stop();
+    const errPayload = `[INSTITUTIONAL MEMORY — error: ${message}]`;
     return {
-      memory_payload: `[INSTITUTIONAL MEMORY — error: ${message}]`,
+      memory_payload: errPayload,
+      display: wrapDisplay(`prepare_context \u00b7 ${format} \u00b7 0 scars (0 blocking) \u00b7 ~0 tokens\n\n${errPayload}`),
       scars_included: 0,
       blocking_scars: 0,
       format,

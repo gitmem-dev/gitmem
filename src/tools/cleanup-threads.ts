@@ -20,6 +20,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { wrapDisplay, relativeTime, truncate } from "../services/display-protocol.js";
 import type { Project } from "../types/index.js";
 import type { PerformanceData } from "../services/metrics.js";
 
@@ -58,7 +59,57 @@ export interface CleanupThreadsResult {
   };
   archived_count: number;
   archived_ids: string[];
+  display?: string;
   performance: PerformanceData;
+}
+
+// --- Display Formatting ---
+
+function formatDaysAgo(days: number): string {
+  if (days < 1) return "now";
+  if (days < 7) return `${days}d ago`;
+  const wk = Math.floor(days / 7);
+  if (wk < 52) return `${wk}w ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+function buildCleanupDisplay(
+  summary: CleanupThreadsResult["summary"],
+  groups: CleanupThreadsResult["groups"],
+  archivedCount: number
+): string {
+  const lines: string[] = [];
+  lines.push(
+    `gitmem cleanup · ${summary.total_open} open · ${summary.active} active · ${summary.cooling} cooling · ${summary.dormant} dormant`
+  );
+  lines.push("");
+
+  const totalItems = summary.total_open;
+  if (totalItems === 0 && archivedCount === 0) {
+    lines.push("No threads found.");
+    return wrapDisplay(lines.join("\n"));
+  }
+
+  const sections: [string, ThreadSummary[]][] = [
+    ["Active", groups.active],
+    ["Emerging", groups.emerging],
+    ["Cooling", groups.cooling],
+    ["Dormant", groups.dormant],
+  ];
+
+  for (const [label, items] of sections) {
+    if (items.length === 0) continue;
+    lines.push(`${label} (${items.length}):`);
+    for (const t of items) {
+      const text = truncate(t.text, 48);
+      const time = formatDaysAgo(t.days_since_touch);
+      lines.push(`  ${t.thread_id}  ${text.padEnd(50)} ${time.padStart(8)}`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`Archived: ${archivedCount}`);
+  return wrapDisplay(lines.join("\n"));
 }
 
 // ---------- Tool Implementation ----------
@@ -72,12 +123,15 @@ export async function cleanupThreads(
 
   if (!hasSupabase() || !supabase.isConfigured()) {
     const latencyMs = timer.stop();
+    const emptySummary = { emerging: 0, active: 0, cooling: 0, dormant: 0, total_open: 0 };
+    const emptyGroups = { emerging: [] as ThreadSummary[], active: [] as ThreadSummary[], cooling: [] as ThreadSummary[], dormant: [] as ThreadSummary[] };
     return {
       success: false,
-      summary: { emerging: 0, active: 0, cooling: 0, dormant: 0, total_open: 0 },
-      groups: { emerging: [], active: [], cooling: [], dormant: [] },
+      summary: emptySummary,
+      groups: emptyGroups,
       archived_count: 0,
       archived_ids: [],
+      display: buildCleanupDisplay(emptySummary, emptyGroups, 0),
       performance: buildPerformanceData("cleanup_threads", latencyMs, 0),
     };
   }
@@ -173,23 +227,27 @@ export async function cleanupThreads(
     },
   }).catch(() => {});
 
+  const resultSummary = {
+    emerging: groups.emerging.length,
+    active: groups.active.length,
+    cooling: groups.cooling.length,
+    dormant: groups.dormant.length,
+    total_open: totalOpen,
+  };
+  const resultGroups = {
+    emerging: groups.emerging,
+    active: groups.active,
+    cooling: groups.cooling,
+    dormant: groups.dormant,
+  };
+
   return {
     success: true,
-    summary: {
-      emerging: groups.emerging.length,
-      active: groups.active.length,
-      cooling: groups.cooling.length,
-      dormant: groups.dormant.length,
-      total_open: totalOpen,
-    },
-    groups: {
-      emerging: groups.emerging,
-      active: groups.active,
-      cooling: groups.cooling,
-      dormant: groups.dormant,
-    },
+    summary: resultSummary,
+    groups: resultGroups,
     archived_count,
     archived_ids,
+    display: buildCleanupDisplay(resultSummary, resultGroups, archived_count),
     performance: perfData,
   };
 }

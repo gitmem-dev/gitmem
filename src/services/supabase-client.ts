@@ -482,6 +482,7 @@ export async function loadScarsWithEmbeddings<T = unknown>(
   try {
     const filters: Record<string, string> = {
       learning_type: "in.(scar,pattern,win,anti_pattern)",
+      is_active: "eq.true",
     };
     if (project) {
       filters.project = project;

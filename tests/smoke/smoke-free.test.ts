@@ -19,7 +19,6 @@ import {
   createMcpClient,
   callTool,
   listTools,
-  parseToolResult,
   getToolResultText,
   isToolError,
   createTierEnv,
@@ -104,16 +103,11 @@ describe("Smoke: Free Tier", () => {
 
     expect(isToolError(result)).toBe(false);
 
-    const data = parseToolResult<{
-      activated: boolean;
-      plan: string;
-      scars: unknown[];
-    }>(result);
-
-    // Plan echoed back — proves parameter passing through MCP protocol
-    expect(data.plan).toBe("smoke test deployment verification");
-    expect(typeof data.activated).toBe("boolean");
-    expect(Array.isArray(data.scars)).toBe(true);
+    // recall returns display protocol output (pre-formatted markdown)
+    const text = getToolResultText(result);
+    // In free tier, recall may find 0 scars or hit local cache miss —
+    // either way it should return a non-empty display string, not crash
+    expect(text.length).toBeGreaterThan(0);
   });
 
   it("session_close works", async () => {

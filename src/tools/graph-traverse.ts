@@ -19,6 +19,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import { v4 as uuidv4 } from "uuid";
 import type { Project, PerformanceData } from "../types/index.js";
 
@@ -79,6 +80,7 @@ export interface GraphTraverseResult {
   lens: GraphTraverseLens;
   query_node?: string;
   summary: string;
+  display?: string;
   node?: GraphNode;
   chain?: ProvenanceHop[];
   stats?: GraphStats;
@@ -222,6 +224,7 @@ async function connectedTo(
     lens: "connected_to",
     query_node: params.node,
     summary,
+    display: wrapDisplay(summary),
     node: {
       label: params.node!,
       type,
@@ -286,6 +289,7 @@ async function producedBy(
     lens: "produced_by",
     query_node: params.node,
     summary,
+    display: wrapDisplay(summary),
     node: {
       label: params.node!,
       type: detectNodeType(`Agent: ${params.node}`).startsWith("Agent") ? "Agent" : "Persona",
@@ -378,6 +382,7 @@ async function provenance(
     lens: "provenance",
     query_node: params.node,
     summary,
+    display: wrapDisplay(summary),
     chain,
     total_triples_scanned: allTriples.length,
     performance: buildPerformanceData("graph_traverse" as any, latencyMs, totalEdges),
@@ -469,6 +474,7 @@ async function stats(
     success: true,
     lens: "stats",
     summary,
+    display: wrapDisplay(summary),
     stats: graphStats,
     total_triples_scanned: allTriples.length,
     performance: buildPerformanceData("graph_traverse" as any, latencyMs, allTriples.length),
@@ -484,10 +490,12 @@ export async function graphTraverse(
   const lens = params.lens;
 
   if (!hasSupabase()) {
+    const noSupabaseMsg = "Graph traversal requires Supabase connection";
     return {
       success: false,
       lens,
-      summary: "Graph traversal requires Supabase connection",
+      summary: noSupabaseMsg,
+      display: wrapDisplay(noSupabaseMsg),
       total_triples_scanned: 0,
       performance: buildPerformanceData("graph_traverse" as any, timer.stop(), 0),
     };
@@ -495,10 +503,12 @@ export async function graphTraverse(
 
   // Validate: node required for all lenses except stats
   if (lens !== "stats" && !params.node) {
+    const missingNodeMsg = `The '${lens}' lens requires a 'node' parameter (e.g., "OD-466", "CLI", "Elena")`;
     return {
       success: false,
       lens,
-      summary: `The '${lens}' lens requires a 'node' parameter (e.g., "OD-466", "CLI", "Elena")`,
+      summary: missingNodeMsg,
+      display: wrapDisplay(missingNodeMsg),
       total_triples_scanned: 0,
       performance: buildPerformanceData("graph_traverse" as any, timer.stop(), 0),
     };
@@ -514,23 +524,28 @@ export async function graphTraverse(
         return await provenance(params, timer);
       case "stats":
         return await stats(params, timer);
-      default:
+      default: {
+        const unknownLensMsg = `Unknown lens: ${lens}. Available: connected_to, produced_by, provenance, stats`;
         return {
           success: false,
           lens,
-          summary: `Unknown lens: ${lens}. Available: connected_to, produced_by, provenance, stats`,
+          summary: unknownLensMsg,
+          display: wrapDisplay(unknownLensMsg),
           total_triples_scanned: 0,
           performance: buildPerformanceData("graph_traverse" as any, timer.stop(), 0),
         };
+      }
     }
   } catch (error) {
     const latencyMs = timer.stop();
     const message = error instanceof Error ? error.message : String(error);
+    const failMsg = `Graph traversal failed: ${message}`;
     return {
       success: false,
       lens,
       query_node: params.node,
-      summary: `Graph traversal failed: ${message}`,
+      summary: failMsg,
+      display: wrapDisplay(failMsg),
       total_triples_scanned: 0,
       performance: buildPerformanceData("graph_traverse" as any, latencyMs, 0),
     };

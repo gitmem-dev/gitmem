@@ -16,6 +16,7 @@ import {
   promoteSuggestionById,
 } from "../services/thread-suggestions.js";
 import { createThread } from "./create-thread.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import {
   Timer,
   buildPerformanceData,
@@ -35,6 +36,7 @@ export interface PromoteSuggestionResult {
   suggestion?: ThreadSuggestion;
   error?: string;
   performance: PerformanceData;
+  display?: string;
 }
 
 // --- Handler ---
@@ -50,6 +52,7 @@ export async function promoteSuggestion(
       success: false,
       error: "suggestion_id is required",
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
+      display: wrapDisplay(`Failed: suggestion_id is required`),
     };
   }
 
@@ -64,6 +67,7 @@ export async function promoteSuggestion(
       success: false,
       error: `Pending suggestion not found: "${params.suggestion_id}"`,
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
+      display: wrapDisplay(`Suggestion not found: ${params.suggestion_id}`),
     };
   }
 
@@ -79,6 +83,7 @@ export async function promoteSuggestion(
       success: false,
       error: `Thread creation failed: ${threadResult.error || "unknown"}`,
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
+      display: wrapDisplay(`Failed to promote suggestion`),
     };
   }
 
@@ -92,5 +97,6 @@ export async function promoteSuggestion(
     thread: threadResult.thread,
     suggestion: target,
     performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 1),
+    display: wrapDisplay(`Promoted suggestion to thread\nID: ${threadResult.thread.id}`),
   };
 }

@@ -30,7 +30,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         match_count: {
           type: "number",
@@ -108,7 +108,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -126,7 +126,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (default: from active session)",
+          description: "Project namespace (default: from active session). Free-form string (e.g., 'my-project').",
         },
       },
     },
@@ -222,7 +222,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -273,7 +273,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -418,7 +418,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["session_id", "transcript"],
@@ -485,7 +485,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -514,7 +514,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -563,7 +563,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -623,7 +623,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -687,7 +687,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["suggestion_id"],
@@ -721,7 +721,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         auto_archive: {
           type: "boolean",
@@ -765,7 +765,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         match_count: {
           type: "number",
@@ -829,7 +829,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -847,7 +847,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (default: from active session)",
+          description: "Project namespace (default: from active session). Free-form string (e.g., 'my-project').",
         },
       },
     },
@@ -943,7 +943,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -994,7 +994,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["title", "decision", "rationale"],
@@ -1139,7 +1139,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["session_id", "transcript"],
@@ -1230,7 +1230,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -1260,7 +1260,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -1306,7 +1306,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -1460,7 +1460,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         force: {
           type: "boolean",
@@ -1501,7 +1501,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace (default: from active session)",
+          description: "Project namespace (default: from active session). Free-form string (e.g., 'my-project').",
         },
       },
     },
@@ -1597,7 +1597,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["learning_type", "title", "description"],
@@ -1621,7 +1621,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         severity: {
           type: "string",
@@ -1651,7 +1651,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         learning_type: {
           type: "string",
@@ -1697,7 +1697,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
       required: ["plan", "format"],
@@ -1837,7 +1837,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1870,7 +1870,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1903,7 +1903,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         agent: {
           type: "string",
@@ -1938,7 +1938,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -1952,7 +1952,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -1966,7 +1966,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -1980,7 +1980,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -1994,7 +1994,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
     },
@@ -2008,9 +2008,66 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
       },
+    },
+  },
+
+  // --- Archive Learning Tool ---
+
+  {
+    name: "archive_learning",
+    description: "Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp. Archived learnings are excluded from recall and search results but preserved for audit trail.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the learning to archive",
+        },
+        reason: {
+          type: "string",
+          description: "Optional reason for archiving (e.g., 'superseded by OD-XXX', 'no longer relevant')",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "gitmem-al",
+    description: "gitmem-al (archive_learning) - Archive a scar/win/pattern (sets is_active=false)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the learning to archive",
+        },
+        reason: {
+          type: "string",
+          description: "Optional reason for archiving",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "gm-archive",
+    description: "gm-archive (archive_learning) - Archive a scar/win/pattern",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID of the learning to archive",
+        },
+        reason: {
+          type: "string",
+          description: "Optional reason for archiving",
+        },
+      },
+      required: ["id"],
     },
   },
 
@@ -2043,7 +2100,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         limit: {
           type: "number",
@@ -2077,7 +2134,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         limit: { type: "number", description: "Max triples (default: 50)" },
       },
@@ -2105,7 +2162,7 @@ export const TOOLS = [
         project: {
           type: "string",
 
-          description: "Project namespace for organizing memories",
+          description: "Project namespace (e.g., 'my-project', 'orchestra_dev'). Scopes sessions and searches.",
         },
         limit: { type: "number", description: "Max triples" },
       },
@@ -2144,6 +2201,10 @@ export const GRAPH_TOOL_NAMES = new Set([
   "graph_traverse", "gitmem-graph", "gm-graph",
 ]);
 
+export const ARCHIVE_TOOL_NAMES = new Set([
+  "archive_learning", "gitmem-al", "gm-archive",
+]);
+
 /**
  * Get tools registered for the current tier.
  * Free: core tools only (7 canonical + aliases)
@@ -2165,6 +2226,9 @@ export function getRegisteredTools() {
       return hasSupabase();
     }
     if (GRAPH_TOOL_NAMES.has(tool.name)) {
+      return hasSupabase();
+    }
+    if (ARCHIVE_TOOL_NAMES.has(tool.name)) {
       return hasSupabase();
     }
     return true;

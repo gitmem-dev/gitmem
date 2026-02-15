@@ -29,6 +29,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ResolveThreadParams, ResolveThreadResult } from "../types/index.js";
 
@@ -45,6 +46,7 @@ export async function resolveThread(
       success: false,
       error: "Either thread_id or text_match is required",
       performance: buildPerformanceData("resolve_thread", latencyMs, 0),
+      display: wrapDisplay(`Either thread_id or text_match is required`),
     };
   }
 
@@ -74,6 +76,7 @@ export async function resolveThread(
       success: false,
       error: `Thread not found: "${searchKey}"`,
       performance: buildPerformanceData("resolve_thread", latencyMs, 0),
+      display: wrapDisplay(`Thread not found: "${searchKey}"`),
     };
   }
 
@@ -166,6 +169,9 @@ export async function resolveThread(
     );
   }
 
+  let resolveMsg = `Thread resolved: "${resolved.text?.slice(0, 60) || resolved.id}"`;
+  if (alsoResolved.length > 0) resolveMsg += `\nAlso resolved: ${alsoResolved.map(t => t.id).join(", ")}`;
+
   return {
     success: true,
     resolved_thread: formatThreadForDisplay(resolved),
@@ -173,5 +179,6 @@ export async function resolveThread(
       also_resolved: alsoResolved.map(formatThreadForDisplay),
     }),
     performance: perfData,
+    display: wrapDisplay(resolveMsg),
   };
 }

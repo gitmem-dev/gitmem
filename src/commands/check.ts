@@ -383,7 +383,7 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
   const cache = getCache();
 
   // Cold start benchmark (cache initialization)
-  console.log("  Running cold start benchmark...");
+  console.error("  Running cold start benchmark...");
   try {
     benchmarks.coldStart = await runBenchmark(
       "coldStart",
@@ -395,11 +395,11 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
       5
     );
   } catch (error) {
-    console.log(`  Cold start benchmark failed: ${error}`);
+    console.error(`  Cold start benchmark failed: ${error}`);
   }
 
   // Cache populate benchmark
-  console.log("  Running cache populate benchmark...");
+  console.error("  Running cache populate benchmark...");
   try {
     benchmarks.cachePopulate = await runBenchmark(
       "cachePopulate",
@@ -410,11 +410,11 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
       5
     );
   } catch (error) {
-    console.log(`  Cache populate benchmark failed: ${error}`);
+    console.error(`  Cache populate benchmark failed: ${error}`);
   }
 
   // Cache hit benchmark
-  console.log("  Running cache hit benchmark...");
+  console.error("  Running cache hit benchmark...");
   try {
     // First, populate a cache entry
     const hitKey = `bench_hit_${Date.now()}`;
@@ -428,12 +428,12 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
       5
     );
   } catch (error) {
-    console.log(`  Cache hit benchmark failed: ${error}`);
+    console.error(`  Cache hit benchmark failed: ${error}`);
   }
 
   // Recall benchmark (if Supabase configured)
   if (hasSupabase()) {
-    console.log("  Running recall benchmark...");
+    console.error("  Running recall benchmark...");
     try {
       benchmarks.recall = await runBenchmark(
         "recall",
@@ -452,7 +452,7 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
         5
       );
     } catch (error) {
-      console.log(`  Recall benchmark failed: ${error}`);
+      console.error(`  Recall benchmark failed: ${error}`);
     }
   }
 
@@ -464,35 +464,35 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
  */
 export async function runCheck(options: CheckOptions): Promise<void> {
   const mode = options.full ? "full" : "quick";
-  console.log(`\nGitMem Diagnostic Check (${mode} mode)\n`);
-  console.log("=".repeat(50));
+  console.error(`\nGitMem Diagnostic Check (${mode} mode)\n`);
+  console.error("=".repeat(50));
 
   const collector = new DiagnosticsCollector();
   collector.start();
 
   // Run quick checks
-  console.log("\nRunning health checks...");
+  console.error("\nRunning health checks...");
   const { health, configuration, dataVolume } = await runQuickCheck();
 
   // Print health check results
-  console.log("\nHealth Checks:");
+  console.error("\nHealth Checks:");
   for (const [name, result] of Object.entries(health)) {
     const icon = result.status === "pass" ? "✓" : result.status === "fail" ? "✗" : "○";
     const time = result.durationMs ? ` (${result.durationMs}ms)` : "";
-    console.log(`  ${icon} ${name}: ${result.message}${time}`);
+    console.error(`  ${icon} ${name}: ${result.message}${time}`);
   }
 
   // Run benchmarks if full mode
   let benchmarks: DiagnosticReport["benchmarks"] | undefined;
   if (options.full) {
-    console.log("\nRunning benchmarks...");
+    console.error("\nRunning benchmarks...");
     benchmarks = await runFullCheck();
 
     if (benchmarks) {
-      console.log("\nBenchmark Results:");
+      console.error("\nBenchmark Results:");
       for (const [name, result] of Object.entries(benchmarks)) {
         if (result) {
-          console.log(`  ${name}: mean=${result.meanMs.toFixed(2)}ms, p95=${result.p95Ms.toFixed(2)}ms`);
+          console.error(`  ${name}: mean=${result.meanMs.toFixed(2)}ms, p95=${result.p95Ms.toFixed(2)}ms`);
         }
       }
     }
@@ -528,21 +528,21 @@ export async function runCheck(options: CheckOptions): Promise<void> {
 
   // Write report
   writeFileSync(outputPath, JSON.stringify(report, null, 2));
-  console.log(`\nReport saved to: ${outputPath}`);
+  console.error(`\nReport saved to: ${outputPath}`);
 
   // Summary
   const passCount = Object.values(health).filter((h) => h.status === "pass").length;
   const failCount = Object.values(health).filter((h) => h.status === "fail").length;
   const skipCount = Object.values(health).filter((h) => h.status === "skip").length;
 
-  console.log(`\nSummary: ${passCount} passed, ${failCount} failed, ${skipCount} skipped`);
+  console.error(`\nSummary: ${passCount} passed, ${failCount} failed, ${skipCount} skipped`);
 
   if (failCount > 0) {
-    console.log("\n⚠️  Some health checks failed. Review the report for details.");
+    console.error("\n⚠️  Some health checks failed. Review the report for details.");
     process.exit(1);
   }
 
-  console.log("\n✓ All health checks passed.");
+  console.error("\n✓ All health checks passed.");
 }
 
 /**

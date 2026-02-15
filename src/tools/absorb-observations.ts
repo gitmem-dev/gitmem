@@ -13,6 +13,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { wrapDisplay } from "../services/display-protocol.js";
 import { addObservations, getObservations, getCurrentSession } from "../services/session-state.js";
 import { hasSupabase } from "../services/tier.js";
 import * as supabase from "../services/supabase-client.js";
@@ -91,10 +92,18 @@ export async function absorbObservations(
     },
   }).catch(() => {});
 
+  const displayLines = [`Absorbed ${absorbed} observations (${candidates.length} scar candidates)`];
+  if (suggestions.length > 0) {
+    displayLines.push("");
+    displayLines.push("Suggestions:");
+    for (const s of suggestions) displayLines.push(`  · ${s}`);
+  }
+
   return {
     absorbed,
     scar_candidates: candidates.length,
     suggestions,
     performance: perfData,
+    display: wrapDisplay(displayLines.join("\n")),
   };
 }

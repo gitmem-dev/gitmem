@@ -365,6 +365,14 @@ function cleanupSessionFiles(sessionId: string): void {
   // Legacy active-session.json cleanup removed — file is no longer written
 }
 
+// UUID and short-ID format validation for session_id (OD-548)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHORT_ID_REGEX = /^[0-9a-f]{8}$/i;
+
+function isValidSessionId(id: string): boolean {
+  return UUID_REGEX.test(id) || SHORT_ID_REGEX.test(id);
+}
+
 /**
  * Execute session_close tool
  */
@@ -373,6 +381,29 @@ export async function sessionClose(
 ): Promise<SessionCloseResult> {
   const timer = new Timer();
   const metricsId = uuidv4();
+
+  // OD-548: Validate session_id format before any DB calls
+  if (params.session_id && !isValidSessionId(params.session_id)) {
+    const latencyMs = timer.stop();
+    const perfData = buildPerformanceData("session_close", latencyMs, 0);
+    return {
+      success: false,
+      session_id: params.session_id,
+      close_compliance: {
+        close_type: params.close_type,
+        agent: "Unknown",
+        checklist_displayed: false,
+        questions_answered_by_agent: false,
+        human_asked_for_corrections: false,
+        learnings_stored: 0,
+        scars_applied: 0,
+      },
+      validation_errors: [
+        `Invalid session_id format: "${params.session_id}". Expected UUID (e.g., '393adb34-a80c-4c3a-b71a-bc0053b7a7ea') or short form (e.g., '393adb34'). Run session_start first.`,
+      ],
+      performance: perfData,
+    };
+  }
 
   // GIT-21: Recover session_id from active-sessions registry (hostname+PID) or legacy file
   if (!params.session_id && params.close_type !== "retroactive") {

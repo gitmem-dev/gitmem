@@ -11,6 +11,7 @@
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { writeTriplesForDecision } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
@@ -143,6 +144,7 @@ export async function createDecision(
       success: true,
       decision_id: decisionId,
       performance: perfData,
+      display: wrapDisplay(`Decision logged: "${params.title}"\nID: ${decisionId}`),
     };
   } catch (error) {
     console.error("[create_decision] Failed:", error);
@@ -152,6 +154,7 @@ export async function createDecision(
       success: false,
       decision_id: "",
       performance: perfData,
+      display: wrapDisplay(`Failed to log decision`),
     };
   }
 }

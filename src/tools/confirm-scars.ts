@@ -23,6 +23,7 @@ import {
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getSessionPath } from "../services/gitmem-dir.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import type {
   ConfirmScarsParams,
   ConfirmScarsResult,
@@ -160,12 +161,14 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
   const session = getCurrentSession();
   if (!session) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
+    const noSessionMsg = "⛔ No active session. Call session_start before confirm_scars.";
     return {
       valid: false,
       errors: ["No active session. Call session_start first."],
       confirmations: [],
       missing_scars: [],
-      formatted_response: "⛔ No active session. Call session_start before confirm_scars.",
+      formatted_response: noSessionMsg,
+      display: wrapDisplay(noSessionMsg),
       performance,
     };
   }
@@ -176,12 +179,14 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
 
   if (recallScars.length === 0) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
+    const noScarsMsg = "✅ No recall-surfaced scars to confirm. Proceed freely.";
     return {
       valid: true,
       errors: [],
       confirmations: [],
       missing_scars: [],
-      formatted_response: "✅ No recall-surfaced scars to confirm. Proceed freely.",
+      formatted_response: noScarsMsg,
+      display: wrapDisplay(noScarsMsg),
       performance,
     };
   }
@@ -250,6 +255,7 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
     confirmations: validConfirmations,
     missing_scars: missingScars,
     formatted_response,
+    display: wrapDisplay(formatted_response),
     performance,
   };
 }

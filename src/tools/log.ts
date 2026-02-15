@@ -22,6 +22,7 @@ import {
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
 import { formatTimestamp } from "../services/timezone.js";
+import { wrapDisplay, relativeTime, truncate, SEV, TYPE } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -55,7 +56,43 @@ export interface LogResult {
     since_days?: number;
     since_date?: string;
   };
+  display?: string;
   performance: PerformanceData;
+}
+
+// --- Display Formatting ---
+
+function buildLogDisplay(entries: LogEntry[], total: number, filters: LogResult["filters"]): string {
+  const lines: string[] = [];
+  lines.push(`gitmem log · ${total} entries · ${filters.project}`);
+  const fp: string[] = [];
+  if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
+  if (filters.severity) fp.push(`severity=${filters.severity}`);
+  if (filters.since_days) fp.push(`since ${filters.since_days}d`);
+  if (fp.length > 0) lines.push(`Filters: ${fp.join(", ")}`);
+  lines.push("");
+  if (entries.length === 0) {
+    lines.push("No learnings found.");
+    return wrapDisplay(lines.join("\n"));
+  }
+  for (const e of entries) {
+    const te = TYPE[e.learning_type] || "·";
+    const se = SEV[e.severity] || "⚪";
+    const t = truncate(e.title, 50);
+    const time = relativeTime(e.created_at);
+    const issue = e.source_linear_issue ? `  ${e.source_linear_issue}` : "";
+    lines.push(`${te} ${se} ${t.padEnd(52)} ${time.padStart(6)}${issue}`);
+  }
+  lines.push("");
+  const counts: Record<string, number> = {};
+  for (const e of entries) {
+    counts[e.learning_type] = (counts[e.learning_type] || 0) + 1;
+  }
+  const cp = Object.entries(counts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([type, n]) => `${n} ${type}${n !== 1 ? "s" : ""}`);
+  lines.push(`${total} total: ${cp.join(", ")}`);
+  return wrapDisplay(lines.join("\n"));
 }
 
 // --- Implementation ---
@@ -104,16 +141,19 @@ export async function log(params: LogParams): Promise<LogResult> {
       const queryLatencyMs = queryTimer.stop();
       const latencyMs = timer.stop();
 
+      const filtersObj = {
+        project,
+        learning_type: typeFilter,
+        severity: severityFilter,
+        since_days: sinceDays,
+        since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
+      };
+
       return {
         entries: filtered.map(e => ({ ...e, created_at: formatTimestamp(e.created_at) })),
         total: filtered.length,
-        filters: {
-          project,
-          learning_type: typeFilter,
-          severity: severityFilter,
-          since_days: sinceDays,
-          since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
-        },
+        filters: filtersObj,
+        display: buildLogDisplay(filtered, filtered.length, filtersObj),
         performance: buildPerformanceData("log", latencyMs, filtered.length, {
           search_mode: "local",
         }),
@@ -124,6 +164,7 @@ export async function log(params: LogParams): Promise<LogResult> {
         entries: [],
         total: 0,
         filters: { project },
+        display: buildLogDisplay([], 0, { project }),
         performance: buildPerformanceData("log", latencyMs, 0),
       };
     }
@@ -136,6 +177,7 @@ export async function log(params: LogParams): Promise<LogResult> {
       entries: [],
       total: 0,
       filters: { project },
+      display: buildLogDisplay([], 0, { project }),
       performance: buildPerformanceData("log", latencyMs, 0),
     };
   }
@@ -192,16 +234,19 @@ export async function log(params: LogParams): Promise<LogResult> {
       metadata: { project, limit, typeFilter, severityFilter, sinceDays },
     }).catch(() => {});
 
+    const filtersObj = {
+      project,
+      learning_type: typeFilter,
+      severity: severityFilter,
+      since_days: sinceDays,
+      since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
+    };
+
     return {
       entries: records.map(e => ({ ...e, created_at: formatTimestamp(e.created_at) })),
       total: records.length,
-      filters: {
-        project,
-        learning_type: typeFilter,
-        severity: severityFilter,
-        since_days: sinceDays,
-        since_date: sinceDate ? formatTimestamp(sinceDate) : undefined,
-      },
+      filters: filtersObj,
+      display: buildLogDisplay(records, records.length, filtersObj),
       performance: perfData,
     };
   } catch (error) {
@@ -212,6 +257,7 @@ export async function log(params: LogParams): Promise<LogResult> {
       entries: [],
       total: 0,
       filters: { project },
+      display: buildLogDisplay([], 0, { project }),
       performance: buildPerformanceData("log", latencyMs, 0),
     };
   }

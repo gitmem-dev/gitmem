@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
+import { wrapDisplay, TYPE, SEV } from "../services/display-protocol.js";
 import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
@@ -86,7 +87,9 @@ export async function createLearning(
         success: false,
         learning_id: "",
         embedding_generated: false,
+        errors,
         performance: perfData,
+        display: wrapDisplay(`Failed to create ${params.learning_type}: ${errors.join("; ")}`),
       };
     }
   }
@@ -244,22 +247,29 @@ export async function createLearning(
       },
     }).catch(() => {});
 
+    const te = TYPE[params.learning_type] || "·";
+    const se = params.severity ? (SEV[params.severity] || "") + " " : "";
+
     return {
       success: true,
       learning_id: learningId,
       embedding_generated: embeddingGenerated,
       performance: perfData,
+      display: wrapDisplay(`${te} Created ${params.learning_type}: "${params.title}"\n${se}ID: ${learningId}`),
     };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("[create_learning] Failed:", error);
-    console.error("[create_learning] Error details:", error instanceof Error ? error.message : String(error));
+    console.error("[create_learning] Error details:", errorMsg);
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("create_learning", latencyMs, 0);
     return {
       success: false,
       learning_id: "",
       embedding_generated: false,
+      errors: [errorMsg],
       performance: perfData,
+      display: wrapDisplay(`Failed to create learning: ${errorMsg}`),
     };
   }
 }

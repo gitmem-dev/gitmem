@@ -8,6 +8,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { wrapDisplay } from "../services/display-protocol.js";
 import * as supabase from "../services/supabase-client.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
@@ -96,15 +97,19 @@ export async function recordScarUsage(
       success: true,
       usage_id: usageId,
       performance: perfData,
+      display: wrapDisplay(`Scar usage recorded\nID: ${usageId}`),
     };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("[record_scar_usage] Failed:", error);
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("record_scar_usage", latencyMs, 0);
     return {
       success: false,
       usage_id: "",
+      errors: [errorMsg],
       performance: perfData,
+      display: wrapDisplay(`Failed to record scar usage: ${errorMsg}`),
     };
   }
 }

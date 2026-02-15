@@ -36,6 +36,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
+import { wrapDisplay, truncate } from "../services/display-protocol.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ThreadWithEmbedding } from "../services/thread-dedup.js";
 import type { ThreadObject, PerformanceData, Project } from "../types/index.js";
@@ -66,6 +67,7 @@ export interface CreateThreadResult {
     similarity: number | null;
     matched_thread_id: string | null;
   };
+  display?: string;
 }
 
 // --- Handler ---
@@ -84,6 +86,7 @@ export async function createThread(
       total_open: 0,
       supabase_synced: false,
       performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
+      display: wrapDisplay(`Failed: thread text is required`),
     };
   }
 
@@ -168,6 +171,7 @@ export async function createThread(
         similarity: dedupResult.similarity,
         matched_thread_id: dedupResult.matched_thread_id,
       },
+      display: wrapDisplay(`Dedup: matched existing thread "${truncate(trimmedText, 60)}"\nID: ${dedupResult.matched_thread_id}`),
     };
   }
 
@@ -245,5 +249,6 @@ export async function createThread(
       similarity: dedupResult.similarity,
       matched_thread_id: null,
     },
+    display: wrapDisplay(`Thread created: "${truncate(trimmedText, 60)}"\nID: ${thread.id} · ${totalOpen} open threads`),
   };
 }

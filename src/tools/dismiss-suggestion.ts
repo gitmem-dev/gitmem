@@ -12,6 +12,7 @@ import {
   saveSuggestions,
   dismissSuggestionById,
 } from "../services/thread-suggestions.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import {
   Timer,
   buildPerformanceData,
@@ -29,6 +30,7 @@ export interface DismissSuggestionResult {
   suggestion?: ThreadSuggestion;
   error?: string;
   performance: PerformanceData;
+  display?: string;
 }
 
 // --- Handler ---
@@ -44,6 +46,7 @@ export async function dismissSuggestion(
       success: false,
       error: "suggestion_id is required",
       performance: buildPerformanceData("dismiss_suggestion" as any, latencyMs, 0),
+      display: wrapDisplay(`Failed: suggestion_id is required`),
     };
   }
 
@@ -56,6 +59,7 @@ export async function dismissSuggestion(
       success: false,
       error: `Suggestion not found: "${params.suggestion_id}"`,
       performance: buildPerformanceData("dismiss_suggestion" as any, latencyMs, 0),
+      display: wrapDisplay(`Suggestion not found: ${params.suggestion_id}`),
     };
   }
 
@@ -66,5 +70,6 @@ export async function dismissSuggestion(
     success: true,
     suggestion: result,
     performance: buildPerformanceData("dismiss_suggestion" as any, latencyMs, 1),
+    display: wrapDisplay(`Dismissed suggestion: ${params.suggestion_id}`),
   };
 }

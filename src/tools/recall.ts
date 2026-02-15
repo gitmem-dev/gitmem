@@ -38,6 +38,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionPath } from "../services/gitmem-dir.js";
+import { wrapDisplay } from "../services/display-protocol.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
 /**
@@ -118,6 +119,7 @@ export interface RecallResult {
   scars: FormattedScar[];
   performance_ms: number;
   formatted_response: string;
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -262,6 +264,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   const plan = params.plan || (params as unknown as Record<string, unknown>).action as string;
   if (!plan || typeof plan !== "string" || plan.trim().length === 0) {
     const latencyMs = timer.stop();
+    const msg = "⚠️ Missing required parameter: plan (what you're about to do)";
     return {
       activated: false,
       plan: plan || "",
@@ -269,7 +272,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       match_count: params.match_count || 3,
       scars: [],
       performance_ms: latencyMs,
-      formatted_response: "⚠️ Missing required parameter: plan (what you're about to do)",
+      formatted_response: msg,
+      display: wrapDisplay(msg),
       performance: buildPerformanceData("recall", latencyMs, 0),
     };
   }
@@ -302,6 +306,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         search_mode: "local",
       });
 
+      const freeFormatted = formatResponse(scars, plan);
       return {
         activated: scars.length > 0,
         plan,
@@ -309,13 +314,15 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         match_count: matchCount,
         scars,
         performance_ms: latencyMs,
-        formatted_response: formatResponse(scars, plan),
+        formatted_response: freeFormatted,
+        display: wrapDisplay(freeFormatted),
         performance: perfData,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("recall", latencyMs, 0);
+      const errMsg = `⚠️ Error querying institutional memory: ${message}`;
       return {
         activated: false,
         plan,
@@ -323,7 +330,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         match_count: matchCount,
         scars: [],
         performance_ms: latencyMs,
-        formatted_response: `⚠️ Error querying institutional memory: ${message}`,
+        formatted_response: errMsg,
+        display: wrapDisplay(errMsg),
         performance: perfData,
       };
     }
@@ -333,6 +341,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   if (!supabase.isConfigured()) {
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("recall", latencyMs, 0);
+    const notConfiguredMsg = "⚠️ GitMem not configured - check SUPABASE_URL and SUPABASE_KEY environment variables.";
     return {
       activated: false,
       plan,
@@ -340,7 +349,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       match_count: matchCount,
       scars: [],
       performance_ms: latencyMs,
-      formatted_response: "⚠️ GitMem not configured - check SUPABASE_URL and SUPABASE_KEY environment variables.",
+      formatted_response: notConfiguredMsg,
+      display: wrapDisplay(notConfiguredMsg),
       performance: perfData,
     };
   }
@@ -519,6 +529,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     });
 
     // Record metrics asynchronously
+    const mainFormatted = formatResponse(scars, plan);
     const result = {
       activated: scars.length > 0,
       plan,
@@ -526,7 +537,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       match_count: matchCount,
       scars,
       performance_ms: latencyMs,
-      formatted_response: formatResponse(scars, plan),
+      formatted_response: mainFormatted,
+      display: wrapDisplay(mainFormatted),
       performance: perfData,
     };
 
@@ -560,6 +572,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
 
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("recall", latencyMs, 0);
+    const mainErrMsg = `⚠️ Error querying institutional memory: ${message}`;
 
     return {
       activated: false,
@@ -568,7 +581,8 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       match_count: matchCount,
       scars: [],
       performance_ms: latencyMs,
-      formatted_response: `⚠️ Error querying institutional memory: ${message}`,
+      formatted_response: mainErrMsg,
+      display: wrapDisplay(mainErrMsg),
       performance: perfData,
     };
   }

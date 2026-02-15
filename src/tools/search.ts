@@ -23,6 +23,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
+import { wrapDisplay, truncate, SEV, TYPE } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -59,7 +60,41 @@ export interface SearchResult {
     severity?: string;
     learning_type?: string;
   };
+  display?: string;
   performance: PerformanceData;
+}
+
+// --- Display Formatting ---
+
+function buildSearchDisplay(
+  results: SearchResultEntry[],
+  total_found: number,
+  query: string,
+  filters: SearchResult["filters_applied"]
+): string {
+  const lines: string[] = [];
+  lines.push(`gitmem search · ${total_found} results · "${truncate(query, 60)}"`);
+  const fp: string[] = [];
+  if (filters.severity) fp.push(`severity=${filters.severity}`);
+  if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
+  if (fp.length > 0) lines.push(`Filters: ${fp.join(", ")}`);
+  lines.push("");
+  if (results.length === 0) {
+    lines.push("No results found.");
+    return wrapDisplay(lines.join("\n"));
+  }
+  for (const r of results) {
+    const te = TYPE[r.learning_type] || "·";
+    const se = SEV[r.severity] || "⚪";
+    const t = truncate(r.title, 50);
+    const sim = `(${r.similarity.toFixed(2)})`;
+    const issue = r.source_linear_issue ? `  ${r.source_linear_issue}` : "";
+    lines.push(`${te} ${se} ${t.padEnd(52)} ${sim}${issue}`);
+    lines.push(`   ${truncate(r.description, 80)}`);
+  }
+  lines.push("");
+  lines.push(`${total_found} results found`);
+  return wrapDisplay(lines.join("\n"));
 }
 
 // --- Implementation ---
@@ -111,13 +146,15 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       filtered = filtered.slice(0, matchCount);
       const latencyMs = timer.stop();
 
+      const filtersApplied = { severity: severityFilter, learning_type: typeFilter };
       return {
         query,
         project,
         match_count: matchCount,
         results: filtered,
         total_found: filtered.length,
-        filters_applied: { severity: severityFilter, learning_type: typeFilter },
+        filters_applied: filtersApplied,
+        display: buildSearchDisplay(filtered, filtered.length, query, filtersApplied),
         performance: buildPerformanceData("search", latencyMs, filtered.length, {
           search_mode: "local",
         }),
@@ -131,6 +168,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
         results: [],
         total_found: 0,
         filters_applied: {},
+        display: buildSearchDisplay([], 0, query, {}),
         performance: buildPerformanceData("search", latencyMs, 0),
       };
     }
@@ -146,6 +184,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       results: [],
       total_found: 0,
       filters_applied: {},
+      display: buildSearchDisplay([], 0, query, {}),
       performance: buildPerformanceData("search", latencyMs, 0),
     };
   }
@@ -241,13 +280,15 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       metadata: { project, match_count: matchCount, search_mode, severityFilter, typeFilter },
     }).catch(() => {});
 
+    const filtersAppliedFinal = { severity: severityFilter, learning_type: typeFilter };
     return {
       query,
       project,
       match_count: matchCount,
       results,
       total_found: results.length,
-      filters_applied: { severity: severityFilter, learning_type: typeFilter },
+      filters_applied: filtersAppliedFinal,
+      display: buildSearchDisplay(results, results.length, query, filtersAppliedFinal),
       performance: perfData,
     };
   } catch (error) {
@@ -261,6 +302,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       results: [],
       total_found: 0,
       filters_applied: {},
+      display: buildSearchDisplay([], 0, query, {}),
       performance: buildPerformanceData("search", latencyMs, 0),
     };
   }

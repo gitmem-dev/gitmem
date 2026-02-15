@@ -321,6 +321,9 @@ export interface CreateLearningResult {
   success: boolean;
   learning_id: string;
   embedding_generated: boolean;
+  /** Error details when success=false (OD-554: surface DB/validation errors) */
+  errors?: string[];
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -340,6 +343,7 @@ export interface CreateDecisionParams {
 export interface CreateDecisionResult {
   success: boolean;
   decision_id: string;
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -377,6 +381,7 @@ export interface ConfirmScarsResult {
   confirmations: ScarConfirmation[];
   missing_scars: string[]; // scar titles not confirmed
   formatted_response: string;
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -399,6 +404,9 @@ export interface RecordScarUsageParams {
 export interface RecordScarUsageResult {
   success: boolean;
   usage_id: string;
+  /** Error details when success=false (OD-554: surface DB errors) */
+  errors?: string[];
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -427,6 +435,7 @@ export interface RecordScarUsageBatchResult {
   resolved_count: number;
   failed_count: number;
   failed_identifiers?: string[];
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -511,6 +520,7 @@ export interface AbsorbObservationsResult {
   absorbed: number;
   scar_candidates: number;
   suggestions: string[];
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -528,6 +538,7 @@ export interface ListThreadsResult {
   threads: ThreadObject[];
   total_open: number;
   total_resolved: number;
+  display?: string;
   performance: PerformanceData;
 }
 
@@ -546,6 +557,7 @@ export interface ResolveThreadResult {
   /** Threads that were also resolved via duplicate cascade */
   also_resolved?: ThreadObject[];
   error?: string;
+  display?: string;
   performance: PerformanceData;
 }
 

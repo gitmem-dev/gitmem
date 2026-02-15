@@ -23,6 +23,7 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
+import { wrapDisplay, relativeTime, truncate } from "../services/display-protocol.js";
 import type { ListThreadsParams, ListThreadsResult, ThreadObject } from "../types/index.js";
 
 /** Minimal session shape for aggregation (matches session_start) */
@@ -32,6 +33,30 @@ interface SessionRecord {
   session_date: string;
   open_threads?: (string | ThreadObject)[];
   close_compliance?: Record<string, unknown> | null;
+}
+
+// --- Display Formatting ---
+
+function buildThreadsDisplay(
+  threads: ThreadObject[],
+  totalOpen: number,
+  totalResolved: number
+): string {
+  const lines: string[] = [];
+  lines.push(`gitmem threads · ${totalOpen} open · ${totalResolved} resolved`);
+  lines.push("");
+  if (threads.length === 0) {
+    lines.push("No threads found.");
+    return wrapDisplay(lines.join("\n"));
+  }
+  for (const t of threads) {
+    const text = truncate(t.text, 48);
+    const time = relativeTime(t.created_at);
+    lines.push(`  ${t.id}  ${text.padEnd(50)} ${time.padStart(8)}`);
+  }
+  lines.push("");
+  lines.push(`${totalOpen} open threads`);
+  return wrapDisplay(lines.join("\n"));
 }
 
 export async function listThreads(
@@ -138,6 +163,7 @@ export async function listThreads(
     threads: threads.map(formatThreadForDisplay),
     total_open: totalOpen,
     total_resolved: totalResolved,
+    display: buildThreadsDisplay(threads, totalOpen, totalResolved),
     performance: perfData,
   };
 }

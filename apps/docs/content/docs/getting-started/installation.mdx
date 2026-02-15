@@ -15,7 +15,7 @@ npx gitmem init
 The interactive wizard walks you through 6 steps:
 
 1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
-2. **MCP Server** — Adds gitmem to `.mcp.json` (auto-detects free vs pro tier)
+2. **MCP Server** — Adds gitmem to `.mcp.json`
 3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
 4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
 5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
@@ -124,8 +124,6 @@ You should see a list of available commands with your current tier and tool coun
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `GITMEM_DIR` | `.gitmem/` | Storage directory |
-| `GITMEM_TIER` | `free` | Tier: `free`, `pro`, or `dev` |
-| `SUPABASE_URL` | — | Pro tier: Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Pro tier: Supabase service key |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Project namespace for scoping |
 
 See [Configuration](/docs/getting-started/configuration) for full details.

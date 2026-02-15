@@ -9,13 +9,10 @@ GitMem works out of the box with zero configuration on the free tier. For Pro ti
 
 ## Environment Variables
 
-| Variable | Default | Tier | Purpose |
-|----------|---------|------|---------|
-| `GITMEM_TIER` | `free` | All | Set to `pro` or `dev` to enable Supabase features |
-| `GITMEM_DIR` | `.gitmem/` | All | Override the storage directory location |
-| `GITMEM_DEFAULT_PROJECT` | `default` | All | Default project namespace for scoping |
-| `SUPABASE_URL` | — | Pro | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Pro | Supabase service role key (not anon key) |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Override the storage directory location |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Default project namespace for scoping |
 
 ## Storage
 
@@ -35,9 +32,9 @@ All data stored in `.gitmem/` relative to your project root:
 
 Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
 
-### Pro Tier (Supabase)
+### Pro Tier (Coming Soon)
 
-Data stored in Supabase PostgreSQL with pgvector for semantic search. Local `.gitmem/` serves as a cache layer for fast recall.
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.dev) to get notified.
 
 ## Project Namespaces
 

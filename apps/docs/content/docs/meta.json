@@ -2,13 +2,9 @@
   "pages": [
     "index",
     "getting-started",
-    "---Concepts---",
     "concepts",
-    "---Reference---",
     "tools",
-    "---Guides---",
     "guides",
-    "---Project---",
     "contributing",
     "changelog"
   ]

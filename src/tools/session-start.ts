@@ -868,12 +868,12 @@ export async function sessionStart(
       priorSession ? { surfacedScars: forceCarrySurfacedScars, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
   }
 
-  // 2. OD-645: Load last session + decisions + rapport in parallel (was sequential)
+  // 2. OD-645: Load last session + decisions in parallel (was sequential)
   // Scars and wins removed from pipeline — load on-demand via recall/search
-  const [lastSessionResult, decisionsResult, rapportSummaries] = await Promise.all([
+  // OD-666: Rapport loading disabled — recording kept in session_close but not injected
+  const [lastSessionResult, decisionsResult] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
-    loadRecentRapport(project), // OD-666: cross-agent rapport
   ]);
 
   const lastSession = lastSessionResult.session;
@@ -989,8 +989,7 @@ export async function sessionStart(
     }),
     // OD-645: scars, wins, suggested_threads removed from start result
     recent_decisions: decisions,
-    // OD-666: Cross-agent rapport summaries
-    ...(rapportSummaries.length > 0 && { rapport_summaries: rapportSummaries }),
+    // OD-666: Rapport disabled — not injected into session context
     ...(recordingPath && { recording_path: recordingPath }),
     gitmem_dir: getGitmemDir(),
     project,
@@ -1104,12 +1103,12 @@ export async function sessionRefresh(
     };
   }
 
-  // 2. OD-645: Load last session + decisions + rapport in parallel (same as session_start)
+  // 2. OD-645: Load last session + decisions in parallel (same as session_start)
   // Scars and wins removed — load on-demand via recall/search
-  const [lastSessionResult, decisionsResult, refreshRapport] = await Promise.all([
+  // OD-666: Rapport loading disabled — recording kept in session_close but not injected
+  const [lastSessionResult, decisionsResult] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
-    loadRecentRapport(project), // OD-666
   ]);
 
   const lastSession = lastSessionResult.session;
@@ -1160,8 +1159,7 @@ export async function sessionRefresh(
     ...(projectState && { project_state: projectState }),
     // open_threads filled after merge below
     recent_decisions: decisions,
-    // OD-666: Cross-agent rapport summaries
-    ...(refreshRapport.length > 0 && { rapport_summaries: refreshRapport }),
+    // OD-666: Rapport disabled — not injected into session context
     ...(recordingPath && { recording_path: recordingPath }),
     project,
     performance,

@@ -82,7 +82,19 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
       success: false,
       lens,
       data: null,
-      error: "Analytics requires Supabase connection (Pro/Dev tier)",
+      text: [
+        "## Analytics — Pro Feature",
+        "",
+        "`gitmem-analyze` provides session analytics across your full history:",
+        "- **summary** — session counts, agent activity, scar usage rates",
+        "- **reflections** — aggregated closing reflections (what broke, what worked)",
+        "- **blindspots** — scars that exist but aren't being applied",
+        "",
+        "This requires a Supabase connection to query session history at scale.",
+        "",
+        "To upgrade, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in your environment,",
+        "then run `npx gitmem init` again to reconfigure.",
+      ].join("\n"),
       performance: buildPerformanceData("analyze" as any, 0, 0),
     };
   }

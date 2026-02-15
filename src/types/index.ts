@@ -354,6 +354,7 @@ export interface SurfacedScar {
   scar_severity: string;
   surfaced_at: string; // ISO timestamp
   source: "session_start" | "recall";
+  variant_id?: string; // UUID of assigned variant from scar_enforcement_variants
 }
 
 // Scar confirmation decisions (refute-or-obey protocol for CLI)
@@ -399,6 +400,7 @@ export interface RecordScarUsageParams {
   reference_type: ReferenceType;
   reference_context: string;
   execution_successful?: boolean;
+  variant_id?: string; // UUID of assigned variant for A/B testing
 }
 
 export interface RecordScarUsageResult {
@@ -422,6 +424,7 @@ export interface ScarUsageEntry {
   reference_type: ReferenceType;
   reference_context: string;
   execution_successful?: boolean;
+  variant_id?: string; // UUID of assigned variant for A/B testing
 }
 
 export interface RecordScarUsageBatchParams {

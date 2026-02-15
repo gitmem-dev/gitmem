@@ -15,6 +15,7 @@ import { getAgentIdentity } from "../services/agent-detection.js";
 import { wrapDisplay, TYPE, SEV } from "../services/display-protocol.js";
 import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
+import { generateVariantsForScar } from "../services/variant-generation.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
@@ -207,6 +208,23 @@ export async function createLearning(
           project: (params.project || getProject() || "default"),
         })
       );
+
+      // Auto-generate A/B testing variants for scars (tracked fire-and-forget)
+      if (params.learning_type === "scar") {
+        getEffectTracker().track("variant_generation", "learning", () =>
+          generateVariantsForScar({
+            id: learningId,
+            title: params.title,
+            description: params.description,
+            counter_arguments: params.counter_arguments,
+            action_protocol: params.action_protocol,
+            self_check_criteria: params.self_check_criteria,
+            why_this_matters: params.why_this_matters,
+            keywords: params.keywords,
+            domain: params.domain,
+          })
+        );
+      }
 
       // Invalidate local cache so next recall picks up the new learning
       const project = (params.project || getProject() || "default") as Project;

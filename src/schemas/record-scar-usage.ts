@@ -19,6 +19,7 @@ export const RecordScarUsageParamsSchema = z.object({
   reference_type: ReferenceTypeSchema,
   reference_context: z.string(),
   execution_successful: z.boolean().optional(),
+  variant_id: z.string().uuid().optional(),
 });
 
 export type RecordScarUsageParams = z.infer<typeof RecordScarUsageParamsSchema>;

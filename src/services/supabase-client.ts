@@ -591,6 +591,7 @@ export async function cachedListWins<T = unknown>(
         filters: {
           learning_type: "win",
           project,
+          is_active: "eq.true",
         },
         limit,
         orderBy: { column: "created_at", ascending: false },

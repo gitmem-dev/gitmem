@@ -799,16 +799,8 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
     }
   }
 
-  // OD-666: Rapport section — cross-agent working style preferences
-  const hasRapport = result.rapport_summaries && result.rapport_summaries.length > 0;
-  if (hasRapport) {
-    visual.push("");
-    visual.push(`\x1b[1mRapport\x1b[0m`);
-    for (const r of result.rapport_summaries!) {
-      const summary = r.summary.length > 60 ? r.summary.slice(0, 57) + "..." : r.summary;
-      visual.push(`  ${r.agent}: ${summary}`);
-    }
-  }
+  // OD-666: Rapport is included in the JSON result for LLM context
+  // but omitted from the visual display — it's noise for the human user.
 
   // Footer
   if (!hasThreads && !hasDecisions) {

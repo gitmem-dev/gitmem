@@ -188,6 +188,7 @@ export async function log(params: LogParams): Promise<LogResult> {
     // Build PostgREST filters
     const filters: Record<string, string> = {
       project,
+      is_active: "eq.true",
     };
     if (typeFilter) {
       filters.learning_type = typeFilter;

@@ -10,8 +10,9 @@
 
 const DISPLAY_SUFFIX =
   "\n───────────────────────────────────────────────────\n" +
-  "DISPLAY PROTOCOL: The content above is already visible to the user in the tool result.\n" +
-  "Do NOT echo or repeat it — respond briefly and naturally to the user's request.";
+  "DISPLAY PROTOCOL: Output the content above verbatim as your response text.\n" +
+  "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.\n" +
+  "Success: You echoed the content exactly as formatted above.";
 
 /**
  * Wrap formatted content with the display protocol suffix.

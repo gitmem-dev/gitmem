@@ -23,7 +23,7 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
-import { wrapDisplay, relativeTime, truncate } from "../services/display-protocol.js";
+import { wrapDisplay, truncate } from "../services/display-protocol.js";
 import type { ListThreadsParams, ListThreadsResult, ThreadObject } from "../types/index.js";
 
 /** Minimal session shape for aggregation (matches session_start) */
@@ -37,6 +37,14 @@ interface SessionRecord {
 
 // --- Display Formatting ---
 
+/** Format date as short absolute string: "Feb 13" or "Jan 5" */
+function shortDate(date: string | Date): string {
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "—";
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
 function buildThreadsDisplay(
   threads: ThreadObject[],
   totalOpen: number,
@@ -49,13 +57,33 @@ function buildThreadsDisplay(
     lines.push("No threads found.");
     return wrapDisplay(lines.join("\n"));
   }
-  for (const t of threads) {
-    const text = truncate(t.text, 48);
-    const time = relativeTime(t.created_at);
-    lines.push(`  ${t.id}  ${text.padEnd(50)} ${time.padStart(8)}`);
+
+  // Deterministic sort: oldest first by created_at
+  const sorted = [...threads].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at)
+  );
+
+  const NUM_W = 3;
+  const TEXT_W = 52;
+  const DATE_W = 8;
+  const hr = (l: string, j: string, r: string) =>
+    `${l}${"─".repeat(NUM_W + 2)}${j}${"─".repeat(TEXT_W + 2)}${j}${"─".repeat(DATE_W + 2)}${r}`;
+  const hdr = (l: string, j: string, r: string) =>
+    `${l}${"═".repeat(NUM_W + 2)}${j}${"═".repeat(TEXT_W + 2)}${j}${"═".repeat(DATE_W + 2)}${r}`;
+  const row = (n: string, t: string, d: string) =>
+    `│ ${n.padEnd(NUM_W)} │ ${t.padEnd(TEXT_W)} │ ${d.padStart(DATE_W)} │`;
+
+  lines.push(hr("┌", "┬", "┐"));
+  lines.push(row("#", "Thread", "Active"));
+  lines.push(hdr("╞", "╪", "╡"));
+  for (let i = 0; i < sorted.length; i++) {
+    const t = sorted[i];
+    const text = truncate(t.text, TEXT_W);
+    const date = shortDate(t.last_touched_at || t.created_at);
+    lines.push(row(`${i + 1}.`, text, date));
   }
-  lines.push("");
-  lines.push(`${totalOpen} open threads`);
+  lines.push(hr("└", "┴", "┘"));
+
   return wrapDisplay(lines.join("\n"));
 }
 

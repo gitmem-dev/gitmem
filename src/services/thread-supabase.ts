@@ -101,6 +101,7 @@ export function rowToThreadObject(row: ThreadRow): ThreadObject {
     text: row.text,
     status: mapStatusFromSupabase(row.status),
     created_at: row.created_at,
+    ...(row.last_touched_at && { last_touched_at: row.last_touched_at }),
     ...(row.resolved_at && { resolved_at: row.resolved_at }),
     ...(row.source_session && { source_session: row.source_session }),
     ...(row.resolved_by_session && { resolved_by_session: row.resolved_by_session }),

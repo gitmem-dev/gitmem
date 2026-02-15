@@ -78,6 +78,8 @@ export interface ThreadObject {
   status: ThreadStatus;
   /** ISO timestamp when thread was first created */
   created_at: string;
+  /** ISO timestamp when thread was last touched/referenced (Supabase-sourced) */
+  last_touched_at?: string;
   /** ISO timestamp when thread was resolved */
   resolved_at?: string;
   /** Session ID that created this thread */

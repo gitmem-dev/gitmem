@@ -140,6 +140,7 @@ export function formatThreadForDisplay(thread: ThreadObject): ThreadObject {
   return {
     ...thread,
     created_at: formatTimestamp(thread.created_at),
+    ...(thread.last_touched_at && { last_touched_at: formatTimestamp(thread.last_touched_at) }),
     ...(thread.resolved_at && { resolved_at: formatTimestamp(thread.resolved_at) }),
   };
 }

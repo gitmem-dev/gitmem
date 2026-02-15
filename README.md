@@ -4,6 +4,8 @@ Institutional memory for AI coding agents. Never repeat the same mistake.
 
 GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent persistent memory across sessions. It remembers mistakes (scars), successes (wins), and architectural decisions — so your agent learns from experience instead of starting from scratch every time.
 
+**[Documentation](https://gitmem.dev)** · **[npm](https://www.npmjs.com/package/gitmem-mcp)** · **[GitHub](https://github.com/nTEG-dev/gitmem)**
+
 ## How It Works
 
 1. **Before each task**, the agent calls `recall` with a plan — GitMem surfaces relevant warnings from past sessions
@@ -24,34 +26,64 @@ Over time, your agent builds institutional memory that prevents repeated mistake
 
 ## Quick Start
 
-### Free Tier (zero config)
+### One command setup
 
 ```bash
-npx gitmem-mcp init
-npx gitmem-mcp configure
+npx gitmem init
 ```
 
-This creates a `.gitmem/` directory with starter scars and prints the MCP config to add to your editor.
+The interactive wizard detects your existing config and sets up everything:
 
-Add the config to your project's `.mcp.json` (Claude Code) or IDE settings (Cursor, Windsurf), then copy `CLAUDE.md.template` into your project root. Start coding — memory is active.
+1. Creates `.gitmem/` with 12 starter scars
+2. Adds gitmem to `.mcp.json`
+3. Adds memory instructions to `CLAUDE.md`
+4. Configures tool permissions in `.claude/settings.json`
+5. Installs lifecycle hooks
+6. Updates `.gitignore`
+
+Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destroying your existing config.
+
+```bash
+# Non-interactive (accept all defaults)
+npx gitmem init --yes
+
+# Preview what would change
+npx gitmem init --dry-run
+
+# Set project name
+npx gitmem init --project my-app
+```
+
+Start Claude Code — memory is active.
 
 ### Pro Tier (with Supabase)
 
+For semantic search and cloud persistence:
+
 1. Create a free Supabase project at [database.new](https://database.new)
-2. `npx gitmem-mcp setup` — copy the SQL output into Supabase SQL Editor
-3. Get an API key for embeddings (OpenAI, OpenRouter, or Ollama)
-4. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as environment variables
-5. `npx gitmem-mcp configure` — generates your MCP config with env vars
-6. `npx gitmem-mcp init` — loads starter scars into Supabase
-7. Copy `CLAUDE.md.template` into your project
-8. Start coding — memory is active!
+2. `npx gitmem setup` — copy the SQL output into Supabase SQL Editor
+3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as environment variables
+4. `npx gitmem init` — auto-detects pro tier from env vars
+
+### Uninstall
+
+```bash
+npx gitmem uninstall
+```
+
+Cleanly removes gitmem from all config files. Your memory data (`.gitmem/`) is preserved by default.
+
+```bash
+# Also delete .gitmem/ data
+npx gitmem uninstall --all
+```
 
 ## Installation
 
 ### npx (no install required)
 
 ```bash
-npx gitmem-mcp init
+npx gitmem init
 ```
 
 ### Global install
@@ -61,9 +93,9 @@ npm install -g gitmem-mcp
 gitmem init
 ```
 
-### MCP Configuration
+### Manual MCP Configuration
 
-Add to your project's `.mcp.json` (Claude Code) or IDE MCP settings (Cursor, Windsurf):
+If you prefer to configure manually instead of using `npx gitmem init`:
 
 **Free Tier:**
 ```json
@@ -110,19 +142,23 @@ claude mcp list
 
 | Command | Description |
 |---------|-------------|
-| `gitmem init` | Initialize memory — loads starter scars (auto-detects tier) |
+| `gitmem init` | Interactive setup wizard — detects, prompts, merges |
+| `gitmem init --yes` | Non-interactive setup (accept all defaults) |
+| `gitmem init --dry-run` | Preview what would be configured |
+| `gitmem uninstall` | Clean removal of gitmem from project |
+| `gitmem uninstall --all` | Also delete `.gitmem/` data directory |
 | `gitmem setup` | Output SQL for Supabase schema setup (Pro tier) |
 | `gitmem configure` | Generate MCP config for your editor |
 | `gitmem check` | Run diagnostic health check |
 | `gitmem check --full` | Full diagnostic with benchmarks |
-| `gitmem install-hooks` | Install Claude Code hooks plugin |
-| `gitmem uninstall-hooks` | Remove Claude Code hooks plugin |
+| `gitmem install-hooks` | Install Claude Code hooks (standalone) |
+| `gitmem uninstall-hooks` | Remove Claude Code hooks (standalone) |
 | `gitmem server` | Start MCP server (default when no command given) |
 | `gitmem help` | Show help |
 
 ## MCP Tools
 
-GitMem exposes tools via the Model Context Protocol. Your AI agent calls these automatically based on the instructions in `CLAUDE.md.template`.
+GitMem exposes tools via the Model Context Protocol. Your AI agent calls these automatically based on the instructions in `CLAUDE.md`.
 
 ### Core Tools
 
@@ -169,23 +205,18 @@ GitMem tracks four types of institutional knowledge:
 
 All types are searched together when `recall` is called, giving the agent comprehensive context.
 
-## Hooks Plugin
+## Lifecycle Hooks
 
-GitMem includes a Claude Code hooks plugin that automates memory protocols:
+GitMem includes Claude Code hooks that automate memory protocols. These are installed automatically by `npx gitmem init`.
 
 - **SessionStart** — Automatically calls `session_start` when a session begins
 - **PreToolUse** — Reminds the agent to call `recall` before consequential actions
 - **PostToolUse** — Tracks scar acknowledgment
 - **Stop** — Reminds the agent to close sessions properly
 
-Install:
+To install hooks standalone (without the full wizard):
 ```bash
-npx gitmem-mcp install-hooks
-```
-
-Uninstall:
-```bash
-npx gitmem-mcp uninstall-hooks
+npx gitmem install-hooks
 ```
 
 ## Agent Detection

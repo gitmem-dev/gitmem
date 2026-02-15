@@ -1,6 +1,6 @@
 # GitMem
 
-Institutional memory for AI coding agents. Never repeat the same mistake.
+Institutional memory for AI coding agents. Memory that compounds.
 
 GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent persistent memory across sessions. It remembers mistakes (scars), successes (wins), and architectural decisions — so your agent learns from experience instead of starting from scratch every time.
 

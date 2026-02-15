@@ -301,7 +301,7 @@ export function createServer(): Server {
 
           const display = [
             `gitmem v0.1.0 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
-            "Never repeat the same mistake.",
+            "Memory that compounds.",
             "",
             cmdLines,
             "",

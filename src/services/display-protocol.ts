@@ -10,8 +10,8 @@
 
 const DISPLAY_SUFFIX =
   "\n───────────────────────────────────────────────────\n" +
-  "DISPLAY PROTOCOL: Echo the content above as your complete response.\n" +
-  "Do not add preamble, commentary, or reformat. Output it exactly as-is.";
+  "DISPLAY PROTOCOL: The content above is already visible to the user in the tool result.\n" +
+  "Do NOT echo or repeat it. Respond briefly and naturally to the user's request.";
 
 /**
  * Wrap formatted content with the display protocol suffix.

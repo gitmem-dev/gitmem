@@ -125,3 +125,71 @@ export function closingReflectionDescription(): string {
     (q) => `Q${q.number} (${q.key}): ${q.question}`
   ).join("\n");
 }
+
+/**
+ * Common aliases agents use for closing_reflection field names.
+ * Maps alias → canonical key from CLOSING_QUESTIONS.
+ */
+const REFLECTION_ALIASES: Record<string, string> = {
+  // Q1
+  q1_broke: "what_broke",
+  broke: "what_broke",
+  unexpected: "what_broke",
+  // Q2
+  q2_slow: "what_took_longer",
+  took_longer: "what_took_longer",
+  slow: "what_took_longer",
+  // Q3
+  q3_differently: "do_differently",
+  differently: "do_differently",
+  next_time: "do_differently",
+  // Q4
+  q4_worked: "what_worked",
+  worked: "what_worked",
+  pattern_worked: "what_worked",
+  // Q5
+  q5_wrong_assumption: "wrong_assumption",
+  assumption: "wrong_assumption",
+  wrong: "wrong_assumption",
+  // Q6
+  q6_scars_applied: "scars_applied",
+  scars: "scars_applied",
+  // Q7
+  q7_capture: "institutional_memory_items",
+  capture: "institutional_memory_items",
+  capture_as_memory: "institutional_memory_items",
+  memory_items: "institutional_memory_items",
+  // Q8-Q9 (rapport, not in CLOSING_QUESTIONS but used)
+  q8_human_style: "human_work_style",
+  q9_dynamic: "collaborative_dynamic",
+};
+
+/** Canonical keys from CLOSING_QUESTIONS */
+const CANONICAL_KEYS = new Set(CLOSING_QUESTIONS.map((q) => q.key));
+
+/**
+ * Normalize closing_reflection field names from common aliases to canonical keys.
+ * Agents frequently guess field names (q1_broke, q2_slow, etc.) instead of using
+ * the canonical names (what_broke, what_took_longer). This prevents validation failures.
+ */
+export function normalizeReflectionKeys(
+  reflection: Record<string, unknown>
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(reflection)) {
+    if (CANONICAL_KEYS.has(key) || key === "human_work_style" || key === "collaborative_dynamic" || key === "rapport_notes") {
+      // Already canonical
+      normalized[key] = value;
+    } else if (REFLECTION_ALIASES[key]) {
+      // Map alias to canonical (don't overwrite if canonical already set)
+      const canonical = REFLECTION_ALIASES[key];
+      if (!(canonical in normalized)) {
+        normalized[canonical] = value;
+      }
+    } else {
+      // Unknown key — pass through
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}

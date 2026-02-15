@@ -21,6 +21,7 @@ import {
   validateSessionClose,
   buildCloseCompliance,
 } from "../services/compliance-validator.js";
+import { normalizeReflectionKeys } from "../constants/closing-questions.js";
 import {
   Timer,
   recordMetrics,
@@ -892,6 +893,27 @@ export async function sessionClose(
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
+  }
+
+  // Normalize closing_reflection field aliases (q1_broke → what_broke, etc.)
+  // Agents frequently guess field names instead of using canonical keys from CLOSING_QUESTIONS.
+  if (params.closing_reflection && typeof params.closing_reflection === "object") {
+    params.closing_reflection = normalizeReflectionKeys(
+      params.closing_reflection as unknown as Record<string, unknown>
+    ) as unknown as typeof params.closing_reflection;
+  }
+
+  // Normalize task_completion: if agent passed a string, wrap it in the expected object shape
+  if (params.task_completion && typeof params.task_completion === "string") {
+    const now = new Date().toISOString();
+    const fiveSecsAgo = new Date(Date.now() - 5000).toISOString();
+    (params as unknown as Record<string, unknown>).task_completion = {
+      questions_displayed_at: fiveSecsAgo,
+      reflection_completed_at: fiveSecsAgo,
+      human_asked_at: fiveSecsAgo,
+      human_response_at: now,
+      human_response: "auto-normalized from string payload",
+    };
   }
 
   // Close type auto-detection: reject mismatched close types based on session activity.

@@ -4,7 +4,9 @@
  * GitMem Init Wizard
  *
  * Interactive setup that detects existing config, prompts, and merges.
- * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>]
+ * Supports Claude Code and Cursor IDE.
+ *
+ * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>] [--client <claude|cursor>]
  */
 
 import {
@@ -28,20 +30,93 @@ const autoYes = args.includes("--yes") || args.includes("-y");
 const dryRun = args.includes("--dry-run");
 const projectIdx = args.indexOf("--project");
 const projectName = projectIdx !== -1 ? args[projectIdx + 1] : null;
+const clientIdx = args.indexOf("--client");
+const clientFlag = clientIdx !== -1 ? args[clientIdx + 1]?.toLowerCase() : null;
 
-// Paths
+// ── Client Configuration ──
+
+const CLIENT_CONFIGS = {
+  claude: {
+    name: "Claude Code",
+    mcpConfigPath: join(cwd, ".mcp.json"),
+    mcpConfigName: ".mcp.json",
+    instructionsFile: join(cwd, "CLAUDE.md"),
+    instructionsName: "CLAUDE.md",
+    templateFile: join(__dirname, "..", "CLAUDE.md.template"),
+    startMarker: "<!-- gitmem:start -->",
+    endMarker: "<!-- gitmem:end -->",
+    configDir: join(cwd, ".claude"),
+    settingsFile: join(cwd, ".claude", "settings.json"),
+    settingsLocalFile: join(cwd, ".claude", "settings.local.json"),
+    hasPermissions: true,
+    hooksInSettings: true,
+    completionMsg: "Setup complete! Start Claude Code \u2014 memory is active.",
+  },
+  cursor: {
+    name: "Cursor",
+    mcpConfigPath: join(cwd, ".cursor", "mcp.json"),
+    mcpConfigName: ".cursor/mcp.json",
+    instructionsFile: join(cwd, ".cursorrules"),
+    instructionsName: ".cursorrules",
+    templateFile: join(__dirname, "..", "cursorrules.template"),
+    startMarker: "# --- gitmem:start ---",
+    endMarker: "# --- gitmem:end ---",
+    configDir: join(cwd, ".cursor"),
+    settingsFile: null,
+    settingsLocalFile: null,
+    hasPermissions: false,
+    hooksInSettings: false,
+    hooksFile: join(cwd, ".cursor", "hooks.json"),
+    hooksFileName: ".cursor/hooks.json",
+    completionMsg: "Setup complete! Open Cursor (Agent mode) \u2014 memory is active.",
+  },
+};
+
+// Shared paths (client-agnostic)
 const gitmemDir = join(cwd, ".gitmem");
-const mcpJsonPath = join(cwd, ".mcp.json");
-const claudeMdPath = join(cwd, "CLAUDE.md");
-const claudeDir = join(cwd, ".claude");
-const settingsPath = join(claudeDir, "settings.json");
-const settingsLocalPath = join(claudeDir, "settings.local.json");
 const gitignorePath = join(cwd, ".gitignore");
-const templatePath = join(__dirname, "..", "CLAUDE.md.template");
 const starterScarsPath = join(__dirname, "..", "schema", "starter-scars.json");
 const hooksScriptsDir = join(__dirname, "..", "hooks", "scripts");
 
 let rl;
+let client; // "claude" | "cursor" — set by detectClient()
+let cc; // shorthand for CLIENT_CONFIGS[client]
+
+// ── Client Detection ──
+
+function detectClient() {
+  // Explicit flag takes priority
+  if (clientFlag) {
+    if (clientFlag !== "claude" && clientFlag !== "cursor") {
+      console.error(`  Error: Unknown client "${clientFlag}". Use --client claude or --client cursor.`);
+      process.exit(1);
+    }
+    return clientFlag;
+  }
+
+  // Auto-detect based on directory presence
+  const hasCursorDir = existsSync(join(cwd, ".cursor"));
+  const hasClaudeDir = existsSync(join(cwd, ".claude"));
+  const hasMcpJson = existsSync(join(cwd, ".mcp.json"));
+  const hasClaudeMd = existsSync(join(cwd, "CLAUDE.md"));
+  const hasCursorRules = existsSync(join(cwd, ".cursorrules"));
+  const hasCursorMcp = existsSync(join(cwd, ".cursor", "mcp.json"));
+
+  // Strong Cursor signals
+  if (hasCursorDir && !hasClaudeDir && !hasMcpJson && !hasClaudeMd) return "cursor";
+  if (hasCursorRules && !hasClaudeMd) return "cursor";
+  if (hasCursorMcp && !hasMcpJson) return "cursor";
+
+  // Strong Claude signals
+  if (hasClaudeDir && !hasCursorDir) return "claude";
+  if (hasMcpJson && !hasCursorMcp) return "claude";
+  if (hasClaudeMd && !hasCursorRules) return "claude";
+
+  // Default to Claude Code (most common)
+  return "claude";
+}
+
+// ── Helpers ──
 
 async function confirm(message, defaultYes = true) {
   if (autoYes) return true;
@@ -85,7 +160,7 @@ function buildMcpConfig() {
   };
 }
 
-function buildHooks() {
+function buildClaudeHooks() {
   const relScripts = ".gitmem/hooks";
   return {
     SessionStart: [
@@ -213,16 +288,60 @@ function buildHooks() {
   };
 }
 
-function isGitmemHook(entry) {
-  if (!entry.hooks || !Array.isArray(entry.hooks)) return false;
-  return entry.hooks.some(
-    (h) => typeof h.command === "string" && h.command.includes("gitmem")
-  );
+function buildCursorHooks() {
+  const relScripts = ".gitmem/hooks";
+  // Cursor hooks format: .cursor/hooks.json
+  // Events: sessionStart, beforeMCPExecution, afterMCPExecution, stop
+  // No per-tool matchers — all MCP calls go through beforeMCPExecution
+  return {
+    sessionStart: [
+      {
+        command: `bash ${relScripts}/session-start.sh`,
+        timeout: 5000,
+      },
+    ],
+    beforeMCPExecution: [
+      {
+        command: `bash ${relScripts}/credential-guard.sh`,
+        timeout: 3000,
+      },
+      {
+        command: `bash ${relScripts}/recall-check.sh`,
+        timeout: 5000,
+      },
+    ],
+    afterMCPExecution: [
+      {
+        command: `bash ${relScripts}/post-tool-use.sh`,
+        timeout: 3000,
+      },
+    ],
+    stop: [
+      {
+        command: `bash ${relScripts}/session-close-check.sh`,
+        timeout: 5000,
+      },
+    ],
+  };
 }
 
-function getClaudeMdTemplate() {
+function isGitmemHook(entry) {
+  // Claude Code format: entry.hooks is an array of {command: "..."}
+  if (entry.hooks && Array.isArray(entry.hooks)) {
+    return entry.hooks.some(
+      (h) => typeof h.command === "string" && h.command.includes("gitmem")
+    );
+  }
+  // Cursor format: entry itself has {command: "..."}
+  if (typeof entry.command === "string") {
+    return entry.command.includes("gitmem");
+  }
+  return false;
+}
+
+function getInstructionsTemplate() {
   try {
-    return readFileSync(templatePath, "utf-8");
+    return readFileSync(cc.templateFile, "utf-8");
   } catch {
     return null;
   }
@@ -318,12 +437,15 @@ async function stepMemoryStore() {
 }
 
 async function stepMcpServer() {
-  const existing = readJson(mcpJsonPath);
+  const mcpPath = cc.mcpConfigPath;
+  const mcpName = cc.mcpConfigName;
+
+  const existing = readJson(mcpPath);
   const hasGitmem =
     existing?.mcpServers?.gitmem || existing?.mcpServers?.["gitmem-mcp"];
 
   if (hasGitmem) {
-    console.log("  Already configured in .mcp.json. Skipping.");
+    console.log(`  Already configured in ${mcpName}. Skipping.`);
     return;
   }
 
@@ -332,8 +454,8 @@ async function stepMcpServer() {
     : 0;
   const tierLabel = process.env.SUPABASE_URL ? "pro" : "free";
   const prompt = existing
-    ? `Add gitmem to .mcp.json? (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
-    : "Create .mcp.json with gitmem server?";
+    ? `Add gitmem to ${mcpName}? (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
+    : `Create ${mcpName} with gitmem server?`;
 
   if (!(await confirm(prompt))) {
     console.log("  Skipped.");
@@ -341,40 +463,49 @@ async function stepMcpServer() {
   }
 
   if (dryRun) {
-    console.log(`  [dry-run] Would add gitmem entry to .mcp.json (${tierLabel} tier)`);
+    console.log(`  [dry-run] Would add gitmem entry to ${mcpName} (${tierLabel} tier)`);
     return;
+  }
+
+  // Ensure parent directory exists (for .cursor/mcp.json)
+  const parentDir = dirname(mcpPath);
+  if (!existsSync(parentDir)) {
+    mkdirSync(parentDir, { recursive: true });
   }
 
   const config = existing || { mcpServers: {} };
   if (!config.mcpServers) config.mcpServers = {};
   config.mcpServers.gitmem = buildMcpConfig();
-  writeJson(mcpJsonPath, config);
+  writeJson(mcpPath, config);
 
   console.log(
-    `  Added gitmem entry to .mcp.json (${tierLabel} tier` +
-      (process.env.SUPABASE_URL ? " — Supabase detected" : " — local storage") +
+    `  Added gitmem entry to ${mcpName} (${tierLabel} tier` +
+      (process.env.SUPABASE_URL ? " \u2014 Supabase detected" : " \u2014 local storage") +
       ")"
   );
 }
 
-async function stepClaudeMd() {
-  const template = getClaudeMdTemplate();
+async function stepInstructions() {
+  const template = getInstructionsTemplate();
+  const instrName = cc.instructionsName;
+
   if (!template) {
-    console.log("  ! CLAUDE.md.template not found. Skipping.");
+    console.log(`  ! ${instrName} template not found. Skipping.`);
     return;
   }
 
-  const exists = existsSync(claudeMdPath);
-  let content = exists ? readFileSync(claudeMdPath, "utf-8") : "";
+  const instrPath = cc.instructionsFile;
+  const exists = existsSync(instrPath);
+  let content = exists ? readFileSync(instrPath, "utf-8") : "";
 
-  if (content.includes("<!-- gitmem:start -->")) {
-    console.log("  Already configured in CLAUDE.md. Skipping.");
+  if (content.includes(cc.startMarker)) {
+    console.log(`  Already configured in ${instrName}. Skipping.`);
     return;
   }
 
   const prompt = exists
-    ? "Append gitmem section to CLAUDE.md?"
-    : "Create CLAUDE.md with gitmem instructions?";
+    ? `Append gitmem section to ${instrName}?`
+    : `Create ${instrName} with gitmem instructions?`;
 
   if (!(await confirm(prompt))) {
     console.log("  Skipped.");
@@ -383,15 +514,15 @@ async function stepClaudeMd() {
 
   if (dryRun) {
     console.log(
-      `  [dry-run] Would ${exists ? "append gitmem section to" : "create"} CLAUDE.md`
+      `  [dry-run] Would ${exists ? "append gitmem section to" : "create"} ${instrName}`
     );
     return;
   }
 
   // Template should already have delimiters, but ensure they're there
   let block = template;
-  if (!block.includes("<!-- gitmem:start -->")) {
-    block = `<!-- gitmem:start -->\n${block}\n<!-- gitmem:end -->`;
+  if (!block.includes(cc.startMarker)) {
+    block = `${cc.startMarker}\n${block}\n${cc.endMarker}`;
   }
 
   if (exists) {
@@ -400,23 +531,29 @@ async function stepClaudeMd() {
     content = block + "\n";
   }
 
-  writeFileSync(claudeMdPath, content);
+  writeFileSync(instrPath, content);
   console.log(
-    `  ${exists ? "Added gitmem section to" : "Created"} CLAUDE.md`
+    `  ${exists ? "Added gitmem section to" : "Created"} ${instrName}`
   );
 }
 
 async function stepPermissions() {
-  const existing = readJson(settingsPath);
+  // Cursor doesn't have an equivalent permissions system
+  if (!cc.hasPermissions) {
+    console.log(`  Not needed for ${cc.name}. Skipping.`);
+    return;
+  }
+
+  const existing = readJson(cc.settingsFile);
   const allow = existing?.permissions?.allow || [];
   const pattern = "mcp__gitmem__*";
 
   if (allow.includes(pattern)) {
-    console.log("  Already configured in .claude/settings.json. Skipping.");
+    console.log(`  Already configured in ${cc.configDir}/settings.json. Skipping.`);
     return;
   }
 
-  if (!(await confirm("Add mcp__gitmem__* to .claude/settings.json?"))) {
+  if (!(await confirm(`Add mcp__gitmem__* to ${cc.configDir}/settings.json?`))) {
     console.log("  Skipped.");
     return;
   }
@@ -427,20 +564,48 @@ async function stepPermissions() {
   }
 
   const settings = existing || {};
-  if (!existsSync(claudeDir)) {
-    mkdirSync(claudeDir, { recursive: true });
+  if (!existsSync(cc.configDir)) {
+    mkdirSync(cc.configDir, { recursive: true });
   }
   const permissions = settings.permissions || {};
   const newAllow = permissions.allow || [];
   newAllow.push(pattern);
   settings.permissions = { ...permissions, allow: newAllow };
-  writeJson(settingsPath, settings);
+  writeJson(cc.settingsFile, settings);
 
   console.log("  Added gitmem tool permissions");
 }
 
+function copyHookScripts() {
+  const destHooksDir = join(gitmemDir, "hooks");
+  if (!existsSync(destHooksDir)) {
+    mkdirSync(destHooksDir, { recursive: true });
+  }
+  if (existsSync(hooksScriptsDir)) {
+    try {
+      for (const file of readdirSync(hooksScriptsDir)) {
+        if (file.endsWith(".sh")) {
+          const src = join(hooksScriptsDir, file);
+          const dest = join(destHooksDir, file);
+          writeFileSync(dest, readFileSync(src));
+          chmodSync(dest, 0o755);
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+}
+
 async function stepHooks() {
-  const existing = readJson(settingsPath);
+  if (cc.hooksInSettings) {
+    return stepHooksClaude();
+  }
+  return stepHooksCursor();
+}
+
+async function stepHooksClaude() {
+  const existing = readJson(cc.settingsFile);
   const hooks = existing?.hooks || {};
   const hasGitmem = JSON.stringify(hooks).includes("gitmem");
 
@@ -472,32 +637,14 @@ async function stepHooks() {
     return;
   }
 
-  // Copy hook scripts to .gitmem/hooks/ (works regardless of npx vs local install)
-  const destHooksDir = join(gitmemDir, "hooks");
-  if (!existsSync(destHooksDir)) {
-    mkdirSync(destHooksDir, { recursive: true });
-  }
-  if (existsSync(hooksScriptsDir)) {
-    try {
-      for (const file of readdirSync(hooksScriptsDir)) {
-        if (file.endsWith(".sh")) {
-          const src = join(hooksScriptsDir, file);
-          const dest = join(destHooksDir, file);
-          writeFileSync(dest, readFileSync(src));
-          chmodSync(dest, 0o755);
-        }
-      }
-    } catch {
-      // Non-critical
-    }
-  }
+  copyHookScripts();
 
   const settings = existing || {};
-  if (!existsSync(claudeDir)) {
-    mkdirSync(claudeDir, { recursive: true });
+  if (!existsSync(cc.configDir)) {
+    mkdirSync(cc.configDir, { recursive: true });
   }
 
-  const gitmemHooks = buildHooks();
+  const gitmemHooks = buildClaudeHooks();
   const merged = { ...(settings.hooks || {}) };
 
   for (const [eventType, gitmemEntries] of Object.entries(gitmemHooks)) {
@@ -507,7 +654,7 @@ async function stepHooks() {
   }
 
   settings.hooks = merged;
-  writeJson(settingsPath, settings);
+  writeJson(cc.settingsFile, settings);
 
   const preservedMsg =
     existingHookCount > 0
@@ -516,8 +663,8 @@ async function stepHooks() {
   console.log(`  Merged 4 gitmem hook types${preservedMsg}`);
 
   // Warn about settings.local.json
-  if (existsSync(settingsLocalPath)) {
-    const local = readJson(settingsLocalPath);
+  if (cc.settingsLocalFile && existsSync(cc.settingsLocalFile)) {
+    const local = readJson(cc.settingsLocalFile);
     if (local?.hooks) {
       console.log("");
       console.log(
@@ -528,6 +675,69 @@ async function stepHooks() {
       );
     }
   }
+}
+
+async function stepHooksCursor() {
+  const hooksPath = cc.hooksFile;
+  const hooksName = cc.hooksFileName;
+
+  const existing = readJson(hooksPath);
+  const hasGitmem = existing ? JSON.stringify(existing).includes("gitmem") : false;
+
+  if (hasGitmem) {
+    console.log(`  Already configured in ${hooksName}. Skipping.`);
+    return;
+  }
+
+  // Count existing non-gitmem hooks
+  let existingHookCount = 0;
+  if (existing?.hooks) {
+    for (const entries of Object.values(existing.hooks)) {
+      if (Array.isArray(entries)) {
+        existingHookCount += entries.filter((e) => !isGitmemHook(e)).length;
+      }
+    }
+  }
+
+  const prompt =
+    existingHookCount > 0
+      ? `Merge gitmem hooks into ${hooksName}? (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+      : `Add gitmem lifecycle hooks to ${hooksName}?`;
+
+  if (!(await confirm(prompt))) {
+    console.log("  Skipped.");
+    return;
+  }
+
+  if (dryRun) {
+    console.log("  [dry-run] Would merge 4 gitmem hook types");
+    return;
+  }
+
+  copyHookScripts();
+
+  if (!existsSync(cc.configDir)) {
+    mkdirSync(cc.configDir, { recursive: true });
+  }
+
+  const gitmemHooks = buildCursorHooks();
+  const config = existing || {};
+  const merged = { ...(config.hooks || {}) };
+
+  for (const [eventType, gitmemEntries] of Object.entries(gitmemHooks)) {
+    const existingEntries = merged[eventType] || [];
+    const nonGitmem = existingEntries.filter((e) => !isGitmemHook(e));
+    merged[eventType] = [...nonGitmem, ...gitmemEntries];
+  }
+
+  config.hooks = merged;
+  writeJson(hooksPath, config);
+
+  const preservedMsg =
+    existingHookCount > 0
+      ? ` (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+      : "";
+  console.log(`  Merged 4 gitmem hook types${preservedMsg}`);
 }
 
 async function stepGitignore() {
@@ -565,10 +775,19 @@ async function main() {
   const pkg = readJson(join(__dirname, "..", "package.json"));
   const version = pkg?.version || "1.0.0";
 
+  // Detect client before anything else
+  client = detectClient();
+  cc = CLIENT_CONFIGS[client];
+
   console.log("");
-  console.log(`  gitmem v${version} — Setup`);
+  console.log(`  gitmem v${version} \u2014 Setup for ${cc.name}`);
   if (dryRun) {
-    console.log("  (dry-run mode — no files will be written)");
+    console.log("  (dry-run mode \u2014 no files will be written)");
+  }
+  if (clientFlag) {
+    console.log(`  (client: ${client} \u2014 via --client flag)`);
+  } else {
+    console.log(`  (client: ${client} \u2014 auto-detected)`);
   }
   console.log("");
 
@@ -576,29 +795,39 @@ async function main() {
   console.log("  Detecting environment...");
   const detections = [];
 
-  if (existsSync(mcpJsonPath)) {
-    const mcp = readJson(mcpJsonPath);
+  if (existsSync(cc.mcpConfigPath)) {
+    const mcp = readJson(cc.mcpConfigPath);
     const count = mcp?.mcpServers ? Object.keys(mcp.mcpServers).length : 0;
     detections.push(
-      `  .mcp.json found (${count} server${count !== 1 ? "s" : ""})`
+      `  ${cc.mcpConfigName} found (${count} server${count !== 1 ? "s" : ""})`
     );
   }
 
-  if (existsSync(claudeMdPath)) {
-    const content = readFileSync(claudeMdPath, "utf-8");
-    const hasGitmem = content.includes("<!-- gitmem:start -->");
+  if (existsSync(cc.instructionsFile)) {
+    const content = readFileSync(cc.instructionsFile, "utf-8");
+    const hasGitmem = content.includes(cc.startMarker);
     detections.push(
-      `  CLAUDE.md found (${hasGitmem ? "has gitmem section" : "no gitmem section"})`
+      `  ${cc.instructionsName} found (${hasGitmem ? "has gitmem section" : "no gitmem section"})`
     );
   }
 
-  if (existsSync(settingsPath)) {
-    const settings = readJson(settingsPath);
+  if (cc.settingsFile && existsSync(cc.settingsFile)) {
+    const settings = readJson(cc.settingsFile);
     const hookCount = settings?.hooks
       ? Object.values(settings.hooks).flat().length
       : 0;
     detections.push(
       `  .claude/settings.json found (${hookCount} hook${hookCount !== 1 ? "s" : ""})`
+    );
+  }
+
+  if (!cc.hooksInSettings && cc.hooksFile && existsSync(cc.hooksFile)) {
+    const hooks = readJson(cc.hooksFile);
+    const hookCount = hooks?.hooks
+      ? Object.values(hooks.hooks).flat().length
+      : 0;
+    detections.push(
+      `  ${cc.hooksFileName} found (${hookCount} hook${hookCount !== 1 ? "s" : ""})`
     );
   }
 
@@ -621,35 +850,45 @@ async function main() {
   );
   console.log("");
 
-  // Run steps
-  console.log("  Step 1/6 — Memory Store");
+  // Run steps — step count depends on client
+  const stepCount = cc.hasPermissions ? 6 : 5;
+  let step = 1;
+
+  console.log(`  Step ${step}/${stepCount} \u2014 Memory Store`);
   await stepMemoryStore();
   console.log("");
+  step++;
 
-  console.log("  Step 2/6 — MCP Server");
+  console.log(`  Step ${step}/${stepCount} \u2014 MCP Server`);
   await stepMcpServer();
   console.log("");
+  step++;
 
-  console.log("  Step 3/6 — Project Instructions");
-  await stepClaudeMd();
+  console.log(`  Step ${step}/${stepCount} \u2014 Project Instructions`);
+  await stepInstructions();
   console.log("");
+  step++;
 
-  console.log("  Step 4/6 — Tool Permissions");
-  await stepPermissions();
-  console.log("");
+  if (cc.hasPermissions) {
+    console.log(`  Step ${step}/${stepCount} \u2014 Tool Permissions`);
+    await stepPermissions();
+    console.log("");
+    step++;
+  }
 
-  console.log("  Step 5/6 — Lifecycle Hooks");
+  console.log(`  Step ${step}/${stepCount} \u2014 Lifecycle Hooks`);
   await stepHooks();
   console.log("");
+  step++;
 
-  console.log("  Step 6/6 — Gitignore");
+  console.log(`  Step ${step}/${stepCount} \u2014 Gitignore`);
   await stepGitignore();
   console.log("");
 
   if (dryRun) {
-    console.log("  Dry run complete — no files were modified.");
+    console.log("  Dry run complete \u2014 no files were modified.");
   } else {
-    console.log("  Setup complete! Start Claude Code — memory is active.");
+    console.log(`  ${cc.completionMsg}`);
     console.log("  To remove: npx gitmem-mcp uninstall");
   }
   console.log("");

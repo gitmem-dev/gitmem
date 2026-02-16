@@ -40,18 +40,25 @@ Usage:
   npx gitmem-mcp init              Interactive setup wizard (recommended)
   npx gitmem-mcp init --yes        Non-interactive setup (accept all defaults)
   npx gitmem-mcp init --dry-run    Show what would be configured
+  npx gitmem-mcp init --client cursor   Set up for Cursor IDE
   npx gitmem-mcp uninstall         Clean removal of gitmem from project
   npx gitmem-mcp uninstall --all   Also delete .gitmem/ data directory
 
 Other commands:
   npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)
-  npx gitmem-mcp configure         Generate .mcp.json config for Claude Code
+  npx gitmem-mcp configure         Generate .mcp.json config for Claude Code / Cursor
   npx gitmem-mcp check             Run diagnostic health check
   npx gitmem-mcp check --full      Full diagnostic with benchmarks
-  npx gitmem-mcp install-hooks     Install Claude Code hooks (standalone)
-  npx gitmem-mcp uninstall-hooks   Remove Claude Code hooks (standalone)
+  npx gitmem-mcp install-hooks     Install hooks (standalone)
+  npx gitmem-mcp uninstall-hooks   Remove hooks (standalone)
   npx gitmem-mcp server            Start MCP server (default)
   npx gitmem-mcp help              Show this help message
+
+Options:
+  --client <claude|cursor>   Target IDE (auto-detected if not specified)
+  --project <name>           Set project namespace
+  --yes / -y                 Accept all defaults (non-interactive)
+  --dry-run                  Show what would change without writing files
 
 Quick Start:
   npx gitmem-mcp init              One command sets up everything
@@ -459,19 +466,37 @@ async function cmdSessionRefresh() {
 }
 
 /**
- * Install gitmem hooks as project-level hooks in .claude/settings.json
+ * Install gitmem hooks as project-level hooks.
  *
- * Writes hook entries pointing to scripts in node_modules/gitmem-mcp/hooks/scripts/.
- * No plugin registration needed — Claude Code reads hooks directly from settings.
+ * Claude Code: writes to .claude/settings.json
+ * Cursor: writes to .cursor/hooks.json
+ *
  * Use --force to overwrite existing hook entries.
+ * Use --client <claude|cursor> to target a specific IDE.
  */
 function cmdInstallHooks() {
   const force = process.argv.includes("--force");
+  const clientIdx = process.argv.indexOf("--client");
+  const clientArg = clientIdx !== -1 ? process.argv[clientIdx + 1]?.toLowerCase() : null;
   const scriptsDir = join(__dirname, "..", "hooks", "scripts");
-  const claudeDir = join(process.cwd(), ".claude");
-  const settingsPath = join(claudeDir, "settings.json");
 
-  console.log("GitMem Hooks — Install");
+  // Detect client
+  let clientName;
+  if (clientArg === "cursor") {
+    clientName = "cursor";
+  } else if (clientArg === "claude") {
+    clientName = "claude";
+  } else if (clientArg) {
+    console.error(`Error: Unknown client "${clientArg}". Use --client claude or --client cursor.`);
+    process.exit(1);
+  } else {
+    // Auto-detect
+    const hasCursorDir = existsSync(join(process.cwd(), ".cursor"));
+    const hasClaudeDir = existsSync(join(process.cwd(), ".claude"));
+    clientName = (hasCursorDir && !hasClaudeDir) ? "cursor" : "claude";
+  }
+
+  console.log(`GitMem Hooks — Install (${clientName === "cursor" ? "Cursor" : "Claude Code"})`);
   console.log("======================");
   console.log("");
 
@@ -489,7 +514,7 @@ function cmdInstallHooks() {
     }
   }
 
-  // Copy hook scripts to .gitmem/hooks/ (works regardless of npx vs local install)
+  // Copy hook scripts to .gitmem/hooks/
   const gitmemDir = join(process.cwd(), ".gitmem");
   const destHooksDir = join(gitmemDir, "hooks");
   if (!existsSync(destHooksDir)) {
@@ -505,146 +530,261 @@ function cmdInstallHooks() {
   }
 
   const relScripts = ".gitmem/hooks";
-  const gitmemHooks = {
-    SessionStart: [
-      {
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/session-start.sh`,
-            statusMessage: "Initializing GitMem session...",
-            timeout: 5000,
-          },
-        ],
-      },
-    ],
-    PreToolUse: [
-      { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
-      { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
-      { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
-    ],
-    PostToolUse: [
-      { matcher: "mcp__gitmem__recall", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
-      { matcher: "mcp__gitmem__search", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
-      { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
-      { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
-      { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
-    ],
-    Stop: [
-      {
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/session-close-check.sh`,
-            timeout: 5000,
-          },
-        ],
-      },
-    ],
-  };
 
-  // Read existing settings or create new
-  let settings = {};
-  if (existsSync(settingsPath)) {
-    try {
-      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    } catch {
-      console.warn("  Warning: Could not parse existing .claude/settings.json, creating fresh");
-    }
-  } else {
-    mkdirSync(claudeDir, { recursive: true });
-  }
+  if (clientName === "cursor") {
+    // Cursor: write to .cursor/hooks.json
+    const cursorDir = join(process.cwd(), ".cursor");
+    const hooksPath = join(cursorDir, "hooks.json");
 
-  // Check if hooks already exist
-  if (settings.hooks && !force) {
-    const hasGitmem = JSON.stringify(settings.hooks).includes("gitmem");
-    if (hasGitmem) {
-      console.log("GitMem hooks already installed in .claude/settings.json");
-      console.log("");
-      console.log("To reinstall (overwrite), run:");
-      console.log("  npx gitmem-mcp install-hooks --force");
-      return;
-    }
-  }
+    const gitmemHooks = {
+      sessionStart: [{ command: `bash ${relScripts}/session-start.sh`, timeout: 5000 }],
+      beforeMCPExecution: [
+        { command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 },
+        { command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 },
+      ],
+      afterMCPExecution: [{ command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }],
+      stop: [{ command: `bash ${relScripts}/session-close-check.sh`, timeout: 5000 }],
+    };
 
-  // Merge hooks into settings (replace hooks section entirely)
-  settings.hooks = gitmemHooks;
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-
-  console.log("Hooks written to .claude/settings.json");
-  console.log(`Scripts at: ${relScripts}/`);
-  console.log("");
-
-  // Verify gitmem MCP is configured
-  let mcpFound = false;
-  const mcpPaths = [
-    join(process.cwd(), ".mcp.json"),
-    join(process.cwd(), ".claude", "mcp.json"),
-    join(homedir(), ".claude.json"),
-  ];
-  for (const p of mcpPaths) {
-    if (existsSync(p)) {
+    let config = {};
+    if (existsSync(hooksPath)) {
       try {
-        const cfg = JSON.parse(readFileSync(p, "utf-8"));
-        const servers = cfg.mcpServers || {};
-        if (servers.gitmem || servers["gitmem-mcp"]) {
-          mcpFound = true;
-          break;
-        }
+        config = JSON.parse(readFileSync(hooksPath, "utf-8"));
       } catch {
-        // ignore parse errors
+        console.warn("  Warning: Could not parse existing .cursor/hooks.json, creating fresh");
+      }
+    } else {
+      mkdirSync(cursorDir, { recursive: true });
+    }
+
+    if (config.hooks && !force) {
+      const hasGitmem = JSON.stringify(config.hooks).includes("gitmem");
+      if (hasGitmem) {
+        console.log("GitMem hooks already installed in .cursor/hooks.json");
+        console.log("");
+        console.log("To reinstall (overwrite), run:");
+        console.log("  npx gitmem-mcp install-hooks --client cursor --force");
+        return;
       }
     }
-  }
 
-  if (!mcpFound) {
-    console.log("WARNING: gitmem MCP server not detected in .mcp.json.");
-    console.log("  Hooks will be silent until gitmem MCP is configured.");
-    console.log("  Run: npx gitmem-mcp configure");
+    config.hooks = gitmemHooks;
+    writeFileSync(hooksPath, JSON.stringify(config, null, 2));
+
+    console.log("Hooks written to .cursor/hooks.json");
+    console.log(`Scripts at: ${relScripts}/`);
     console.log("");
+    console.log("Installed! Hooks will activate on next Cursor Agent session.");
+
+  } else {
+    // Claude Code: write to .claude/settings.json
+    const claudeDir = join(process.cwd(), ".claude");
+    const settingsPath = join(claudeDir, "settings.json");
+
+    const gitmemHooks = {
+      SessionStart: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: `bash ${relScripts}/session-start.sh`,
+              statusMessage: "Initializing GitMem session...",
+              timeout: 5000,
+            },
+          ],
+        },
+      ],
+      PreToolUse: [
+        { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 }, { type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+        { matcher: "Read", hooks: [{ type: "command", command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 }] },
+        { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+        { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 }] },
+      ],
+      PostToolUse: [
+        { matcher: "mcp__gitmem__recall", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+        { matcher: "mcp__gitmem__search", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+        { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+        { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+        { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      ],
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: `bash ${relScripts}/session-close-check.sh`,
+              timeout: 5000,
+            },
+          ],
+        },
+      ],
+    };
+
+    let settings = {};
+    if (existsSync(settingsPath)) {
+      try {
+        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      } catch {
+        console.warn("  Warning: Could not parse existing .claude/settings.json, creating fresh");
+      }
+    } else {
+      mkdirSync(claudeDir, { recursive: true });
+    }
+
+    if (settings.hooks && !force) {
+      const hasGitmem = JSON.stringify(settings.hooks).includes("gitmem");
+      if (hasGitmem) {
+        console.log("GitMem hooks already installed in .claude/settings.json");
+        console.log("");
+        console.log("To reinstall (overwrite), run:");
+        console.log("  npx gitmem-mcp install-hooks --force");
+        return;
+      }
+    }
+
+    settings.hooks = gitmemHooks;
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    console.log("Hooks written to .claude/settings.json");
+    console.log(`Scripts at: ${relScripts}/`);
+    console.log("");
+
+    // Verify gitmem MCP is configured
+    let mcpFound = false;
+    const mcpPaths = [
+      join(process.cwd(), ".mcp.json"),
+      join(process.cwd(), ".claude", "mcp.json"),
+      join(homedir(), ".claude.json"),
+    ];
+    for (const p of mcpPaths) {
+      if (existsSync(p)) {
+        try {
+          const cfg = JSON.parse(readFileSync(p, "utf-8"));
+          const servers = cfg.mcpServers || {};
+          if (servers.gitmem || servers["gitmem-mcp"]) {
+            mcpFound = true;
+            break;
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+
+    if (!mcpFound) {
+      console.log("WARNING: gitmem MCP server not detected in .mcp.json.");
+      console.log("  Hooks will be silent until gitmem MCP is configured.");
+      console.log("  Run: npx gitmem-mcp configure");
+      console.log("");
+    }
+
+    console.log("Installed! Hooks will activate on next Claude Code session.");
   }
 
-  console.log("Installed! Hooks will activate on next Claude Code session.");
   console.log("");
   console.log("To update after a gitmem version bump:");
   console.log("  npx gitmem-mcp install-hooks --force");
 }
 
 /**
- * Uninstall gitmem hooks from .claude/settings.json
+ * Uninstall gitmem hooks.
  *
- * Removes the hooks section, cleans up legacy plugin directories,
- * and removes temp state directories.
+ * Claude Code: removes from .claude/settings.json
+ * Cursor: removes from .cursor/hooks.json
+ *
+ * Also cleans up legacy plugin directories and temp state.
+ * Use --client <claude|cursor> to target a specific IDE.
  */
 function cmdUninstallHooks() {
-  console.log("GitMem Hooks — Uninstall");
+  const clientIdx = process.argv.indexOf("--client");
+  const clientArg = clientIdx !== -1 ? process.argv[clientIdx + 1]?.toLowerCase() : null;
+
+  // Detect client
+  let clientName;
+  if (clientArg === "cursor") {
+    clientName = "cursor";
+  } else if (clientArg === "claude") {
+    clientName = "claude";
+  } else if (clientArg) {
+    console.error(`Error: Unknown client "${clientArg}". Use --client claude or --client cursor.`);
+    process.exit(1);
+  } else {
+    const hasCursorDir = existsSync(join(process.cwd(), ".cursor"));
+    const hasClaudeDir = existsSync(join(process.cwd(), ".claude"));
+    clientName = (hasCursorDir && !hasClaudeDir) ? "cursor" : "claude";
+  }
+
+  console.log(`GitMem Hooks — Uninstall (${clientName === "cursor" ? "Cursor" : "Claude Code"})`);
   console.log("========================");
   console.log("");
 
-  // Remove hooks from .claude/settings.json
-  const settingsPath = join(process.cwd(), ".claude", "settings.json");
-  if (existsSync(settingsPath)) {
-    try {
-      const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
-      if (cfg.hooks) {
-        delete cfg.hooks;
-        writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
-        console.log("[uninstall] Removed hooks from .claude/settings.json");
-      } else {
-        console.log("[uninstall] No hooks found in .claude/settings.json");
+  if (clientName === "cursor") {
+    // Remove hooks from .cursor/hooks.json
+    const hooksPath = join(process.cwd(), ".cursor", "hooks.json");
+    if (existsSync(hooksPath)) {
+      try {
+        const cfg = JSON.parse(readFileSync(hooksPath, "utf-8"));
+        if (cfg.hooks) {
+          // Filter out gitmem hooks, preserve others
+          const cleaned = {};
+          let removed = 0;
+          for (const [eventType, entries] of Object.entries(cfg.hooks)) {
+            if (!Array.isArray(entries)) continue;
+            const nonGitmem = entries.filter((e) => {
+              if (typeof e.command === "string" && e.command.includes("gitmem")) {
+                removed++;
+                return false;
+              }
+              return true;
+            });
+            if (nonGitmem.length > 0) cleaned[eventType] = nonGitmem;
+          }
+          if (removed > 0) {
+            if (Object.keys(cleaned).length > 0) {
+              cfg.hooks = cleaned;
+            } else {
+              delete cfg.hooks;
+            }
+            writeFileSync(hooksPath, JSON.stringify(cfg, null, 2));
+            console.log(`[uninstall] Removed ${removed} gitmem hooks from .cursor/hooks.json`);
+          } else {
+            console.log("[uninstall] No gitmem hooks found in .cursor/hooks.json");
+          }
+        } else {
+          console.log("[uninstall] No hooks found in .cursor/hooks.json");
+        }
+      } catch {
+        // ignore parse errors
       }
-      // Also clean legacy enabledPlugins
-      if (cfg.enabledPlugins) {
-        for (const key of Object.keys(cfg.enabledPlugins)) {
-          if (key.startsWith("gitmem-hooks")) {
-            delete cfg.enabledPlugins[key];
-            writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
-            console.log("[cleanup] Removed legacy enabledPlugins entry");
+    } else {
+      console.log("[uninstall] No .cursor/hooks.json found");
+    }
+  } else {
+    // Remove hooks from .claude/settings.json
+    const settingsPath = join(process.cwd(), ".claude", "settings.json");
+    if (existsSync(settingsPath)) {
+      try {
+        const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
+        if (cfg.hooks) {
+          delete cfg.hooks;
+          writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
+          console.log("[uninstall] Removed hooks from .claude/settings.json");
+        } else {
+          console.log("[uninstall] No hooks found in .claude/settings.json");
+        }
+        // Also clean legacy enabledPlugins
+        if (cfg.enabledPlugins) {
+          for (const key of Object.keys(cfg.enabledPlugins)) {
+            if (key.startsWith("gitmem-hooks")) {
+              delete cfg.enabledPlugins[key];
+              writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
+              console.log("[cleanup] Removed legacy enabledPlugins entry");
+            }
           }
         }
+      } catch {
+        // ignore parse errors
       }
-    } catch {
-      // ignore parse errors
     }
   }
 
@@ -690,10 +830,11 @@ function cmdUninstallHooks() {
   console.log("");
   console.log("Uninstall complete.");
   console.log("");
-  console.log("Notes:");
-  console.log("  - gitmem MCP server config (.mcp.json) was NOT modified");
-  console.log("  - Restart Claude Code for changes to take effect");
-  console.log("  - To reinstall: npx gitmem-mcp install-hooks");
+  const mcpConfig = clientName === "cursor" ? ".cursor/mcp.json" : ".mcp.json";
+  console.log(`Notes:`);
+  console.log(`  - gitmem MCP server config (${mcpConfig}) was NOT modified`);
+  console.log(`  - Restart ${clientName === "cursor" ? "Cursor" : "Claude Code"} for changes to take effect`);
+  console.log(`  - To reinstall: npx gitmem-mcp install-hooks${clientName === "cursor" ? " --client cursor" : ""}`);
 }
 
 switch (command) {

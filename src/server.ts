@@ -88,7 +88,7 @@ export function createServer(): Server {
   const server = new Server(
     {
       name: "gitmem-mcp",
-      version: "0.1.0",
+      version: "1.0.3",
     },
     {
       capabilities: {
@@ -261,6 +261,7 @@ export function createServer(): Server {
             { alias: "gitmem-r", full: "recall", description: "Check scars before taking action" },
             { alias: "gitmem-cs", full: "confirm_scars", description: "Confirm recalled scars (APPLYING/N_A/REFUTED)" },
             { alias: "gitmem-ss", full: "session_start", description: "Initialize session with context" },
+            { alias: "gitmem-sr", full: "session_refresh", description: "Refresh context for active session" },
             { alias: "gitmem-sc", full: "session_close", description: "Close session with compliance validation" },
             { alias: "gitmem-cl", full: "create_learning", description: "Create scar/win/pattern entry" },
             { alias: "gitmem-cd", full: "create_decision", description: "Log architectural/operational decision" },
@@ -277,6 +278,7 @@ export function createServer(): Server {
             { alias: "gitmem-cleanup", full: "cleanup_threads", description: "Triage threads by lifecycle health" },
             { alias: "gitmem-health", full: "health", description: "Show write health for fire-and-forget operations" },
             { alias: "gitmem-al", full: "archive_learning", description: "Archive a scar/win/pattern (is_active=false)" },
+            { alias: "gitmem-graph", full: "graph_traverse", description: "Traverse knowledge graph over institutional memory" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });
@@ -296,11 +298,14 @@ export function createServer(): Server {
             );
           }
 
+          // Filter to only show commands whose canonical tool is actually registered
+          const visibleCommands = commands.filter(c => registeredToolNames.has(c.full));
+
           // Build command table for display
-          const cmdLines = commands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
+          const cmdLines = visibleCommands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
 
           const display = [
-            `gitmem v0.1.0 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            `gitmem v1.0.3 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
             "Memory that compounds.",
             "",
             cmdLines,
@@ -313,11 +318,11 @@ export function createServer(): Server {
           ].join("\n");
 
           result = {
-            version: "0.1.0",
+            version: "1.0.3",
             tier,
             tools_registered: registeredTools.length,
             storage: hasSupabase() ? "supabase" : "local (.gitmem/)",
-            commands,
+            commands: visibleCommands,
             display,
           };
           break;

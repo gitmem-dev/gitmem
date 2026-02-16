@@ -12,4 +12,5 @@ dist/
 .claude/settings.local.json
 .mcp.json
 .npmrc
-CLAUDE.md
+/CLAUDE.md
+!hooks/CLAUDE.md

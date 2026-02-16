@@ -3,7 +3,7 @@
  *
  * Tests zero-data scenarios to ensure gitmem works on fresh installations:
  * - Empty database → all tools work, return empty results
- * - Starter scars (15) → recall finds matches
+ * - Starter scars (3) → recall finds matches
  * - Free tier (no DB) → local storage works
  *
  * These tests verify the day-one experience for new customers.
@@ -105,11 +105,11 @@ describe("Fresh Install", () => {
     });
   });
 
-  describe("starter scars (15)", () => {
-    it("can seed 15 starter scars", async () => {
+  describe("starter scars (3)", () => {
+    it("can seed 3 starter scars", async () => {
       const starterScars = getStarterScarsForProject("starter_test");
 
-      expect(starterScars.length).toBe(15);
+      expect(starterScars.length).toBe(3);
 
       // Insert starter scars
       for (const scar of starterScars) {
@@ -136,7 +136,7 @@ describe("Fresh Install", () => {
         ["starter_test"]
       );
 
-      expect(parseInt(result.rows[0].count)).toBe(15);
+      expect(parseInt(result.rows[0].count)).toBe(3);
     });
 
     it("semantic search finds matches in starter scars", async () => {
@@ -179,14 +179,12 @@ describe("Fresh Install", () => {
         typeCounts[scar.learning_type] = (typeCounts[scar.learning_type] || 0) + 1;
       }
 
-      // Verify distribution (based on STARTER_SCARS fixture)
-      expect(typeCounts["scar"]).toBeGreaterThan(0);
-      expect(typeCounts["win"]).toBeGreaterThan(0);
-      expect(typeCounts["pattern"]).toBeGreaterThan(0);
+      // Verify distribution (all 3 starter scars are type "scar")
+      expect(typeCounts["scar"]).toBe(3);
 
-      // Total should be 15
+      // Total should be 3
       const total = Object.values(typeCounts).reduce((a, b) => a + b, 0);
-      expect(total).toBe(15);
+      expect(total).toBe(3);
     });
 
     it("can query scars by severity", async () => {

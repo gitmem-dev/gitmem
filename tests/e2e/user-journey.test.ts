@@ -159,7 +159,7 @@ describe.skipIf(!claudeAvailable)(
       mkdirSync(TEST_DIR, { recursive: true });
 
       // 1. gitmem init — creates .gitmem/ + .claude/settings.json with permissions
-      await execFile("node", [GITMEM_BIN, "init"], {
+      await execFile("node", [GITMEM_BIN, "init", "--yes"], {
         cwd: TEST_DIR,
         env: {
           ...process.env,
@@ -357,8 +357,9 @@ describe.skipIf(!claudeAvailable)(
 
         // Should contain the correct ceremony wording
         if (hookText.includes("SESSION START")) {
-          expect(hookText).toContain("YOU (the agent) ANSWER");
           expect(hookText).toContain("session_start");
+          // Should mention persistent memory
+          expect(hookText).toContain("persistent memory");
         }
       }
     }, 90_000);

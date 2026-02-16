@@ -77,11 +77,11 @@ function countScarsApplied(scarsApplied: string | string[] | undefined | null): 
  */
 function findMostRecentTranscript(projectsDir: string, cwdBasename: string, cwdFull: string): string | null {
   // Claude Code names project dirs by replacing / with - in the full CWD path
-  // e.g., /Users/chriscrawford/nTEG-Labs -> -Users-chriscrawford-nTEG-Labs
+  // e.g., /Users/dev/my-project -> -Users-dev-my-project
   const claudeCodeDirName = cwdFull.replace(/\//g, "-");
 
   const possibleDirs = [
-    path.join(projectsDir, claudeCodeDirName),  // Primary: full path with dashes (e.g., -Users-chriscrawford-nTEG-Labs)
+    path.join(projectsDir, claudeCodeDirName),  // Primary: full path with dashes
     path.join(projectsDir, "-workspace"),
     path.join(projectsDir, "workspace"),
     path.join(projectsDir, cwdBasename),         // Legacy fallback

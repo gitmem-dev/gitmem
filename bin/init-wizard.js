@@ -106,8 +106,23 @@ function buildHooks() {
         hooks: [
           {
             type: "command",
+            command: `bash ${relScripts}/credential-guard.sh`,
+            timeout: 3000,
+          },
+          {
+            type: "command",
             command: `bash ${relScripts}/recall-check.sh`,
             timeout: 5000,
+          },
+        ],
+      },
+      {
+        matcher: "Read",
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${relScripts}/credential-guard.sh`,
+            timeout: 3000,
           },
         ],
       },

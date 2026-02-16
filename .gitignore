@@ -7,3 +7,9 @@ dist/
 # GitMem runtime data
 .gitmem/
 .cache/
+
+# Local dev config
+.claude/settings.local.json
+.mcp.json
+.npmrc
+CLAUDE.md

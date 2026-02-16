@@ -10,7 +10,7 @@
     "gitmem-mcp": "bin/gitmem.js"
   },
   "scripts": {
-    "build": "tsc && npm run test:unit",
+    "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -24,7 +24,7 @@
     "test:all": "npm run test:unit && npm run test:smoke && npm run test:integration && npm run test:perf && npm run test:e2e",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "tsc"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",

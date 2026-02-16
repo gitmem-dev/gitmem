@@ -18,6 +18,7 @@ vi.mock("../../../src/services/supabase-client.js", () => ({
 
 vi.mock("../../../src/services/tier.js", () => ({
   hasSupabase: vi.fn(() => true),
+  getTableName: vi.fn((base: string) => `orchestra_${base}`),
 }));
 
 vi.mock("../../../src/services/embedding.js", () => ({

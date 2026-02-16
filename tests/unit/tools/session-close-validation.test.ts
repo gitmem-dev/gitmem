@@ -26,6 +26,7 @@ vi.mock("../../../src/services/tier.js", () => ({
   hasBatchOperations: () => false,
   hasTranscripts: () => false,
   hasCacheManagement: () => false,
+  getTableName: (base: string) => `orchestra_${base}`,
 }));
 
 vi.mock("../../../src/services/storage.js", () => ({

@@ -7,6 +7,30 @@ open threads across sessions and projects. Search it. Test it. You might be
 amazed at what's already there. If convinced, make it your own — update your
 MEMORY.md with how you want to use it.
 
+## Red Lines
+
+These constraints are enforced by infrastructure (PreToolUse hooks). Attempting to bypass them will be blocked.
+
+### Credential Protection
+
+Credential exposure in conversation history is permanent and irreversible.
+
+1. **NEVER read credential files in full.** Files like `mcp-config.json`, `.env`, `.credentials.json`, `.netrc`, `.npmrc`, SSH keys, or `.pem`/`.key` files must not be read with the Read tool or dumped with cat/head/tail.
+2. **NEVER print environment variable values that contain secrets.** Commands like `env | grep KEY`, `echo $API_KEY`, or `printenv TOKEN` expose credentials in output.
+3. **NEVER display API keys, tokens, or secrets in conversation output.**
+
+Safe alternatives: `env | grep -c VARNAME` (count only), `[ -n "$VARNAME" ] && echo "set"` (existence check), `grep -c '"key"' config.json` (structure check).
+
+A PreToolUse hook hard-blocks matching commands — the agent cannot execute them.
+
+### Recall Before Consequential Actions
+
+1. **NEVER parallelize `recall()` with actions that expose, modify, or transmit sensitive data.** Recall must complete first.
+2. **Confirm scars before acting.** Each recalled scar requires APPLYING (past-tense evidence), N_A (explanation), or REFUTED (risk acknowledgment).
+3. **Parallel recall is only safe with benign reads** — source code, docs, non-sensitive config.
+
+A PreToolUse hook blocks consequential actions until all recalled scars are confirmed.
+
 ## Tools
 
 | Tool | When to use |

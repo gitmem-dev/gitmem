@@ -97,6 +97,25 @@ describe("PrepareContextParamsSchema", () => {
     });
   });
 
+  describe("max length enforcement", () => {
+    it("rejects plan exceeding 500 chars", () => {
+      const result = PrepareContextParamsSchema.safeParse({
+        plan: "x".repeat(501),
+        format: "compact",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects agent_role exceeding 100 chars", () => {
+      const result = PrepareContextParamsSchema.safeParse({
+        plan: "test",
+        format: "compact",
+        agent_role: "x".repeat(101),
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe("type mismatches", () => {
     it("rejects numeric plan", () => {
       const result = PrepareContextParamsSchema.safeParse({ plan: 123, format: "full" });

@@ -66,6 +66,45 @@ describe("CreateDecisionParamsSchema", () => {
     });
   });
 
+  describe("max length enforcement", () => {
+    it("rejects title exceeding 500 chars", () => {
+      const result = CreateDecisionParamsSchema.safeParse({
+        title: "x".repeat(501),
+        decision: "Valid",
+        rationale: "Valid",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects decision exceeding 2000 chars", () => {
+      const result = CreateDecisionParamsSchema.safeParse({
+        title: "Valid",
+        decision: "x".repeat(2001),
+        rationale: "Valid",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects rationale exceeding 2000 chars", () => {
+      const result = CreateDecisionParamsSchema.safeParse({
+        title: "Valid",
+        decision: "Valid",
+        rationale: "x".repeat(2001),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects alternative item exceeding 1000 chars", () => {
+      const result = CreateDecisionParamsSchema.safeParse({
+        title: "Valid",
+        decision: "Valid",
+        rationale: "Valid",
+        alternatives_considered: ["x".repeat(1001)],
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe("required params missing", () => {
     it("rejects missing title", () => {
       const result = CreateDecisionParamsSchema.safeParse({

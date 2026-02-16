@@ -146,6 +146,63 @@ describe("normalizeThreads", () => {
     expect(result[3].text).toBe("Plain text thread");
   });
 
+  // Regression: normalizeThreads must preserve existing created_at
+  it("preserves created_at on existing ThreadObjects (no clobbering)", () => {
+    const original: ThreadObject = {
+      id: "t-preserve1",
+      text: "Thread with old date",
+      status: "open",
+      created_at: "2025-06-15T00:00:00.000Z",
+    };
+    const result = normalizeThreads([original]);
+    expect(result[0].created_at).toBe("2025-06-15T00:00:00.000Z");
+  });
+
+  it("preserves created_at from {id, status, note} JSON format", () => {
+    const json = JSON.stringify({
+      id: "t-preserve2",
+      status: "open",
+      note: "Thread with existing date",
+      created_at: "2025-06-15T00:00:00.000Z",
+    });
+    const result = normalizeThreads([json], "new-session");
+    expect(result[0].created_at).toBe("2025-06-15T00:00:00.000Z");
+  });
+
+  it("defaults created_at to now only for genuinely new threads", () => {
+    const json = JSON.stringify({
+      id: "t-newthread",
+      status: "open",
+      note: "Brand new thread without created_at",
+    });
+    const before = new Date().toISOString();
+    const result = normalizeThreads([json]);
+    const after = new Date().toISOString();
+    expect(result[0].created_at >= before).toBe(true);
+    expect(result[0].created_at <= after).toBe(true);
+  });
+
+  it("does not overwrite source_session on threads that already have one", () => {
+    const json = JSON.stringify({
+      id: "t-srcsess1",
+      status: "open",
+      note: "Thread with existing source_session",
+      source_session: "original-session",
+    });
+    const result = normalizeThreads([json], "new-session");
+    expect(result[0].source_session).toBe("original-session");
+  });
+
+  it("sets source_session on threads that lack one", () => {
+    const json = JSON.stringify({
+      id: "t-srcsess2",
+      status: "open",
+      note: "Thread without source_session",
+    });
+    const result = normalizeThreads([json], "new-session");
+    expect(result[0].source_session).toBe("new-session");
+  });
+
   // Regression: the wrapper threads should NOT create duplicates
   it("does not create wrapper duplicates for {id, status, note} format", () => {
     // This is the exact format that caused the wrapper bug in active-session.json

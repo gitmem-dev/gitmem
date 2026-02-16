@@ -67,6 +67,46 @@ describe("CreateLearningParamsSchema", () => {
     });
   });
 
+  describe("max length enforcement", () => {
+    it("rejects title exceeding 1000 chars", () => {
+      const result = CreateLearningParamsSchema.safeParse({
+        learning_type: "win",
+        title: "x".repeat(1001),
+        description: "Valid description",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects description exceeding 5000 chars", () => {
+      const result = CreateLearningParamsSchema.safeParse({
+        learning_type: "win",
+        title: "Valid title",
+        description: "x".repeat(5001),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts title at exactly 1000 chars", () => {
+      const result = CreateLearningParamsSchema.safeParse({
+        learning_type: "win",
+        title: "x".repeat(1000),
+        description: "Valid description",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects counter_argument item exceeding 2000 chars", () => {
+      const result = CreateLearningParamsSchema.safeParse({
+        learning_type: "scar",
+        title: "Test",
+        description: "Test",
+        severity: "high",
+        counter_arguments: ["x".repeat(2001), "Valid arg"],
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe("scar-specific validation", () => {
     it("rejects scar without severity", () => {
       const result = CreateLearningParamsSchema.safeParse({

@@ -7,10 +7,10 @@ import { z } from "zod";
 export const ObservationSeveritySchema = z.enum(["info", "warning", "scar_candidate"]);
 
 export const ObservationSchema = z.object({
-  source: z.string().min(1, "source is required — who made this observation?"),
-  text: z.string().min(1, "text is required — what was observed?"),
+  source: z.string().min(1, "source is required — who made this observation?").max(500),
+  text: z.string().min(1, "text is required — what was observed?").max(5000),
   severity: ObservationSeveritySchema,
-  context: z.string().optional(),
+  context: z.string().max(1000).optional(),
 });
 
 export const AbsorbObservationsParamsSchema = z.object({

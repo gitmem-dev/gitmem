@@ -401,7 +401,7 @@ export function createServer(): Server {
         .replace(/\b\d{5}\b/g, "[code]")            // redact PG error codes
         .replace(/at\s+\S+\s+\(.+\)/g, "")          // strip stack frames
         .slice(0, 200);                              // cap length
-      console.error(`[server] Tool error:`, rawMessage);
+      console.error(`[server] Tool error:`, safeMessage);
       return {
         content: [
           {

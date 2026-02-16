@@ -96,6 +96,34 @@ describe("ObservationSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects source exceeding 500 chars", () => {
+    const result = ObservationSchema.safeParse({
+      source: "x".repeat(501),
+      text: "Valid text",
+      severity: "info",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects text exceeding 5000 chars", () => {
+    const result = ObservationSchema.safeParse({
+      source: "agent",
+      text: "x".repeat(5001),
+      severity: "info",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects context exceeding 1000 chars", () => {
+    const result = ObservationSchema.safeParse({
+      source: "agent",
+      text: "Valid text",
+      severity: "info",
+      context: "x".repeat(1001),
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("AbsorbObservationsParamsSchema", () => {

@@ -180,6 +180,7 @@ async function embedOpenAI(text: string, config: EmbeddingConfig): Promise<numbe
       model: config.model,
       input: text,
     }),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
@@ -211,6 +212,7 @@ async function embedOllama(text: string, config: EmbeddingConfig): Promise<numbe
       model: config.model,
       input: text,
     }),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {

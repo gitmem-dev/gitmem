@@ -15,10 +15,10 @@ export type PrepareContextFormat = z.infer<typeof PrepareContextFormatSchema>;
  * PrepareContext parameters schema
  */
 export const PrepareContextParamsSchema = z.object({
-  plan: z.string().min(1, "plan is required - describe what the team is about to do"),
+  plan: z.string().min(1, "plan is required - describe what the team is about to do").max(500),
   format: PrepareContextFormatSchema,
   max_tokens: PositiveIntSchema.optional(),
-  agent_role: z.string().optional(),
+  agent_role: z.string().max(100).optional(),
   project: ProjectSchema.optional(),
 });
 

@@ -448,6 +448,69 @@ Source: `src/tools/definitions.ts` → `getRegisteredTools()`, `src/services/tie
 
 ---
 
+## Mapping Changes to Test Tiers
+
+**The rule:** Test at the tier where your change first touches a real boundary. Every change gets Tier 1. Then add the tier that matches the highest boundary crossed. Don't skip tiers — if you need Tier 3, also run 1 and 2.
+
+### Decision Framework
+
+```
+Did you change...
+  ├─ a pure function or schema?          → Tier 1 (always, non-negotiable)
+  ├─ how the MCP server responds?        → + Tier 2 (5s, free)
+  ├─ a database query or migration?      → + Tier 3 (30s, needs Docker)
+  ├─ a CLI command or hook script?       → + Tier 4 (90s, needs Docker for pro)
+  ├─ what the agent experiences?          → + Tier 5 (60s, costs ~$0.30)
+  └─ performance-sensitive code?          → + Tier 6 (30s, free)
+```
+
+### Boundary Reference
+
+| Your change touches... | Runtime boundary | Minimum tier | Example |
+|------------------------|-----------------|--------------|---------|
+| Schema validation, Zod rules | None — all in-memory | **Tier 1** | Adding `.max()` limits to schemas |
+| Pure function logic (sorting, formatting, parsing) | None — all in-memory | **Tier 1** | Fixing `normalizeThreads` created_at preservation |
+| Tool handler branching, response formatting | None — still pure functions | **Tier 1** | Changing how recall formats output |
+| MCP server wiring (tool registration, error responses) | Process spawn + stdio | **Tier 2** | Changing error redaction in server.ts |
+| Network calls (`fetch`, `AbortSignal.timeout`) | Network | **Tier 2** (mock) or **Tier 3** (real) | Adding timeouts to fetch calls |
+| Database queries, RPC calls, migrations | Network + SQL | **Tier 3** | New Supabase RPC function |
+| CLI commands (`gitmem init`, `gitmem check`) | Filesystem + process | **Tier 4** | Changing starter scar loading behavior |
+| Hook scripts (SessionStart, SessionClose) | Filesystem + shell | **Tier 4** | Modifying hook output format |
+| Agent behavior (does Claude call the right tools?) | Claude API + everything | **Tier 5** | Changing CLAUDE.md ceremony wording |
+| Latency of hot paths | Time | **Tier 6** | Optimizing recall search |
+
+### Practical examples
+
+**"I added `.max()` to Zod schemas"**
+- Boundary: none (pure validation)
+- Run: Tier 1 unit tests for the schema
+- Also run: Tier 2 smoke — confirms MCP returns clean errors on oversized input
+
+**"I added `AbortSignal.timeout()` to fetch calls"**
+- Boundary: network
+- Run: Tier 1 (build compiles) — but unit tests can't meaningfully verify timeout behavior
+- Also run: Tier 2 smoke (server still boots), Tier 3 if available (real network calls timeout correctly)
+
+**"I changed how `loadStarterScars` timestamps entries"**
+- Boundary: filesystem
+- Run: Tier 1 (test the class method directly with tmpdir)
+- Also run: Tier 4 (`cli-fresh-install.test.ts` tests the full `gitmem init` flow)
+
+**"I changed the session close ceremony wording"**
+- Boundary: Claude API (agent must follow new instructions)
+- Run: Tier 1 (if schema changed), Tier 4 (hook output format), Tier 5 (agent actually follows ceremony)
+
+### Pre-commit minimum
+
+| Situation | Run |
+|-----------|-----|
+| Any code change | `npm run test:unit` (Tier 1) — always, no exceptions |
+| MCP server or tool changes | + `npm run test:smoke:free` (Tier 2) |
+| Before pushing to GitHub | Tiers 1 + 2 minimum |
+| Before npm publish | Tiers 1-5 (Tier 5 is the ship gate) |
+
+---
+
 ## Adding New Tests
 
 When adding new tests:

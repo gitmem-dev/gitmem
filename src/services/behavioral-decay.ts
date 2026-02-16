@@ -53,11 +53,12 @@ export async function refreshBehavioralScores(): Promise<BehavioralRefreshResult
         "Content-Profile": "public",
       },
       body: "{}",
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
       const text = await response.text();
-      console.error(`[behavioral-decay] RPC failed: ${response.status} - ${text.slice(0, 200)}`);
+      console.error(`[behavioral-decay] RPC failed: ${response.status} - ${text.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200)}`);
       return null;
     }
 
@@ -111,6 +112,7 @@ export async function fetchDismissalCounts(
         "Content-Type": "application/json",
         "Accept-Profile": "public",
       },
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

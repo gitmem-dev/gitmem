@@ -66,8 +66,10 @@ export function normalizeThreads(
               id: parsed.id,
               text: parsed.note,
               status: parsed.status,
+              // Preserve existing created_at — only default to now() for genuinely new threads
               created_at: parsed.created_at || new Date().toISOString(),
-              ...(sourceSession && { source_session: sourceSession }),
+              ...(sourceSession && !parsed.source_session && { source_session: sourceSession }),
+              ...(parsed.source_session && { source_session: parsed.source_session }),
               ...(parsed.resolved_at && { resolved_at: parsed.resolved_at }),
             } as ThreadObject;
           }
@@ -99,8 +101,9 @@ export function normalizeThreads(
             id: inner.id,
             text: inner.text || inner.note,
             status: inner.status || item.status,
+            // Preserve the earliest available created_at — never overwrite with now()
             created_at: inner.created_at || item.created_at || new Date().toISOString(),
-            ...(sourceSession && { source_session: sourceSession }),
+            ...(sourceSession && !item.source_session && { source_session: sourceSession }),
             ...(inner.resolved_at && { resolved_at: inner.resolved_at }),
           } as ThreadObject;
         }

@@ -9,14 +9,14 @@ import { ProjectSchema } from "./common.js";
  * Create decision parameters schema
  */
 export const CreateDecisionParamsSchema = z.object({
-  title: z.string().min(1, "title is required"),
-  decision: z.string().min(1, "decision text is required"),
-  rationale: z.string().min(1, "rationale is required"),
-  alternatives_considered: z.array(z.string()).optional(),
-  personas_involved: z.array(z.string()).optional(),
-  docs_affected: z.array(z.string()).optional(),
-  linear_issue: z.string().optional(),
-  session_id: z.string().optional(),
+  title: z.string().min(1, "title is required").max(500),
+  decision: z.string().min(1, "decision text is required").max(2000),
+  rationale: z.string().min(1, "rationale is required").max(2000),
+  alternatives_considered: z.array(z.string().max(1000)).optional(),
+  personas_involved: z.array(z.string().max(200)).optional(),
+  docs_affected: z.array(z.string().max(500)).optional(),
+  linear_issue: z.string().max(100).optional(),
+  session_id: z.string().max(100).optional(),
   project: ProjectSchema.optional(),
 });
 

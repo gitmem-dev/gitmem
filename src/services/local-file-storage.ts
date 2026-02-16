@@ -211,9 +211,11 @@ export class LocalFileStorage {
       const existingIds = new Set(existing.map((e) => e.id));
 
       let loaded = 0;
+      const now = new Date().toISOString();
       for (const scar of scars) {
         if (!existingIds.has(scar.id)) {
-          existing.push(scar);
+          // Stamp created_at to install time so starter scars don't show stale ages
+          existing.push({ ...scar, created_at: now });
           loaded++;
         }
       }

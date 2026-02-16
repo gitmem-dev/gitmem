@@ -148,6 +148,7 @@ async function runQuickCheck(): Promise<{
           apikey: supabaseKey!,
           Authorization: `Bearer ${supabaseKey}`,
         },
+        signal: AbortSignal.timeout(5_000),
       });
       const durationMs = Date.now() - startTime;
 
@@ -186,6 +187,7 @@ async function runQuickCheck(): Promise<{
           headers: {
             Authorization: `Bearer ${openaiKey}`,
           },
+          signal: AbortSignal.timeout(5_000),
         });
         const durationMs = Date.now() - startTime;
 
@@ -215,6 +217,7 @@ async function runQuickCheck(): Promise<{
           headers: {
             Authorization: `Bearer ${openrouterKey}`,
           },
+          signal: AbortSignal.timeout(5_000),
         });
         const durationMs = Date.now() - startTime;
 
@@ -240,7 +243,9 @@ async function runQuickCheck(): Promise<{
     } else if (embeddingProvider === "ollama") {
       try {
         const startTime = Date.now();
-        const response = await fetch(`${ollamaUrl}/api/tags`);
+        const response = await fetch(`${ollamaUrl}/api/tags`, {
+          signal: AbortSignal.timeout(5_000),
+        });
         const durationMs = Date.now() - startTime;
 
         if (response.ok) {
@@ -354,6 +359,7 @@ async function runQuickCheck(): Promise<{
                 Authorization: `Bearer ${supabaseKey}`,
                 Prefer: "count=exact",
               },
+              signal: AbortSignal.timeout(5_000),
             }
           );
           const count = response.headers.get("content-range");
@@ -448,6 +454,7 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
               apikey: supabaseKey!,
               Authorization: `Bearer ${supabaseKey}`,
             },
+            signal: AbortSignal.timeout(5_000),
           });
         },
         5

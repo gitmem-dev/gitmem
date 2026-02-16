@@ -15,22 +15,22 @@ import { LearningTypeSchema, ScarSeveritySchema, ProjectSchema } from "./common.
 export const CreateLearningParamsSchema = z
   .object({
     learning_type: LearningTypeSchema,
-    title: z.string().min(1, "title is required"),
-    description: z.string().min(1, "description is required"),
+    title: z.string().min(1, "title is required").max(1000),
+    description: z.string().min(1, "description is required").max(5000),
     severity: ScarSeveritySchema.optional(),
-    scar_type: z.string().optional(),
-    counter_arguments: z.array(z.string()).optional(),
-    problem_context: z.string().optional(),
-    solution_approach: z.string().optional(),
-    applies_when: z.array(z.string()).optional(),
-    domain: z.array(z.string()).optional(),
-    keywords: z.array(z.string()).optional(),
-    source_linear_issue: z.string().optional(),
+    scar_type: z.string().max(100).optional(),
+    counter_arguments: z.array(z.string().max(2000)).optional(),
+    problem_context: z.string().max(2000).optional(),
+    solution_approach: z.string().max(2000).optional(),
+    applies_when: z.array(z.string().max(500)).optional(),
+    domain: z.array(z.string().max(100)).optional(),
+    keywords: z.array(z.string().max(100)).optional(),
+    source_linear_issue: z.string().max(100).optional(),
     project: ProjectSchema.optional(),
     // LLM-cooperative enforcement fields
-    why_this_matters: z.string().optional(),
-    action_protocol: z.array(z.string()).optional(),
-    self_check_criteria: z.array(z.string()).optional(),
+    why_this_matters: z.string().max(2000).optional(),
+    action_protocol: z.array(z.string().max(1000)).optional(),
+    self_check_criteria: z.array(z.string().max(1000)).optional(),
   })
   .superRefine((data, ctx) => {
     // Scars require severity

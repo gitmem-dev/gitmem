@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-02-15
+
+### Changed
+- **Tool alias consolidation (OD-691)**: Reduced advertised tools from 55 to 20 (free tier). Aliases still work when called directly. Set `GITMEM_FULL_ALIASES=1` to restore all.
+- **Starter scars reduced (OD-684)**: Ship with 3 high-quality starter scars instead of 12. Starter scars deprioritized with 0.7x score multiplier so earned scars outrank them.
+- **Recall similarity threshold (OD-686)**: Weak matches below threshold (0.4 BM25, 0.35 embeddings) are suppressed. Empty results show helpful guidance instead of noise.
+- **Adaptive session closing (OD-685)**: Auto-detects ceremony level (micro/standard/full) based on session activity. Removed hard rejection gate that blocked standard closes on short sessions.
+- **Scar relevance feedback (OD-690)**: Optional `relevance` field (high/low/noise) on `confirm_scars` for recall quality improvement. Defaults derived from decision type.
+- **Pro tier messaging (OD-688)**: Rewritten from agent's perspective with concrete value propositions.
+
+### Added
+- **Agent briefing (OD-689)**: Generates `.gitmem/agent-briefing.md` at session close with memory state summary for MEMORY.md bridge.
+- **PMEM/GitMem boundary docs (OD-687)**: README section documenting how GitMem complements MEMORY.md/cursorrules.
+
 ## [1.0.2] - 2026-02-15
 
 ### Fixed

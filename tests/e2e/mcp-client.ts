@@ -272,12 +272,13 @@ export const DEV_TOOLS = [
  *
  *   free = 73 - 6 - 3 - 2 - 4 - 3 = 55
  *   pro  = 73 - 2 - 4              = 67
- *   dev  = 73
+ *   dev  = 27
  *
  * If these numbers change, a tool was added/removed from definitions.ts.
+ * Note: Aliases are hidden by default (OD-691). Set GITMEM_FULL_ALIASES=1 to show all.
  */
 export const EXPECTED_TOOL_COUNTS = {
-  free: 55,
-  pro: 67,
-  dev: 73,
+  free: 20,
+  pro: 26,
+  dev: 30,
 } as const;

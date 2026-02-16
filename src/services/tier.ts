@@ -128,3 +128,8 @@ export function getTablePrefix(): string {
 export function getTableName(baseName: string): string {
   return `${getTablePrefix()}${baseName}`;
 }
+
+/** Whether all tool aliases (gitmem-*, gm-*) should be advertised (default: false) */
+export function hasFullAliases(): boolean {
+  return process.env.GITMEM_FULL_ALIASES === "1" || process.env.GITMEM_FULL_ALIASES === "true";
+}

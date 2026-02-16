@@ -171,20 +171,25 @@ export class LocalFileStorage {
 
     // Map back to RelevantScar
     const byId = new Map(learnings.map((l) => [String(l.id), l]));
-    return results
-      .map((r) => {
-        const l = byId.get(r.id);
-        if (!l) return null;
-        return {
-          id: r.id,
-          title: String(l.title),
-          description: String(l.description),
-          severity: String(l.severity || "medium"),
-          counter_arguments: (l.counter_arguments as string[]) || [],
-          similarity: r.similarity,
-        };
-      })
-      .filter((r): r is RelevantScar => r !== null);
+    const mapped: RelevantScar[] = [];
+    for (const r of results) {
+      const l = byId.get(r.id);
+      if (!l) continue;
+      // OD-684: Deprioritize starter scars (0.7x multiplier)
+      const isStarter = !!(l as Record<string, unknown>).is_starter;
+      const adjustedSimilarity = isStarter ? r.similarity * 0.7 : r.similarity;
+      mapped.push({
+        id: r.id,
+        title: String(l.title),
+        description: String(l.description),
+        severity: String(l.severity || "medium"),
+        counter_arguments: (l.counter_arguments as string[]) || [],
+        similarity: adjustedSimilarity,
+        is_starter: isStarter || undefined,
+      });
+    }
+    // Re-sort after starter penalty (earned scars float up)
+    return mapped.sort((a, b) => b.similarity - a.similarity);
   }
 
   /**

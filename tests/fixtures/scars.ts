@@ -24,6 +24,7 @@ export interface TestScar {
   source_date?: string;
   created_at?: string;
   updated_at?: string;
+  is_starter?: boolean;
 }
 
 /**

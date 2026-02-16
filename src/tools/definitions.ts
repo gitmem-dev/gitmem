@@ -10,6 +10,7 @@ import {
   hasTranscripts,
   hasCacheManagement,
   hasSupabase,
+  hasFullAliases,
 } from "../services/tier.js";
 
 
@@ -40,6 +41,10 @@ export const TOOLS = [
           type: "string",
           description: "Linear issue identifier for variant assignment (e.g., 'OD-525'). When provided, scars with variants will be randomly assigned and formatted accordingly.",
         },
+        similarity_threshold: {
+          type: "number",
+          description: "Minimum similarity score (0-1) to include results. Weak matches below threshold are suppressed. Default: 0.4 (free tier BM25), 0.35 (pro tier embeddings).",
+        },
       },
       required: ["plan"],
     },
@@ -67,6 +72,11 @@ export const TOOLS = [
               evidence: {
                 type: "string",
                 description: "Past-tense evidence (APPLYING), scenario comparison (N_A), or risk acknowledgment (REFUTED). Minimum 50 characters.",
+              },
+              relevance: {
+                type: "string",
+                enum: ["high", "low", "noise"],
+                description: "How relevant was this scar to your plan? high=directly applicable, low=tangentially related, noise=not relevant to this context. Helps improve future recall quality.",
               },
             },
             required: ["scar_id", "decision", "evidence"],
@@ -2180,6 +2190,31 @@ export const TOOLS = [
 ];
 
 /**
+ * Alias tool names — filtered out by default to reduce context window cost.
+ * Set GITMEM_FULL_ALIASES=1 to advertise all aliases.
+ * Aliases still route correctly in server.ts even when not advertised.
+ */
+export const ALIAS_TOOL_NAMES = new Set([
+  // gitmem-* aliases
+  "gitmem-r", "gitmem-cs", "gitmem-ss", "gitmem-sr", "gitmem-sc",
+  "gitmem-cl", "gitmem-cd", "gitmem-rs", "gitmem-rsb",
+  "gitmem-st", "gitmem-gt", "gitmem-stx",
+  "gitmem-search", "gitmem-log", "gitmem-analyze",
+  "gitmem-pc", "gitmem-ao",
+  "gitmem-lt", "gitmem-rt", "gitmem-ct", "gitmem-ps", "gitmem-ds",
+  "gitmem-cleanup", "gitmem-health", "gitmem-al", "gitmem-graph",
+  // gm-* aliases
+  "gm-open", "gm-confirm", "gm-refresh", "gm-close",
+  "gm-scar", "gm-search", "gm-log", "gm-analyze",
+  "gm-pc", "gm-absorb",
+  "gm-threads", "gm-resolve", "gm-thread-new", "gm-promote", "gm-dismiss",
+  "gm-cleanup", "gm-health", "gm-archive", "gm-graph",
+  "gm-stx",
+  // gm-cache-* aliases (canonical names are gitmem-cache-*, tier-gated separately)
+  "gm-cache-s", "gm-cache-h", "gm-cache-f",
+]);
+
+/**
  * Tier-gated tool names
  *
  * Cache tools: pro/dev only (require Supabase)
@@ -2220,7 +2255,12 @@ export const ARCHIVE_TOOL_NAMES = new Set([
  * Dev: + batch operations + transcripts
  */
 export function getRegisteredTools() {
+  const showAliases = hasFullAliases();
   return TOOLS.filter(tool => {
+    // Filter aliases unless GITMEM_FULL_ALIASES=1 (OD-691)
+    if (!showAliases && ALIAS_TOOL_NAMES.has(tool.name)) {
+      return false;
+    }
     if (BATCH_TOOL_NAMES.has(tool.name)) {
       return hasBatchOperations();
     }

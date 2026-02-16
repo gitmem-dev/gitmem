@@ -50,6 +50,7 @@ export interface RecallParams {
   project?: Project;
   match_count?: number;
   issue_id?: string; // OD-525: Required for variant assignment
+  similarity_threshold?: number; // OD-686: Minimum similarity to include results
 }
 
 /**
@@ -135,7 +136,7 @@ function formatResponse(scars: FormattedScar[], plan: string, dismissals?: Map<s
   if (scars.length === 0) {
     return `No relevant scars found for: "${plan.slice(0, 100)}..."
 
-Proceed with caution - this may be new territory without documented lessons.`;
+No past lessons match this plan closely enough. Scars accumulate as you work — create learnings during session close to build institutional memory.`;
   }
 
   // OD-487: Check if any scars have required_verification (blocking gates)
@@ -294,6 +295,10 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   const matchCount = params.match_count || 3;
   const issueId = params.issue_id; // OD-525: For variant assignment
 
+  // OD-686: Similarity threshold — suppress weak matches
+  const defaultThreshold = hasSupabase() ? 0.35 : 0.4;
+  const similarityThreshold = params.similarity_threshold ?? defaultThreshold;
+
   // Free tier: use local keyword search
   if (!hasSupabase()) {
     try {
@@ -301,16 +306,19 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       const rawScars = await getStorage().search(plan, matchCount);
       const searchLatencyMs = searchTimer.stop();
 
-      const scars: FormattedScar[] = rawScars.map((scar) => ({
-        id: scar.id,
-        title: scar.title,
-        learning_type: scar.learning_type || "scar",
-        severity: scar.severity || "medium",
-        description: scar.description || "",
-        counter_arguments: scar.counter_arguments || [],
-        applies_when: [],
-        similarity: scar.similarity || 0,
-      }));
+      const scars: FormattedScar[] = rawScars
+        .map((scar) => ({
+          id: scar.id,
+          title: scar.title,
+          learning_type: scar.learning_type || "scar",
+          severity: scar.severity || "medium",
+          description: scar.description || "",
+          counter_arguments: scar.counter_arguments || [],
+          applies_when: [],
+          similarity: scar.similarity || 0,
+        }))
+        // OD-686: Filter below threshold
+        .filter((scar) => scar.similarity >= similarityThreshold);
 
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("recall", latencyMs, scars.length, {
@@ -478,27 +486,30 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     }
 
     // Format scars for response
-    const scars: FormattedScar[] = rawScars.map((scar) => ({
-      id: scar.id,
-      title: scar.title,
-      learning_type: (scar as ScarRecord).learning_type || "scar",
-      severity: scar.severity || "medium",
-      description: scar.description || "",
-      counter_arguments: scar.counter_arguments || [],
-      applies_when: (scar as ScarRecord).applies_when || [],
-      source_issue: (scar as ScarRecord).source_linear_issue,
-      similarity: scar.similarity || 0,
-      required_verification: (scar as ScarRecord).required_verification,
-      variant_info: variantResults.get(scar.id), // OD-525
-      // OD-508: LLM-cooperative enforcement fields
-      why_this_matters: (scar as ScarRecord).why_this_matters,
-      action_protocol: (scar as ScarRecord).action_protocol,
-      self_check_criteria: (scar as ScarRecord).self_check_criteria,
-      // OD-466: Knowledge triples
-      related_triples: triplesMap.get(scar.id),
-      // Behavioral decay
-      decay_multiplier: (scar as ScarRecord).decay_multiplier,
-    }));
+    const scars: FormattedScar[] = rawScars
+      .map((scar) => ({
+        id: scar.id,
+        title: scar.title,
+        learning_type: (scar as ScarRecord).learning_type || "scar",
+        severity: scar.severity || "medium",
+        description: scar.description || "",
+        counter_arguments: scar.counter_arguments || [],
+        applies_when: (scar as ScarRecord).applies_when || [],
+        source_issue: (scar as ScarRecord).source_linear_issue,
+        similarity: scar.similarity || 0,
+        required_verification: (scar as ScarRecord).required_verification,
+        variant_info: variantResults.get(scar.id), // OD-525
+        // OD-508: LLM-cooperative enforcement fields
+        why_this_matters: (scar as ScarRecord).why_this_matters,
+        action_protocol: (scar as ScarRecord).action_protocol,
+        self_check_criteria: (scar as ScarRecord).self_check_criteria,
+        // OD-466: Knowledge triples
+        related_triples: triplesMap.get(scar.id),
+        // Behavioral decay
+        decay_multiplier: (scar as ScarRecord).decay_multiplier,
+      }))
+      // OD-686: Filter below threshold
+      .filter((scar) => scar.similarity >= similarityThreshold);
 
     // OD-552: Track surfaced scars for auto-bridge at session close
     const recallSurfacedAt = new Date().toISOString();

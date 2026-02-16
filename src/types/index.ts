@@ -159,6 +159,8 @@ export interface RelevantScar {
   self_check_criteria?: string[];
   // Behavioral decay multiplier (organic scar lifecycle)
   decay_multiplier?: number;
+  // OD-684: Starter scar flag for deprioritization
+  is_starter?: boolean;
 }
 
 export interface RecentDecision {
@@ -364,12 +366,16 @@ export interface SurfacedScar {
 // Scar confirmation decisions (refute-or-obey protocol for CLI)
 export type ConfirmationDecision = "APPLYING" | "N_A" | "REFUTED";
 
+// OD-690: Relevance feedback for recall quality improvement
+export type ScarRelevance = "high" | "low" | "noise";
+
 export interface ScarConfirmation {
   scar_id: string;
   scar_title: string;
   decision: ConfirmationDecision;
   evidence: string;
   confirmed_at: string; // ISO timestamp
+  relevance?: ScarRelevance; // OD-690: Optional relevance rating
 }
 
 export interface ConfirmScarsParams {
@@ -377,6 +383,7 @@ export interface ConfirmScarsParams {
     scar_id: string;
     decision: ConfirmationDecision;
     evidence: string;
+    relevance?: ScarRelevance; // OD-690: Optional relevance rating
   }>;
 }
 

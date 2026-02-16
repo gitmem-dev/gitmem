@@ -39,6 +39,7 @@ import * as os from "os";
 import { getGitmemPath, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
 import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
 import { loadSuggestions, saveSuggestions, detectSuggestedThreads, loadRecentSessionEmbeddings } from "../services/thread-suggestions.js";
+import { writeAgentBriefing } from "../services/agent-briefing.js";
 import type {
   SessionCloseParams,
   SessionCloseResult,
@@ -245,6 +246,10 @@ async function sessionCloseFree(
         });
       }
     }
+
+    // OD-689: Generate agent-briefing.md for PMEM bridge
+    const decisionsCount = params.decisions?.length || 0;
+    await writeAgentBriefing(learningsCount, decisionsCount);
 
     // Clear session state
     clearCurrentSession();
@@ -878,45 +883,43 @@ export async function sessionClose(
     };
   }
 
-  // Close type auto-detection: reject mismatched close types based on session activity.
-  // Standard close on a short/trivial session is wasteful; quick close on a long session loses data.
-  // t-f7c2fa01: If closing_reflection is already present (agent answered 7 questions),
-  // skip the mismatch gate — the ceremony is done, rejecting it wastes work.
+  // OD-685: Adaptive ceremony level based on session activity.
+  // Three levels: micro (quick fix), standard (normal), full (long/heavy session).
+  // t-f7c2fa01: If closing_reflection is already present, skip the mismatch gate.
   const hasReflection = params.closing_reflection &&
     Object.keys(params.closing_reflection).length > 0;
   const activity = getSessionActivity();
+
+  // Compute recommended ceremony level
+  let recommendedLevel: "micro" | "standard" | "full" = "standard";
+  if (activity) {
+    const isMinimal = activity.recall_count === 0 &&
+                      activity.observation_count === 0 &&
+                      activity.children_count === 0;
+
+    if (activity.duration_min < 15 && isMinimal) {
+      recommendedLevel = "micro";
+    } else if (activity.duration_min >= 60 || activity.recall_count >= 3 ||
+               activity.observation_count >= 3) {
+      recommendedLevel = "full";
+    }
+  }
+
   if (activity && params.close_type && !hasReflection) {
     const isMinimal = activity.recall_count === 0 &&
                       activity.observation_count === 0 &&
                       activity.children_count === 0;
 
-    if (params.close_type === "standard" && activity.duration_min < 30 && isMinimal) {
-      const latencyMs = timer.stop();
-      const perfData = buildPerformanceData("session_close", latencyMs, 0);
-      return {
-        success: false,
-        session_id: params.session_id || "",
-        close_compliance: {
-          close_type: params.close_type,
-          agent: detectAgent().agent,
-          checklist_displayed: false,
-          questions_answered_by_agent: false,
-          human_asked_for_corrections: false,
-          learnings_stored: 0,
-          scars_applied: 0,
-        },
-        validation_errors: [
-          `Close type mismatch: "standard" requested but session qualifies for "quick".`,
-          `Session duration: ${Math.round(activity.duration_min)} min (< 30 min threshold).`,
-          `Activity: ${activity.recall_count} recalls, ${activity.observation_count} observations, ${activity.children_count} children.`,
-          `Re-call with close_type: "quick" for short exploratory sessions.`,
-        ],
-        performance: perfData,
-        display: `## CLOSE TYPE MISMATCH\n\nSession is ${Math.round(activity.duration_min)} min with no substantive activity.\nUse \`close_type: "quick"\` instead of \`"standard"\`.`,
-      };
+    // Suggest micro for short sessions requesting standard (soft nudge, not rejection)
+    if (params.close_type === "standard" && recommendedLevel === "micro") {
+      console.error(
+        `[session_close] Hint: session qualifies for "quick" close ` +
+        `(${Math.round(activity.duration_min)} min, no substantive activity). ` +
+        `Proceeding with standard as requested.`
+      );
     }
 
-    if (params.close_type === "quick" && (activity.duration_min >= 30 || !isMinimal)) {
+    if (params.close_type === "quick" && recommendedLevel === "full") {
       // Warn but don't reject — agent chose quick on a substantive session
       console.error(
         `[session_close] Warning: "quick" close on substantive session ` +
@@ -1261,6 +1264,10 @@ export async function sessionClose(
 
     // OD-547: Clear session state after successful close
     clearCurrentSession();
+
+    // OD-689: Generate agent-briefing.md for PMEM bridge
+    const decisionsCount = params.decisions?.length || 0;
+    await writeAgentBriefing(learningsCount, decisionsCount);
 
     // GIT-21: Clean up session files (registry, per-session dir, legacy file)
     cleanupSessionFiles(sessionId);

@@ -218,12 +218,16 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
       if (error) {
         errors.push(error);
       } else {
+        // OD-690: Derive default relevance from decision if not provided
+        const relevance = conf.relevance ??
+          (conf.decision === "APPLYING" ? "high" : conf.decision === "N_A" ? "low" : "low");
         validConfirmations.push({
           scar_id: conf.scar_id,
           scar_title: scar.scar_title,
           decision: conf.decision,
           evidence: conf.evidence.trim(),
           confirmed_at: new Date().toISOString(),
+          relevance,
         });
         confirmedIds.add(conf.scar_id);
       }

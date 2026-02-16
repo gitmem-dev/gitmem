@@ -30,7 +30,7 @@ npx gitmem init
 ```
 
 One command. The wizard sets up everything:
-- `.gitmem/` directory with 12 starter scars
+- `.gitmem/` directory with 3 starter scars
 - `.mcp.json` with gitmem server entry
 - `CLAUDE.md` with memory protocol instructions
 - `.claude/settings.json` with tool permissions
@@ -72,7 +72,7 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 - **Automatic Recall** — Scars surface before the agent takes similar actions
 - **Session Continuity** — Context, threads, and rapport carry across sessions
 - **Closing Ceremony** — Structured reflection captures what broke, what worked, and what to do differently
-- **23 MCP Tools** — Full toolkit for memory management, search, threads, and multi-agent coordination
+- **20+ MCP Tools** — Full toolkit for memory management, search, threads, and multi-agent coordination
 - **Zero Config** — `npx gitmem init` and you're running
 - **Non-Destructive** — Merges with your existing `.mcp.json`, `CLAUDE.md`, and hooks
 
@@ -114,9 +114,30 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 
 ## Pro Tier — Coming Soon
 
-The free tier gives you everything you need for solo projects. **Pro** will add cloud storage (Supabase), semantic vector search, cross-machine sync, team shared memory, and session transcripts.
+| What you get | Why your agent cares |
+|-------------|---------------------|
+| **Semantic search** | Recall returns the *right* scars, not keyword noise |
+| **Session analytics** | Spot patterns in what keeps going wrong |
+| **Sub-agent briefing** | Hand institutional context to sub-agents automatically |
+| **Cloud persistence** | Memory survives machine changes, shareable across team |
+| **A/B testing** | Optimize scar phrasing based on what actually changes behavior |
 
-[Join the mailing list](https://gitmem.ai) to get notified when Pro launches.
+The free tier gives you everything for solo projects. Pro makes recall smarter and memory portable.
+
+[Join the mailing list](https://gitmem.ai) to get notified.
+
+## GitMem + MEMORY.md
+
+Your AI agent likely has its own memory file (MEMORY.md, .cursorrules, etc.). Here's how they work together:
+
+| | MEMORY.md | GitMem |
+|---|-----------|--------|
+| **Loaded** | Every turn (system prompt) | On-demand (tool calls) |
+| **Best for** | Preferences, shortcuts, quick reference | Earned lessons, unfinished work, decisions |
+| **Updates** | Agent writes directly | Session lifecycle (close ceremony) |
+| **Example** | "User prefers terse output" | "Always validate UUID before DB lookup" |
+
+**Tip:** Include `.gitmem/agent-briefing.md` in your MEMORY.md for a lightweight bridge between the two systems.
 
 ## Development
 

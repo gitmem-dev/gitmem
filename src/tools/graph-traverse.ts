@@ -106,29 +106,31 @@ interface NormalizedNode {
 
 function normalizeNode(input: string): NormalizedNode {
   const trimmed = input.trim();
+  // Sanitize: strip PostgREST structural chars that could escape ilike/or expressions
+  const safe = trimmed.replace(/[(),\0]/g, "");
 
   // Already prefixed: "Scar: Title", "Issue: OD-466", etc.
-  if (/^(Scar|Win|Decision|Pattern|Anti-Pattern|Issue|Agent|Persona|Thread):/.test(trimmed)) {
-    return { pattern: `*${trimmed}*`, type: trimmed.split(":")[0] };
+  if (/^(Scar|Win|Decision|Pattern|Anti-Pattern|Issue|Agent|Persona|Thread):/.test(safe)) {
+    return { pattern: `*${safe}*`, type: safe.split(":")[0] };
   }
 
   // OD-XXX issue pattern
-  if (/^OD-\d+$/i.test(trimmed)) {
-    return { pattern: `*${trimmed.toUpperCase()}*`, type: "Issue" };
+  if (/^OD-\d+$/i.test(safe)) {
+    return { pattern: `*${safe.toUpperCase()}*`, type: "Issue" };
   }
 
   // Known agent names
-  if (KNOWN_AGENTS.includes(trimmed)) {
-    return { pattern: `*Agent: ${trimmed}*`, type: "Agent" };
+  if (KNOWN_AGENTS.includes(safe)) {
+    return { pattern: `*Agent: ${safe}*`, type: "Agent" };
   }
 
   // Known persona names
-  if (KNOWN_PERSONAS.includes(trimmed)) {
-    return { pattern: `*Persona: ${trimmed}*`, type: "Persona" };
+  if (KNOWN_PERSONAS.includes(safe)) {
+    return { pattern: `*Persona: ${safe}*`, type: "Persona" };
   }
 
   // Fallback: fuzzy search
-  return { pattern: `*${trimmed}*`, type: "Unknown" };
+  return { pattern: `*${safe}*`, type: "Unknown" };
 }
 
 /** Detect the type label from a subject/object string */

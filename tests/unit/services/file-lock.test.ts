@@ -97,18 +97,36 @@ describe("stale lock detection", () => {
 });
 
 describe("timeout behavior", () => {
-  it("times out when lock is held by active process (not stale)", () => {
+  it("allows reentrant acquisition when same process holds lock", () => {
     const lp = lockPath();
 
-    // Create a fresh (non-stale) lock file
+    // Create a fresh lock held by this process
     const freshContents = {
       pid: process.pid,
       hostname: os.hostname(),
-      acquired_at: new Date().toISOString(), // just now
+      acquired_at: new Date().toISOString(),
     };
     fs.writeFileSync(lp, JSON.stringify(freshContents));
 
-    // Should timeout because the lock is not stale
+    // Same PID + hostname → reentrant, should NOT throw
+    expect(() => acquireLockSync(lp, 100, 10)).not.toThrow();
+
+    // Clean up
+    fs.unlinkSync(lp);
+  });
+
+  it("times out when lock is held by different process (not stale)", () => {
+    const lp = lockPath();
+
+    // Create a fresh lock held by a different PID
+    const freshContents = {
+      pid: process.pid + 9999,
+      hostname: os.hostname(),
+      acquired_at: new Date().toISOString(),
+    };
+    fs.writeFileSync(lp, JSON.stringify(freshContents));
+
+    // Different PID → should timeout
     expect(() => acquireLockSync(lp, 100, 10)).toThrow(/Timeout after 100ms/);
 
     // Clean up

@@ -11,7 +11,7 @@
  *    (called from recall to annotate frequently-dismissed scars)
  */
 
-import { isConfigured } from "./supabase-client.js";
+import { isConfigured, safeInFilter } from "./supabase-client.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
@@ -99,7 +99,7 @@ export async function fetchDismissalCounts(
     // Query scar_usage for the given scar IDs (last 90 days)
     const url = new URL(`${SUPABASE_REST_URL}/scar_usage`);
     url.searchParams.set("select", "scar_id,reference_type");
-    url.searchParams.set("scar_id", `in.(${scarIds.join(",")})`);
+    url.searchParams.set("scar_id", safeInFilter(scarIds));
     url.searchParams.set("surfaced_at", `gte.${new Date(Date.now() - 90 * 86400000).toISOString()}`);
     url.searchParams.set("limit", "1000");
 

@@ -7,7 +7,7 @@
  * Uses directQuery for raw Supabase REST access (no ww-mcp dependency).
  */
 
-import { directQuery, directQueryAll } from "./supabase-client.js";
+import { directQuery, directQueryAll, safeInFilter } from "./supabase-client.js";
 import { getCache } from "./cache.js";
 import type { Project } from "../types/index.js";
 
@@ -266,7 +266,7 @@ export async function enrichScarUsageTitles(
     {
       select: "id,title,severity",
       filters: {
-        id: `in.(${ids.join(",")})`,
+        id: safeInFilter(ids),
       },
     }
   );

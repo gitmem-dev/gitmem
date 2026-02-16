@@ -15,6 +15,46 @@ import type {
 } from "../types/index.js";
 import { getCache } from "./cache.js";
 
+// --- PostgREST Input Sanitization ---
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validate that a value is a UUID. Used to prevent injection in `in.(...)` filters
+ * where array elements are joined with commas.
+ */
+function isValidUUID(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
+/**
+ * Build a safe PostgREST `in.(...)` filter from an array of UUIDs.
+ * Rejects any non-UUID values to prevent filter injection via comma-splitting.
+ */
+export function safeInFilter(ids: string[]): string {
+  const valid = ids.filter(id => isValidUUID(id));
+  if (valid.length !== ids.length) {
+    console.warn(`[supabase-client] safeInFilter rejected ${ids.length - valid.length} non-UUID values`);
+  }
+  if (valid.length === 0) return "in.()";
+  return `in.(${valid.join(",")})`;
+}
+
+/**
+ * Escape PostgREST special characters in a value used within filter expressions.
+ * Prevents injection via characters that have structural meaning in PostgREST syntax:
+ * parentheses (group operators), commas (value separators), dots (operator delimiters).
+ */
+export function escapePostgRESTValue(value: string): string {
+  // Reject null bytes
+  if (value.includes("\0")) {
+    throw new Error("PostgREST value must not contain null bytes");
+  }
+  // For ilike patterns, escape structural PostgREST chars that could break OR groups
+  // PostgREST uses ( ) , as structural delimiters in or=() expressions
+  return value.replace(/[(),]/g, "");
+}
+
 // Configuration from environment
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
@@ -347,7 +387,7 @@ export async function fetchRelatedTriples(
     const triples = await directQuery<KnowledgeTriple>("knowledge_triples", {
       select: "subject,predicate,object,event_time,decay_weight,half_life_days,decay_floor,source_id",
       filters: {
-        source_id: `in.(${scarIds.join(",")})`,
+        source_id: safeInFilter(scarIds),
       },
     });
 

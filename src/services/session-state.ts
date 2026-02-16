@@ -151,6 +151,10 @@ export function hasUnconfirmedScars(): boolean {
   return recallScars.some(s => !confirmedIds.has(s.scar_id));
 }
 
+// Security: cap unbounded arrays to prevent memory exhaustion in long sessions
+const MAX_OBSERVATIONS = 500;
+const MAX_CHILDREN = 100;
+
 /**
  * v2 Phase 2: Add observations from sub-agents/teammates
  */
@@ -164,6 +168,10 @@ export function addObservations(newObs: Observation[]): number {
     absorbed_at: o.absorbed_at || new Date().toISOString(),
   }));
   currentSession.observations.push(...timestamped);
+  // Cap to prevent memory exhaustion — keep most recent
+  if (currentSession.observations.length > MAX_OBSERVATIONS) {
+    currentSession.observations = currentSession.observations.slice(-MAX_OBSERVATIONS);
+  }
   console.error(`[session-state] Observations tracked: ${currentSession.observations.length} total`);
   return timestamped.length;
 }
@@ -181,6 +189,11 @@ export function getObservations(): Observation[] {
 export function addChild(child: SessionChild): void {
   if (!currentSession) {
     console.warn("[session-state] Cannot add child: no active session");
+    return;
+  }
+  // Cap to prevent memory exhaustion — reject silently beyond limit
+  if (currentSession.children.length >= MAX_CHILDREN) {
+    console.warn(`[session-state] Children cap reached (${MAX_CHILDREN}), ignoring new child: ${child.role}`);
     return;
   }
   currentSession.children.push(child);

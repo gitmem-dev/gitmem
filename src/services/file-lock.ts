@@ -81,6 +81,18 @@ export function acquireLockSync(
         throw new Error(`[file-lock] Failed to create lock file ${lockPath}: ${error.message}`);
       }
 
+      // Lock file exists — check if we already hold it (reentrance detection)
+      try {
+        const raw = fs.readFileSync(lockPath, "utf-8");
+        const holder: LockContents = JSON.parse(raw);
+        if (holder.pid === process.pid && holder.hostname === os.hostname()) {
+          // Same process already holds the lock — reentrant call, allow through
+          return;
+        }
+      } catch {
+        // Can't read lock — fall through to stale check
+      }
+
       // Lock file exists — check if stale
       if (isLockStale(lockPath)) {
         try {

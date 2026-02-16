@@ -119,8 +119,8 @@ describe("Smoke: Free Tier", () => {
     expect(isToolError(startResult)).toBe(false);
 
     // session_start returns markdown display — read active-sessions.json for full UUID
-    // Server walks up from CWD to find .gitmem/, so registry is at CWD/.gitmem/
-    const registryPath = join(process.cwd(), ".gitmem", "active-sessions.json");
+    // Server uses GITMEM_DIR (set to TEST_DIR in beforeAll), so registry is there
+    const registryPath = join(TEST_DIR, "active-sessions.json");
     expect(existsSync(registryPath), "active-sessions.json should exist after session_start").toBe(true);
     const registry = JSON.parse(readFileSync(registryPath, "utf-8"));
     const sessionId = registry.sessions[registry.sessions.length - 1].session_id;

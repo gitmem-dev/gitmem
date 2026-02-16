@@ -394,12 +394,19 @@ export function createServer(): Server {
         ],
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      // Redact internal details: file paths, SQL errors, stack traces
+      const safeMessage = rawMessage
+        .replace(/\/[^\s:]+/g, "[path]")           // redact file paths
+        .replace(/\b\d{5}\b/g, "[code]")            // redact PG error codes
+        .replace(/at\s+\S+\s+\(.+\)/g, "")          // strip stack frames
+        .slice(0, 200);                              // cap length
+      console.error(`[server] Tool error:`, rawMessage);
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({ error: message }),
+            text: JSON.stringify({ error: safeMessage }),
           },
         ],
         isError: true,

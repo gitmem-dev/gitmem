@@ -10,6 +10,7 @@
  * - Blind testing (agent doesn't know which variant they received)
  */
 
+import { randomInt } from "crypto";
 import * as supabase from "./supabase-client.js";
 
 /**
@@ -131,8 +132,8 @@ export async function createVariantAssignment(
   }
 
   try {
-    // Random selection from active variants
-    const randomIndex = Math.floor(Math.random() * variants.length);
+    // Cryptographically secure random selection for blind A/B testing integrity
+    const randomIndex = randomInt(0, variants.length);
     const selectedVariant = variants[randomIndex];
 
     const result = await supabase.directUpsert<VariantAssignment>(
@@ -156,7 +157,7 @@ export async function createVariantAssignment(
       return await getExistingAssignment(agentId, scarId);
     }
 
-    console.error(`[variant-assignment] Exception creating assignment:`, error);
+    console.error(`[variant-assignment] Failed to create assignment for scar ${scarId}`);
     return null;
   }
 }

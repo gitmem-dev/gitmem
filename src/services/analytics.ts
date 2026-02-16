@@ -1,5 +1,5 @@
 /**
- * Analytics Service (OD-567)
+ * Analytics Service
  *
  * Shared analytics engine for session insights. Powers both the
  * gitmem-analyze MCP tool (CLI) and the GitMem Console dashboard.

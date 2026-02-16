@@ -4,7 +4,7 @@
  * Track scar application for effectiveness measurement.
  * Records to scar_usage table.
  *
- * Performance target: <1000ms (OD-429)
+ * Performance target: <1000ms
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -38,8 +38,8 @@ export async function recordScarUsage(
     scar_id: params.scar_id,
     issue_id: params.issue_id || null,
     issue_identifier: params.issue_identifier || null,
-    session_id: params.session_id || null, // OD-552: Session tracking
-    agent: params.agent || null, // OD-552: Agent identity
+    session_id: params.session_id || null, // Session tracking
+    agent: params.agent || null, // Agent identity
     surfaced_at: params.surfaced_at,
     acknowledged_at: params.acknowledged_at || null,
     referenced: params.reference_type !== "none",

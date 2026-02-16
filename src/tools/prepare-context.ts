@@ -1,5 +1,5 @@
 /**
- * prepare_context Tool (GitMem v2 Phase 1 — OD-593)
+ * prepare_context Tool
  *
  * Bridge between global memory and agents that can't call recall directly.
  * The lead agent calls this to generate a portable memory payload that

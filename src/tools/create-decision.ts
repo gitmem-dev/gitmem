@@ -5,7 +5,7 @@
  * Generates embeddings client-side and writes directly to Supabase REST API,
  * eliminating the ww-mcp Edge Function dependency.
  *
- * Performance target: <3000ms (OD-429)
+ * Performance target: <3000ms
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -91,7 +91,7 @@ export async function createDecision(
         network_call: true,
       };
 
-      // OD-466: Auto-create knowledge triples (tracked fire-and-forget)
+      // Auto-create knowledge triples (tracked fire-and-forget)
       getEffectTracker().track("triple_write", "decision", () =>
         writeTriplesForDecision({
           id: decisionId,

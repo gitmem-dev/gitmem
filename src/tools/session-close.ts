@@ -4,7 +4,7 @@
  * Persist session with compliance validation.
  * Validates that required fields are present based on close type.
  *
- * Performance target: <3000ms (OD-429)
+ * Performance target: <3000ms
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -13,10 +13,10 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getConfirmations, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js"; // OD-547, OD-552, v2 Phase 2
-import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // OD-thread-lifecycle
-import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
-import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js"; // OD-624
+import { clearCurrentSession, getSurfacedScars, getConfirmations, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js";
+import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
+import { deduplicateThreadList } from "../services/thread-dedup.js";
+import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -73,7 +73,7 @@ function countScarsApplied(scarsApplied: string | string[] | undefined | null): 
 
 /**
  * Find the most recently modified transcript file in Claude Code projects directory
- * OD-538: Search by recency, not by filename matching (supports post-compaction)
+ * Search by recency, not by filename matching (supports post-compaction)
  */
 function findMostRecentTranscript(projectsDir: string, cwdBasename: string, cwdFull: string): string | null {
   // Claude Code names project dirs by replacing / with - in the full CWD path
@@ -127,7 +127,7 @@ function findMostRecentTranscript(projectsDir: string, cwdBasename: string, cwdF
 
 /**
  * Extract Claude Code session ID from transcript JSONL content
- * OD-538: Provides traceability between GitMem sessions and IDE sessions
+ * Provides traceability between GitMem sessions and IDE sessions
  */
 function extractClaudeSessionId(transcriptContent: string, filePath: string): string | null {
   try {
@@ -206,7 +206,7 @@ async function sessionCloseFree(
       sessionData.decisions = params.decisions.map((d) => d.title);
     }
 
-    // OD-thread-lifecycle: Normalize threads for free tier too
+    // : Normalize threads for free tier too
     const freeSessionThreads = getThreads();
     if (params.open_threads && params.open_threads.length > 0) {
       const normalized = normalizeThreads(params.open_threads, params.session_id);
@@ -247,7 +247,7 @@ async function sessionCloseFree(
       }
     }
 
-    // OD-689: Generate agent-briefing.md for PMEM bridge
+    // Generate agent-briefing.md for PMEM bridge
     const decisionsCount = params.decisions?.length || 0;
     await writeAgentBriefing(learningsCount, decisionsCount);
 
@@ -446,7 +446,7 @@ function cleanupSessionFiles(sessionId: string): void {
   // Legacy active-session.json cleanup removed — file is no longer written
 }
 
-// UUID and short-ID format validation for session_id (OD-548)
+// UUID and short-ID format validation for session_id
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHORT_ID_REGEX = /^[0-9a-f]{8}$/i;
 
@@ -497,7 +497,7 @@ function buildSessionRecord(
     }
     sessionData.closing_reflection = reflection;
 
-    // OD-666: Distill Q8+Q9 into rapport_summary for cross-agent surfacing
+    // Distill Q8+Q9 into rapport_summary for cross-agent surfacing
     const q8 = params.closing_reflection.collaborative_dynamic;
     const q9 = params.closing_reflection.rapport_notes;
     if (q8 || q9) {
@@ -511,7 +511,7 @@ function buildSessionRecord(
     sessionData.decisions = params.decisions.map((d) => d.title);
   }
 
-  // OD-thread-lifecycle: Normalize and merge open threads
+  // : Normalize and merge open threads
   const sessionThreads = getThreads();
   if (params.open_threads && params.open_threads.length > 0) {
     const normalized = normalizeThreads(params.open_threads, params.session_id);
@@ -523,7 +523,7 @@ function buildSessionRecord(
     sessionData.open_threads = sessionThreads;
   }
 
-  // OD-534: If project_state provided, prepend it to open_threads as a ThreadObject
+  // If project_state provided, prepend it to open_threads as a ThreadObject
   if (params.project_state) {
     const projectStateText = `PROJECT STATE: ${params.project_state}`;
     const existing = (sessionData.open_threads || []) as ThreadObject[];
@@ -637,7 +637,7 @@ async function captureSessionTranscript(
       };
       console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
 
-      // OD-540: Process transcript for semantic search (fire-and-forget — chunking is expensive)
+      // Process transcript for semantic search (fire-and-forget — chunking is expensive)
       processTranscript(sessionId, transcriptContent, transcriptProject)
         .then(result => {
           if (result.success) {
@@ -804,7 +804,7 @@ export async function sessionClose(
   const timer = new Timer();
   const metricsId = uuidv4();
 
-  // OD-548: Validate session_id format before any DB calls
+  // Validate session_id format before any DB calls
   if (params.session_id && !isValidSessionId(params.session_id)) {
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
@@ -883,7 +883,7 @@ export async function sessionClose(
     };
   }
 
-  // OD-685: Adaptive ceremony level based on session activity.
+  // Adaptive ceremony level based on session activity.
   // Three levels: micro (quick fix), standard (normal), full (long/heavy session).
   // t-f7c2fa01: If closing_reflection is already present, skip the mismatch gate.
   const hasReflection = params.closing_reflection &&
@@ -1129,7 +1129,7 @@ export async function sessionClose(
     params, existingSession, isRetroactive, agentIdentity, closeCompliance, sessionId
   );
 
-  // OD-624: Sync threads to Supabase (fire-and-forget, non-blocking)
+  // Sync threads to Supabase (fire-and-forget, non-blocking)
   const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
   if (closeThreads.length > 0) {
     const closeProject = isRetroactive ? "default" : (existingSession?.project as string | undefined) || "default";
@@ -1147,7 +1147,7 @@ export async function sessionClose(
     console.error("[session_close] Failed to prune threads.json (non-fatal):", err);
   }
 
-  // OD-538: Capture transcript if enabled (default true for CLI/DAC)
+  // Capture transcript if enabled (default true for CLI/DAC)
   let transcriptStatus: TranscriptStatus | undefined;
   const shouldCaptureTranscript = params.capture_transcript !== false &&
     (agentIdentity === "cli" || agentIdentity === "desktop");
@@ -1160,7 +1160,7 @@ export async function sessionClose(
     }
   }
 
-  // OD-552: Auto-bridge Q6 answers to scar_usage records
+  // Auto-bridge Q6 answers to scar_usage records
   const normalizedScarsApplied = normalizeScarsApplied(params.closing_reflection?.scars_applied);
   if (
     (!params.scars_to_record || params.scars_to_record.length === 0) &&
@@ -1174,11 +1174,11 @@ export async function sessionClose(
 
   // 6. Persist to Supabase (direct REST API, bypasses ww-mcp)
   try {
-    // OD-646: Upsert session WITHOUT embedding (fast path)
+    // Upsert session WITHOUT embedding (fast path)
     // Embedding + thread detection run fire-and-forget after
     await supabase.directUpsert("orchestra_sessions", sessionData);
 
-    // OD-646: Tracked fire-and-forget embedding generation + session update + thread detection
+    // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
       getEffectTracker().track("embedding", "session_close", async () => {
         const embeddingParts = [
@@ -1218,8 +1218,8 @@ export async function sessionClose(
       });
     }
 
-    // OD-646: Tracked fire-and-forget scar usage recording (was blocking ~200-500ms)
-    // OD-552: scars_to_record may now come from auto-bridge above
+    // Tracked fire-and-forget scar usage recording (was blocking ~200-500ms)
+    // scars_to_record may now come from auto-bridge above
     if (params.scars_to_record && params.scars_to_record.length > 0) {
       const project = isRetroactive
         ? "default"
@@ -1262,10 +1262,10 @@ export async function sessionClose(
       },
     }).catch(() => {});
 
-    // OD-547: Clear session state after successful close
+    // Clear session state after successful close
     clearCurrentSession();
 
-    // OD-689: Generate agent-briefing.md for PMEM bridge
+    // Generate agent-briefing.md for PMEM bridge
     const decisionsCount = params.decisions?.length || 0;
     await writeAgentBriefing(learningsCount, decisionsCount);
 
@@ -1292,7 +1292,7 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
 
-    // OD-547: Clear session state even on error (session is done either way)
+    // Clear session state even on error (session is done either way)
     clearCurrentSession();
 
     const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus);

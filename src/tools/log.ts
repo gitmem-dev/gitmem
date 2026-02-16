@@ -1,5 +1,5 @@
 /**
- * log Tool (OD-561)
+ * log Tool
  *
  * Chronological listing of recent learnings, like `git log`.
  * Pure read-only operation with no side effects.

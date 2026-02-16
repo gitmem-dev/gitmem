@@ -27,7 +27,7 @@ export const ClosingReflectionSchema = z.object({
 export type ClosingReflection = z.infer<typeof ClosingReflectionSchema>;
 
 /**
- * Task completion proof schema (OD-491)
+ * Task completion proof schema
  */
 export const TaskCompletionSchema = z.object({
   questions_displayed_at: ISOTimestampSchema,

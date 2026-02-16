@@ -30,7 +30,7 @@ Point Claude Desktop at local build in `~/Library/Application Support/Claude/cla
 
 Restart Claude Desktop (Cmd+Q, reopen).
 
-### Test 1: No stdout corruption (OD-590)
+### Test 1: No stdout corruption
 
 Tell the agent:
 > "Run `gm-open` to start a session"
@@ -39,7 +39,7 @@ Tell the agent:
 - [ ] No "invalid JSON" errors in the UI
 - [ ] Session starts cleanly with session_id and agent displayed
 
-### Test 2: Error messages surface (OD-554)
+### Test 2: Error messages surface
 
 Tell the agent:
 > "Create a scar with title 'test scar' and description 'testing error surface' but don't include severity"
@@ -48,7 +48,7 @@ Tell the agent:
 - [ ] Error message mentions missing severity
 - [ ] You can read the error and understand what went wrong
 
-### Test 3: Session ID validation (OD-548)
+### Test 3: Session ID validation
 
 Tell the agent:
 > "Close the session with session_id 'SESSION_AUTO'"
@@ -58,7 +58,7 @@ Tell the agent:
 - [ ] Error message includes a UUID example
 - [ ] Error message suggests running session_start first
 
-### Test 4: Arbitrary project names (OD-640)
+### Test 4: Arbitrary project names
 
 Tell the agent:
 > "Start a new session with project 'my-cool-project'"
@@ -153,11 +153,11 @@ Restart Claude Desktop.
 
 | Issue | Fix | Tests |
 |-------|-----|-------|
-| OD-590 | 22 console.log replaced with console.error in check.ts | +2 regression tests |
-| OD-554 | errors[] added to create_learning and record_scar_usage results | +8 tests |
-| OD-548 | UUID/short-ID format validation in session_close | +10 tests |
-| OD-640 | Removed hardcoded project enum, free-form string | covered by schema tests |
+| | 22 console.log replaced with console.error in check.ts | +2 regression tests |
+| | errors[] added to create_learning and record_scar_usage results | +8 tests |
+| | UUID/short-ID format validation in session_close | +10 tests |
+| | Removed hardcoded project enum, free-form string | covered by schema tests |
 
 ## Known Limitations (shipping as v1.0.2)
 
-- OD-557/563: Multi-session concurrency (last-write-wins on active-sessions.json)
+-  Multi-session concurrency (last-write-wins on active-sessions.json)

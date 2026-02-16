@@ -1,11 +1,11 @@
 /**
- * analyze Tool (OD-567)
+ * analyze Tool
  *
  * Session analytics and insights engine. Provides structured analysis
  * of session history, closing reflections, agent patterns, and more.
  *
  * Starts with "summary" lens; expanded with additional lenses in
- * OD-568 (Tier 1), OD-569 (Tier 2), OD-570 (Tier 3), OD-572 (Tier 4).
+ * (Tier 1).
  *
  * Performance target: 3000ms
  */

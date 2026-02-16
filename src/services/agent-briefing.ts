@@ -1,5 +1,5 @@
 /**
- * Agent Briefing Generator (OD-689)
+ * Agent Briefing Generator
  *
  * Generates `.gitmem/agent-briefing.md` at session close with a
  * compact summary of memory state. Designed for inclusion in

@@ -10,7 +10,7 @@
  * - 500-employees-at-8AM (no Supabase contention during session_start)
  * - Cross-container consistency (same data = same results)
  *
- * Issue: OD-473
+ *
  */
 
 import * as fs from "fs";

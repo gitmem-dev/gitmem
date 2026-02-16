@@ -1,5 +1,5 @@
 /**
- * Unit tests for prepare_context schema (OD-594)
+ * Unit tests for prepare_context schema
  */
 
 import { describe, it, expect } from "vitest";

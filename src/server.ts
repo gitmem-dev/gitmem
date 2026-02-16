@@ -350,7 +350,7 @@ export function createServer(): Server {
           result = await graphTraverse(toolArgs as unknown as GraphTraverseParams);
           break;
 
-        // Cache management tools (OD-473)
+        // Cache management tools
         case "gitmem-cache-status":
         case "gm-cache-s":
           result = getCacheStatus((toolArgs.project as Project) || getProject() as Project || "default");
@@ -420,8 +420,8 @@ export function createServer(): Server {
 /**
  * Run the server with stdio transport
  *
- * OD-473: Initializes local vector search in background for fast startup.
- * OD-489: Uses direct Supabase queries to get embeddings for local cache.
+ * Initializes local vector search in background for fast startup.
+ * Uses direct Supabase queries to get embeddings for local cache.
  *
  * Server starts immediately; cache loads in background.
  * First few queries may use Supabase fallback until cache is ready.

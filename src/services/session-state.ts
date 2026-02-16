@@ -1,7 +1,7 @@
 /**
  * Session State Management
- * OD-547: Track current session context for auto-injecting into recall calls
- * OD-552: Track surfaced scars for auto-bridging Q6 answers to scar_usage records
+ * Track current session context for auto-injecting into recall calls
+ * Track surfaced scars for auto-bridging Q6 answers to scar_usage records
  *
  * Maintains in-memory state of the current active session including:
  * - session_id from session_start
@@ -20,11 +20,11 @@ interface SessionContext {
   agent?: string;
   project?: string;              // Thread fix: track active project for list_threads default
   startedAt: Date;
-  surfacedScars: SurfacedScar[]; // OD-552: Track all scars surfaced during session
+  surfacedScars: SurfacedScar[]; // Track all scars surfaced during session
   confirmations: ScarConfirmation[]; // Refute-or-obey confirmations for recall-surfaced scars
   observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
   children: SessionChild[];      // v2 Phase 2: Child agent records
-  threads: ThreadObject[];       // OD-thread-lifecycle: Working thread state
+  threads: ThreadObject[];       // : Working thread state
 }
 
 // Global session state (single active session per MCP server instance)
@@ -81,7 +81,7 @@ export function hasActiveIssue(): boolean {
 }
 
 /**
- * OD-552: Add surfaced scars to tracking (deduplicates by scar_id)
+ * Add surfaced scars to tracking (deduplicates by scar_id)
  * Called by session_start and recall when scars are surfaced.
  */
 export function addSurfacedScars(scars: SurfacedScar[]): void {
@@ -101,7 +101,7 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
 }
 
 /**
- * OD-552: Get all surfaced scars for the current session
+ * Get all surfaced scars for the current session
  */
 export function getSurfacedScars(): SurfacedScar[] {
   return currentSession?.surfacedScars || [];
@@ -234,7 +234,7 @@ export function getSessionActivity(): SessionActivity | null {
 }
 
 /**
- * OD-thread-lifecycle: Set threads for the current session
+ * : Set threads for the current session
  */
 export function setThreads(threads: ThreadObject[]): void {
   if (!currentSession) {
@@ -246,14 +246,14 @@ export function setThreads(threads: ThreadObject[]): void {
 }
 
 /**
- * OD-thread-lifecycle: Get threads for the current session
+ * : Get threads for the current session
  */
 export function getThreads(): ThreadObject[] {
   return currentSession?.threads || [];
 }
 
 /**
- * OD-thread-lifecycle: Resolve a thread in session state by ID.
+ * : Resolve a thread in session state by ID.
  * Returns the resolved thread or null if not found.
  */
 export function resolveThreadInState(threadId: string, resolutionNote?: string): ThreadObject | null {

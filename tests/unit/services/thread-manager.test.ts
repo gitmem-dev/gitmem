@@ -311,7 +311,7 @@ describe("aggregateThreads", () => {
         session_date: "2026-02-08",
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-aaa", text: "Phase 2 issues OD-604 through OD-609 (GitMem public npm release) still ready to execute", status: "open" as const, created_at: "2026-02-07T00:00:00Z" },
+          { id: "t-aaa", text: "Phase 2 issues (GitMem public npm release) still ready to execute", status: "open" as const, created_at: "2026-02-07T00:00:00Z" },
         ],
       },
     ];
@@ -375,7 +375,7 @@ describe("mergeThreadStates", () => {
     expect(merged[0].status).toBe("resolved");
   });
 
-  it("deduplicates by normalized text across different IDs (OD-641)", () => {
+  it("deduplicates by normalized text across different IDs", () => {
     const current: ThreadObject[] = [
       { id: "t-aaa", text: "Fix auth timeout", status: "open", created_at: "2026-01-01T00:00:00Z" },
     ];
@@ -387,7 +387,7 @@ describe("mergeThreadStates", () => {
     expect(merged[0].id).toBe("t-aaa"); // Current wins
   });
 
-  it("propagates resolved status across text-matched threads with different IDs (OD-641)", () => {
+  it("propagates resolved status across text-matched threads with different IDs", () => {
     const current: ThreadObject[] = [
       { id: "t-aaa", text: "Fix auth timeout", status: "open", created_at: "2026-01-01T00:00:00Z" },
     ];
@@ -401,7 +401,7 @@ describe("mergeThreadStates", () => {
     expect(merged[0].resolved_at).toBe("2026-01-02T00:00:00Z");
   });
 
-  it("handles text normalization differences (trailing punctuation, whitespace) (OD-641)", () => {
+  it("handles text normalization differences (trailing punctuation, whitespace)", () => {
     const current: ThreadObject[] = [
       { id: "t-aaa", text: "Fix the auth timeout.", status: "open", created_at: "2026-01-01T00:00:00Z" },
     ];

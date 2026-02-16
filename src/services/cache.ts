@@ -5,7 +5,7 @@
  * Caches search results to avoid repeated ww-mcp calls.
  *
  * Design: docs/systems/gitmem-caching.md
- * Issue: OD-473
+ *
  */
 
 import { createHash } from "crypto";

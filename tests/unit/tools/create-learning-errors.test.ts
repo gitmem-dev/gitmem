@@ -1,5 +1,5 @@
 /**
- * Unit tests for create_learning error surfacing (OD-554)
+ * Unit tests for create_learning error surfacing
  *
  * Verifies that validation errors and DB errors are returned
  * in the errors[] field instead of being silently swallowed.
@@ -78,7 +78,7 @@ beforeEach(() => {
   mockDirectUpsert.mockResolvedValue({ id: "test-learning-id" });
 });
 
-describe("create_learning: validation error surfacing (OD-554)", () => {
+describe("create_learning: validation error surfacing", () => {
   it("returns errors[] when scar is missing severity", async () => {
     const result = await createLearning({
       learning_type: "scar",
@@ -134,7 +134,7 @@ describe("create_learning: validation error surfacing (OD-554)", () => {
   });
 });
 
-describe("create_learning: DB error surfacing (OD-554)", () => {
+describe("create_learning: DB error surfacing", () => {
   it("returns error message when directUpsert throws", async () => {
     mockDirectUpsert.mockRejectedValue(new Error("duplicate key violates unique constraint"));
 

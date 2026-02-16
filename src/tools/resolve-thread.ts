@@ -1,11 +1,11 @@
 /**
- * resolve_thread Tool (OD-thread-lifecycle, OD-621)
+ * resolve_thread Tool
  *
  * Mark an open thread as resolved. Supports resolution by:
  * - thread_id: exact match (preferred)
  * - text_match: case-insensitive substring match (fallback)
  *
- * OD-621: Updates Supabase (source of truth) + local file (cache).
+ * Updates Supabase (source of truth) + local file (cache).
  * Falls back to local-only if Supabase is unavailable or thread
  * doesn't exist in Supabase.
  *
@@ -104,7 +104,7 @@ export async function resolveThread(
   // Persist to local file (cache)
   saveThreadsFile(threads);
 
-  // OD-621: Update Supabase (source of truth) — graceful fallback on failure
+  // Update Supabase (source of truth) — graceful fallback on failure
   let supabaseSynced = false;
   const supabaseSuccess = await resolveThreadInSupabase(resolved.id, {
     resolvedAt: resolved.resolved_at,

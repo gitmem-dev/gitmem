@@ -130,8 +130,8 @@ export async function recordScarUsageBatch(
           scar_id: scarId,
           issue_id: entry.issue_id || null,
           issue_identifier: entry.issue_identifier || null,
-          session_id: entry.session_id || null, // OD-552: Session tracking
-          agent: entry.agent || null, // OD-552: Agent identity
+          session_id: entry.session_id || null, // Session tracking
+          agent: entry.agent || null, // Agent identity
           surfaced_at: entry.surfaced_at,
           acknowledged_at: entry.acknowledged_at || null,
           referenced: entry.reference_type !== "none",

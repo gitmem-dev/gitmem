@@ -100,7 +100,7 @@ export const TOOLS = [
         },
         linear_issue: {
           type: "string",
-          description: "Current Linear issue identifier (e.g., OD-XXX)",
+          description: "Current Linear issue identifier (e.g., PROJ-123)",
         },
         issue_title: {
           type: "string",
@@ -305,7 +305,7 @@ export const TOOLS = [
         },
         issue_identifier: {
           type: "string",
-          description: "Linear issue identifier (e.g., OD-XXX)",
+          description: "Linear issue identifier (e.g., PROJ-123)",
         },
         surfaced_at: {
           type: "string",
@@ -365,7 +365,7 @@ export const TOOLS = [
               },
               issue_identifier: {
                 type: "string",
-                description: "Linear issue identifier (e.g., OD-XXX)",
+                description: "Linear issue identifier (e.g., PROJ-123)",
               },
               surfaced_at: {
                 type: "string",
@@ -480,7 +480,7 @@ export const TOOLS = [
     },
   },
   // ============================================================================
-  // SEARCH & LOG TOOLS (OD-560, OD-561)
+  // SEARCH & LOG TOOLS
   // ============================================================================
   {
     name: "search",
@@ -549,7 +549,7 @@ export const TOOLS = [
   },
 
   // ============================================================================
-  // PREPARE CONTEXT (GitMem v2 Phase 1 — OD-593)
+  // PREPARE CONTEXT
   // ============================================================================
   {
     name: "prepare_context",
@@ -616,7 +616,7 @@ export const TOOLS = [
     },
   },
 
-  // --- Thread Lifecycle Tools (OD-thread-lifecycle) ---
+  // --- Thread Lifecycle Tools () ---
 
   {
     name: "list_threads",
@@ -678,7 +678,7 @@ export const TOOLS = [
         },
         linear_issue: {
           type: "string",
-          description: "Associated Linear issue (e.g., OD-XXX)",
+          description: "Associated Linear issue (e.g., PROJ-123)",
         },
       },
       required: ["text"],
@@ -825,7 +825,7 @@ export const TOOLS = [
         },
         linear_issue: {
           type: "string",
-          description: "Current Linear issue identifier (e.g., OD-XXX)",
+          description: "Current Linear issue identifier (e.g., PROJ-123)",
         },
         issue_title: {
           type: "string",
@@ -1030,7 +1030,7 @@ export const TOOLS = [
         },
         issue_identifier: {
           type: "string",
-          description: "Linear issue identifier (e.g., OD-XXX)",
+          description: "Linear issue identifier (e.g., PROJ-123)",
         },
         surfaced_at: {
           type: "string",
@@ -1090,7 +1090,7 @@ export const TOOLS = [
               },
               issue_identifier: {
                 type: "string",
-                description: "Linear issue identifier (e.g., OD-XXX)",
+                description: "Linear issue identifier (e.g., PROJ-123)",
               },
               surfaced_at: {
                 type: "string",
@@ -1230,7 +1230,7 @@ export const TOOLS = [
       required: ["query"],
     },
   },
-  // gitmem-search (OD-560)
+  // gitmem-search
   {
     name: "gitmem-search",
     description: "gitmem-search (search) - Search institutional memory by query (exploration, no side effects)",
@@ -1264,7 +1264,7 @@ export const TOOLS = [
       required: ["query"],
     },
   },
-  // gitmem-log (OD-561)
+  // gitmem-log
   {
     name: "gitmem-log",
     description: "gitmem-log (log) - List recent learnings chronologically",
@@ -1297,7 +1297,7 @@ export const TOOLS = [
       },
     },
   },
-  // gitmem-pc (prepare_context) — OD-593
+  // gitmem-pc (prepare_context)
   {
     name: "gitmem-pc",
     description: "gitmem-pc (prepare_context) - Generate portable memory payload for sub-agent injection",
@@ -1356,7 +1356,7 @@ export const TOOLS = [
       required: ["observations"],
     },
   },
-  // gitmem-lt (list_threads) — OD-thread-lifecycle
+  // gitmem-lt (list_threads) — 
   {
     name: "gitmem-lt",
     description: "gitmem-lt (list_threads) - List open threads across sessions",
@@ -1369,7 +1369,7 @@ export const TOOLS = [
       },
     },
   },
-  // gitmem-rt (resolve_thread) — OD-thread-lifecycle
+  // gitmem-rt (resolve_thread) — 
   {
     name: "gitmem-rt",
     description: "gitmem-rt (resolve_thread) - Mark a thread as resolved",
@@ -1460,7 +1460,7 @@ export const TOOLS = [
         },
         linear_issue: {
           type: "string",
-          description: "Current Linear issue identifier (e.g., OD-XXX)",
+          description: "Current Linear issue identifier (e.g., PROJ-123)",
         },
         issue_title: {
           type: "string",
@@ -1621,7 +1621,7 @@ export const TOOLS = [
       required: ["learning_type", "title", "description"],
     },
   },
-  // gm-search (OD-560)
+  // gm-search
   {
     name: "gm-search",
     description: "gm-search (search) - Search institutional memory by query",
@@ -1655,7 +1655,7 @@ export const TOOLS = [
       required: ["query"],
     },
   },
-  // gm-log (OD-561)
+  // gm-log
   {
     name: "gm-log",
     description: "gm-log (log) - List recent learnings chronologically",
@@ -1688,7 +1688,7 @@ export const TOOLS = [
       },
     },
   },
-  // gm-pc (prepare_context) — OD-593
+  // gm-pc (prepare_context)
   {
     name: "gm-pc",
     description: "gm-pc (prepare_context) - Generate portable memory payload for sub-agents",
@@ -1747,7 +1747,7 @@ export const TOOLS = [
       required: ["observations"],
     },
   },
-  // gm-threads (list_threads) — OD-thread-lifecycle
+  // gm-threads (list_threads) — 
   {
     name: "gm-threads",
     description: "gm-threads (list_threads) - List open threads",
@@ -1760,7 +1760,7 @@ export const TOOLS = [
       },
     },
   },
-  // gm-resolve (resolve_thread) — OD-thread-lifecycle
+  // gm-resolve (resolve_thread) — 
   {
     name: "gm-resolve",
     description: "gm-resolve (resolve_thread) - Resolve a thread",
@@ -1835,7 +1835,7 @@ export const TOOLS = [
     },
   },
   // ============================================================================
-  // ANALYTICS TOOLS (OD-567)
+  // ANALYTICS TOOLS
   // ============================================================================
   {
     name: "analyze",
@@ -1869,7 +1869,7 @@ export const TOOLS = [
       },
     },
   },
-  // gitmem-analyze alias (OD-567)
+  // gitmem-analyze alias
   {
     name: "gitmem-analyze",
     description: "gitmem-analyze (analyze) - Session analytics. Returns formatted markdown by default.",
@@ -1902,7 +1902,7 @@ export const TOOLS = [
       },
     },
   },
-  // gm-analyze ultra-short alias (OD-567)
+  // gm-analyze ultra-short alias
   {
     name: "gm-analyze",
     description: "gm-analyze (analyze) - Session analytics. Returns formatted markdown by default.",
@@ -1945,7 +1945,7 @@ export const TOOLS = [
   },
 
   // ============================================================================
-  // CACHE MANAGEMENT TOOLS (OD-473)
+  // CACHE MANAGEMENT TOOLS
   // ============================================================================
   {
     name: "gitmem-cache-status",
@@ -2046,7 +2046,7 @@ export const TOOLS = [
         },
         reason: {
           type: "string",
-          description: "Optional reason for archiving (e.g., 'superseded by OD-XXX', 'no longer relevant')",
+          description: "Optional reason for archiving (e.g., 'superseded by PROJ-123', 'no longer relevant')",
         },
       },
       required: ["id"],
@@ -2257,7 +2257,7 @@ export const ARCHIVE_TOOL_NAMES = new Set([
 export function getRegisteredTools() {
   const showAliases = hasFullAliases();
   return TOOLS.filter(tool => {
-    // Filter aliases unless GITMEM_FULL_ALIASES=1 (OD-691)
+    // Filter aliases unless GITMEM_FULL_ALIASES=1
     if (!showAliases && ALIAS_TOOL_NAMES.has(tool.name)) {
       return false;
     }

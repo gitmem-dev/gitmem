@@ -1,6 +1,6 @@
 /**
- * OD-525 Verification Tests: Dual-Enforcement Engine
- * OD-547: Updated from issue-keyed to agent-keyed assignment
+ * Verification Tests: Dual-Enforcement Engine
+ * Updated from issue-keyed to agent-keyed assignment
  *
  * Tests that variant assignment integrates correctly with scar surfacing:
  * 1. Assignment-Then-Surface Test (idempotency)
@@ -26,7 +26,7 @@ const TEST_AGENT_TRADITIONAL = `TEST-AGENT-OD525-TRADITIONAL-${Date.now()}`;
 const TEST_AGENT_KARPATHY = `TEST-AGENT-OD525-KARPATHY-${Date.now()}`;
 const TEST_AGENT_LEGACY = `TEST-AGENT-OD525-LEGACY-${Date.now()}`;
 
-describe("OD-525: Dual-Enforcement Engine Integration", () => {
+describe("Dual-Enforcement Engine Integration", () => {
   beforeAll(() => {
     // Verify Supabase is configured
     if (!supabase.isConfigured()) {
@@ -41,7 +41,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
         plan: "deploy containerized app to production with full feature parity",
         project: "test-project",
         match_count: 1,
-        issue_id: "OD-525-TEST",
+        issue_id: "TEST-001",
       });
 
       expect(result1.activated).toBe(true);
@@ -82,7 +82,7 @@ describe("OD-525: Dual-Enforcement Engine Integration", () => {
         plan: "deploy containerized app to production with full feature parity",
         project: "test-project",
         match_count: 1,
-        issue_id: "OD-525-TEST",
+        issue_id: "TEST-001",
       });
 
       const scarWithVariants2 = result2.scars.find(

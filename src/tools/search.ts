@@ -1,5 +1,5 @@
 /**
- * search Tool (OD-560)
+ * search Tool
  *
  * Semantic search of institutional memory without action context.
  * Unlike recall (which is "I'm about to do X, warn me"), search is

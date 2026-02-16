@@ -1,5 +1,5 @@
 {
-  "description": "Self-Documentation Nudge Probe — v4 nudge with explicit MEMORY.md mention, haiku (OD-658)",
+  "description": "Self-Documentation Nudge Probe — v4 nudge with explicit MEMORY.md mention, haiku",
   "model": "haiku",
   "runs_per_config": 3,
   "configs": [

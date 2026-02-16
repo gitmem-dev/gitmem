@@ -109,13 +109,13 @@ function normalizeNode(input: string): NormalizedNode {
   // Sanitize: strip PostgREST structural chars that could escape ilike/or expressions
   const safe = trimmed.replace(/[(),\0]/g, "");
 
-  // Already prefixed: "Scar: Title", "Issue: OD-466", etc.
+  // Already prefixed: "Scar: Title", "Issue: PROJ-123", etc.
   if (/^(Scar|Win|Decision|Pattern|Anti-Pattern|Issue|Agent|Persona|Thread):/.test(safe)) {
     return { pattern: `*${safe}*`, type: safe.split(":")[0] };
   }
 
-  // OD-XXX issue pattern
-  if (/^OD-\d+$/i.test(safe)) {
+  // Issue identifier pattern (e.g., PROJ-123, ENG-456)
+  if (/^[A-Z]+-\d+$/i.test(safe)) {
     return { pattern: `*${safe.toUpperCase()}*`, type: "Issue" };
   }
 
@@ -418,13 +418,13 @@ async function stats(
     objectCounts[t.object] = (objectCounts[t.object] || 0) + 1;
   }
 
-  // Issues by learning count (objects matching "Issue: OD-*")
+  // Issues by learning count (objects matching "Issue: *")
   const issueCounts: Record<string, number> = {};
   for (const t of allTriples) {
-    if (t.object.startsWith("Issue: OD-")) {
+    if (t.object.startsWith("Issue: ")) {
       issueCounts[t.object] = (issueCounts[t.object] || 0) + 1;
     }
-    if (t.subject.startsWith("Issue: OD-")) {
+    if (t.subject.startsWith("Issue: ")) {
       issueCounts[t.subject] = (issueCounts[t.subject] || 0) + 1;
     }
   }

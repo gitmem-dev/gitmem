@@ -228,8 +228,8 @@ describe("Free Tier E2E", () => {
     });
   });
 
-  // OD-666: Rapport Memory Feature
-  describe("Rapport Memory (OD-666)", () => {
+  // Rapport Memory Feature
+  describe("Rapport Memory", () => {
     it("accepts closing_reflection with Q8/Q9 rapport fields", async () => {
       // Start a session first
       const startResult = await callTool(mcpClient.client, "session_start", {

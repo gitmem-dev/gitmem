@@ -1,7 +1,7 @@
 /**
  * Scar Variant Assignment Service
- * OD-525: Integrates variant assignment into enforcement engine
- * OD-547: Switched from issue-keyed to agent-keyed assignment
+ * Integrates variant assignment into enforcement engine
+ * Switched from issue-keyed to agent-keyed assignment
  *
  * Handles:
  * - Random variant assignment for scars with variants
@@ -34,7 +34,7 @@ export interface ScarVariant {
 
 /**
  * Assignment record
- * OD-547: Primary key is (agent_id, scar_id), issue_id/session_id are metadata
+ * Primary key is (agent_id, scar_id), issue_id/session_id are metadata
  */
 export interface VariantAssignment {
   id: string;
@@ -86,7 +86,7 @@ export async function getActiveVariants(scarId: string): Promise<ScarVariant[]> 
 
 /**
  * Get existing assignment for an agent + scar pair
- * OD-547: Changed from issue-keyed to agent-keyed lookup
+ * Changed from issue-keyed to agent-keyed lookup
  */
 export async function getExistingAssignment(
   agentId: string,
@@ -119,7 +119,7 @@ export async function getExistingAssignment(
 
 /**
  * Create random variant assignment
- * OD-547: Agent-keyed with optional issue/session metadata
+ * Agent-keyed with optional issue/session metadata
  */
 export async function createVariantAssignment(
   agentId: string,
@@ -166,7 +166,7 @@ export async function createVariantAssignment(
  * Get or create variant assignment for a scar
  * This is the main entry point for enforcement integration
  *
- * OD-547: Changed from issue-keyed to agent-keyed assignment.
+ * Changed from issue-keyed to agent-keyed assignment.
  * Agent identity is always available, so variants are always assigned.
  *
  * @param agentId - Agent identity (e.g., 'CLI', 'DAC', 'CODA-1')

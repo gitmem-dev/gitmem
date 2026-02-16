@@ -20,14 +20,14 @@ describe("RecallParamsSchema", () => {
         plan: "deploy to production",
         project: "my-project",
         match_count: 5,
-        issue_id: "OD-123",
+        issue_id: "PROJ-123",
       });
       expect(result.success).toBe(true);
       expect(result.data).toEqual({
         plan: "deploy to production",
         project: "my-project",
         match_count: 5,
-        issue_id: "OD-123",
+        issue_id: "PROJ-123",
       });
     });
 

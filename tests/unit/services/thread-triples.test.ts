@@ -21,7 +21,7 @@ const BASE_CREATION_PARAMS: ThreadCreationTripleParams = {
   thread_id: "t-abc12345",
   text: "Fix auth timeout in production",
   session_id: "550e8400-e29b-41d4-a716-446655440000",
-  linear_issue: "OD-123",
+  linear_issue: "PROJ-123",
   project: "test-project",
   agent: "CLI",
 };
@@ -63,7 +63,7 @@ describe("extractThreadCreationTriples", () => {
     expect(relatesTriple!.subject).toBe(
       "Thread: Fix auth timeout in production"
     );
-    expect(relatesTriple!.object).toBe("Issue: OD-123");
+    expect(relatesTriple!.object).toBe("Issue: PROJ-123");
   });
 
   it("creates 2 triples when both session_id and linear_issue present", () => {

@@ -5,11 +5,11 @@
 // Tier type (re-exported from tier.ts for convenience)
 export type { GitMemTier } from "../services/tier.js";
 
-// Data source types for cache instrumentation (OD-489)
+// Data source types for cache instrumentation
 export type DataSource = "local_cache" | "supabase" | "memory";
 export type CacheStatus = "hit" | "miss" | "expired" | "bypassed" | "not_applicable";
 
-// Per-component performance breakdown (OD-489 - test harness requirements)
+// Per-component performance breakdown
 export interface ComponentPerformance {
   latency_ms: number;
   source: DataSource;
@@ -31,7 +31,7 @@ export interface PerformanceBreakdown {
   storage_write?: ComponentPerformance;
 }
 
-// Performance data included in all tool results (OD-429, extended OD-489)
+// Performance data included in all tool results
 export interface PerformanceData {
   // Legacy fields (maintained for backward compatibility)
   latency_ms: number;
@@ -41,17 +41,17 @@ export interface PerformanceData {
   memories_surfaced?: string[];
   similarity_scores?: number[];
 
-  // OD-489: Detailed instrumentation for test harness
+  // Detailed instrumentation for test harness
   total_latency_ms?: number;           // Alias for latency_ms (test harness format)
   network_calls_made?: number;          // PRIMARY METRIC - count of network round-trips
   fully_local?: boolean;                // true only if network_calls_made === 0
   breakdown?: PerformanceBreakdown;     // Per-component details
 
-  // Cache fields (OD-473)
+  // Cache fields
   cache_hit?: boolean;
   cache_age_ms?: number;
 
-  // Search mode (OD-489)
+  // Search mode
   search_mode?: "local" | "remote";
 }
 
@@ -66,7 +66,7 @@ export type AgentIdentity =
 
 export type Project = string;
 
-// Thread lifecycle types (OD-thread-lifecycle)
+// Thread lifecycle types ()
 export type ThreadStatus = "open" | "resolved";
 
 export interface ThreadObject {
@@ -132,7 +132,7 @@ export interface SessionStartParams {
   issue_description?: string;
   issue_labels?: string[];
   project?: Project;
-  /** OD-558: Force overwrite of existing active session */
+  /** Force overwrite of existing active session */
   force?: boolean;
 }
 
@@ -153,13 +153,13 @@ export interface RelevantScar {
   description: string;
   counter_arguments: string[];
   similarity: number;
-  // OD-508: LLM-cooperative enforcement fields
+  // LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
   // Behavioral decay multiplier (organic scar lifecycle)
   decay_multiplier?: number;
-  // OD-684: Starter scar flag for deprioritization
+  // Starter scar flag for deprioritization
   is_starter?: boolean;
 }
 
@@ -183,7 +183,7 @@ export interface SessionStartResult {
   agent: AgentIdentity;
   detected_environment?: DetectedEnvironment;
   last_session?: LastSession | null;
-  /** OD-534: PROJECT STATE thread extracted from last session (if present) */
+  /** PROJECT STATE thread extracted from last session (if present) */
   project_state?: string;
   /** Aggregated open threads across last 5 sessions (deduplicated, migrated to objects) */
   open_threads?: ThreadObject[];
@@ -192,15 +192,15 @@ export interface SessionStartResult {
   suggested_threads?: ThreadSuggestion[];
   relevant_scars?: RelevantScar[];
   recent_decisions?: RecentDecision[];
-  /** OD-666: Cross-agent rapport summaries from recent sessions */
+  /** Cross-agent rapport summaries from recent sessions */
   rapport_summaries?: { agent: string; summary: string; date: string }[];
   recent_wins?: RecentWin[];
   performance?: PerformanceData;
-  /** OD-558: Whether this session was resumed from an existing active session */
+  /** Whether this session was resumed from an existing active session */
   resumed?: boolean;
   /** Whether this result is from a mid-session refresh (no new session created) */
   refreshed?: boolean;
-  /** OD-558: Message explaining session state */
+  /** Message explaining session state */
   message?: string;
   /** Asciinema recording path for session replay (from GITMEM_RECORDING_PATH env var) */
   recording_path?: string;
@@ -231,7 +231,7 @@ export interface ClosingReflection {
 }
 
 /**
- * Task completion proof for standard close (OD-491)
+ * Task completion proof for standard close
  *
  * Enforces that each step in the closing protocol was actually completed.
  * Timestamps must be in logical order and human_response requires minimum gap.
@@ -259,21 +259,21 @@ export interface SessionDecision {
 export interface SessionCloseParams {
   session_id: string;
   close_type: CloseType;
-  /** Task completion proof - REQUIRED for standard close (OD-491) */
+  /** Task completion proof - REQUIRED for standard close */
   task_completion?: TaskCompletion;
   closing_reflection?: ClosingReflection;
   human_corrections?: string;
   decisions?: SessionDecision[];
   open_threads?: (string | ThreadObject)[];
-  /** Optional PROJECT STATE that auto-prepends to open_threads[0] (OD-534) */
+  /** Optional PROJECT STATE that auto-prepends to open_threads[0] */
   project_state?: string;
   learnings_created?: (string | Record<string, unknown>)[];
   linear_issue?: string;
   ceremony_duration_ms?: number; // End-to-end ceremony duration from agent perspective
   scars_to_record?: ScarUsageEntry[]; // Optional: scars to record as part of close
-  /** OD-538: Capture full conversation transcript to Supabase storage (defaults to true for CLI/DAC) */
+  /** Capture full conversation transcript to Supabase storage (defaults to true for CLI/DAC) */
   capture_transcript?: boolean;
-  /** OD-538: Explicit transcript file path (overrides automatic detection) */
+  /** Explicit transcript file path (overrides automatic detection) */
   transcript_path?: string;
 }
 
@@ -317,7 +317,7 @@ export interface CreateLearningParams {
   keywords?: string[];
   source_linear_issue?: string;
   project?: Project;
-  // OD-508: LLM-cooperative enforcement fields
+  // LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
@@ -327,7 +327,7 @@ export interface CreateLearningResult {
   success: boolean;
   learning_id: string;
   embedding_generated: boolean;
-  /** Error details when success=false (OD-554: surface DB/validation errors) */
+  /** Error details when success=false */
   errors?: string[];
   display?: string;
   performance: PerformanceData;
@@ -353,7 +353,7 @@ export interface CreateDecisionResult {
   performance: PerformanceData;
 }
 
-// OD-552: Surfaced scar tracking (persisted from session_start and recall)
+// Surfaced scar tracking (persisted from session_start and recall)
 export interface SurfacedScar {
   scar_id: string;
   scar_title: string;
@@ -366,7 +366,7 @@ export interface SurfacedScar {
 // Scar confirmation decisions (refute-or-obey protocol for CLI)
 export type ConfirmationDecision = "APPLYING" | "N_A" | "REFUTED";
 
-// OD-690: Relevance feedback for recall quality improvement
+// Relevance feedback for recall quality improvement
 export type ScarRelevance = "high" | "low" | "noise";
 
 export interface ScarConfirmation {
@@ -375,7 +375,7 @@ export interface ScarConfirmation {
   decision: ConfirmationDecision;
   evidence: string;
   confirmed_at: string; // ISO timestamp
-  relevance?: ScarRelevance; // OD-690: Optional relevance rating
+  relevance?: ScarRelevance; // Optional relevance rating
 }
 
 export interface ConfirmScarsParams {
@@ -383,7 +383,7 @@ export interface ConfirmScarsParams {
     scar_id: string;
     decision: ConfirmationDecision;
     evidence: string;
-    relevance?: ScarRelevance; // OD-690: Optional relevance rating
+    relevance?: ScarRelevance; // Optional relevance rating
   }>;
 }
 
@@ -404,8 +404,8 @@ export interface RecordScarUsageParams {
   scar_id: string;
   issue_id?: string;
   issue_identifier?: string;
-  session_id?: string; // OD-552: Session tracking for non-issue contexts
-  agent?: string; // OD-552: Agent identity for analytics
+  session_id?: string; // Session tracking for non-issue contexts
+  agent?: string; // Agent identity for analytics
   surfaced_at: string;
   acknowledged_at?: string;
   reference_type: ReferenceType;
@@ -417,7 +417,7 @@ export interface RecordScarUsageParams {
 export interface RecordScarUsageResult {
   success: boolean;
   usage_id: string;
-  /** Error details when success=false (OD-554: surface DB errors) */
+  /** Error details when success=false */
   errors?: string[];
   display?: string;
   performance: PerformanceData;
@@ -428,8 +428,8 @@ export interface ScarUsageEntry {
   scar_identifier: string; // Can be UUID or title/description
   issue_id?: string;
   issue_identifier?: string;
-  session_id?: string; // OD-552: Session tracking for non-issue contexts
-  agent?: string; // OD-552: Agent identity for analytics
+  session_id?: string; // Session tracking for non-issue contexts
+  agent?: string; // Agent identity for analytics
   surfaced_at: string;
   acknowledged_at?: string;
   reference_type: ReferenceType;
@@ -472,7 +472,7 @@ export interface SupabaseSearchOptions {
   project?: Project;
 }
 
-// Transcript types (OD-467)
+// Transcript types
 export interface SaveTranscriptParams {
   session_id: string;
   transcript: string;
@@ -538,7 +538,7 @@ export interface AbsorbObservationsResult {
   performance: PerformanceData;
 }
 
-// --- Thread Lifecycle Tool Types (OD-thread-lifecycle) ---
+// --- Thread Lifecycle Tool Types () ---
 
 export interface ListThreadsParams {
   /** Filter by status (default: "open") */

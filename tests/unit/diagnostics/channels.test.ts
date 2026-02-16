@@ -1,7 +1,7 @@
 /**
  * Unit tests for diagnostics channels
  *
- * Issue: OD-584
+ *
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * OD-547: Agent-Keyed Variant Assignment Tests
+ * Agent-Keyed Variant Assignment Tests
  *
  * These tests verify the fix: variants are now assigned using agent identity
  * (always available) instead of issue_id (often missing).
@@ -17,7 +17,7 @@ import * as supabase from "../src/services/supabase-client.js";
 // Test scar that has variants
 const TEST_SCAR_WITH_VARIANTS = "debc6a79-f080-459b-85c6-01f073eca609"; // Containerization scar
 
-describe("OD-547: Agent-Keyed Variant Assignment", () => {
+describe("Agent-Keyed Variant Assignment", () => {
   beforeAll(() => {
     if (!supabase.isConfigured()) {
       throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
@@ -93,7 +93,7 @@ describe("OD-547: Agent-Keyed Variant Assignment", () => {
     it("should store issue_id and session_id as optional metadata", async () => {
       const testAgent = `TEST-AGENT-OD547-META-${Date.now()}`;
       const metadata = {
-        issueId: "OD-547",
+        issueId: "PROJ-547",
         sessionId: "test-session-abc",
       };
 
@@ -123,7 +123,7 @@ describe("OD-547: Agent-Keyed Variant Assignment", () => {
         plan: "deploy containerized app to production with full feature parity",
         project: "test-project",
         match_count: 3,
-        issue_id: "OD-547-REGRESSION",
+        issue_id: "PROJ-547-REGRESSION",
       });
 
       expect(result.activated).toBe(true);

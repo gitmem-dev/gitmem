@@ -1,5 +1,5 @@
 /**
- * Unit tests for absorb_observations tool (OD-595)
+ * Unit tests for absorb_observations tool
  *
  * Tests observation ingestion, scar candidate detection,
  * Supabase persistence, and performance data.
@@ -73,7 +73,7 @@ describe("absorb_observations: basic ingestion", () => {
 
   it("accepts task_id parameter", async () => {
     const result = await absorbObservations({
-      task_id: "OD-595",
+      task_id: "PROJ-595",
       observations: [
         { source: "Sub-Agent: explorer", text: "Found config file", severity: "info" },
       ],

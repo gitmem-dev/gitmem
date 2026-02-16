@@ -1,10 +1,10 @@
 /**
- * list_threads Tool (OD-thread-lifecycle, OD-622)
+ * list_threads Tool
  *
  * List open threads across recent sessions. Shows unresolved work items
  * that carry over between sessions, with IDs for resolution.
  *
- * OD-622: Primary read from Supabase (source of truth).
+ * Primary read from Supabase (source of truth).
  * Falls back to session-based aggregation (same as session_start),
  * then in-memory session state, then .gitmem/threads.json.
  *
@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import { hasSupabase } from "../services/tier.js";
 import { getThreads, getProject } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
-import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
+import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { listThreadsFromSupabase } from "../services/thread-supabase.js";
 import * as supabase from "../services/supabase-client.js";
 import {
@@ -103,7 +103,7 @@ export async function listThreads(
   let allThreads: ThreadObject[] | null = null;
   let source: "supabase" | "aggregation" | "memory" | "file" = "file";
 
-  // OD-622: Try Supabase first (source of truth)
+  // Try Supabase first (source of truth)
   const supabaseThreads = await listThreadsFromSupabase(project, {
     statusFilter: includeResolved ? undefined : statusFilter,
     includeResolved,

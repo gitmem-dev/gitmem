@@ -63,7 +63,7 @@ describe("SessionCloseParamsSchema", () => {
       expect(result.success).toBe(true);
     });
 
-    it("accepts standard close with rapport fields (OD-666)", () => {
+    it("accepts standard close with rapport fields", () => {
       const result = SessionCloseParamsSchema.safeParse({
         session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         close_type: "standard",
@@ -345,8 +345,8 @@ describe("ClosingReflectionSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  // OD-666: Rapport fields (Q8/Q9)
-  describe("rapport fields (OD-666)", () => {
+  // Rapport fields (Q8/Q9)
+  describe("rapport fields", () => {
     it("accepts Q8 collaborative_dynamic", () => {
       const result = ClosingReflectionSchema.safeParse({
         what_broke: "Nothing",

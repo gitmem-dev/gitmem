@@ -201,7 +201,7 @@ describe("checkDuplicate — text fallback", () => {
 });
 
 // ===========================================================================
-// 5. deduplicateThreadList (OD-641)
+// 5. deduplicateThreadList
 // ===========================================================================
 
 function makeThreadObject(

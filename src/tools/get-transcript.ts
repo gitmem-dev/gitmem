@@ -3,7 +3,7 @@
  *
  * Retrieve a session transcript from Supabase storage.
  *
- * Issue: OD-467
+ *
  */
 
 import * as supabase from "../services/supabase-client.js";

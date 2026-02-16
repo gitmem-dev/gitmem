@@ -4,12 +4,12 @@
  * Check institutional memory for relevant scars before taking action.
  * Core GitMem MVP tool that enables "check before act" workflow.
  *
- * Performance target: <2000ms response time (OD-429)
+ * Performance target: <2000ms response time
  *
- * OD-489: Uses local vector search when available for speed,
+ * Uses local vector search when available for speed,
  * falls back to Supabase scar_search when local cache isn't ready.
  *
- * OD-466: After scar search, fetches related knowledge triples and
+ * After scar search, fetches related knowledge triples and
  * includes them in the formatted response for relationship context.
  */
 
@@ -32,8 +32,8 @@ import {
   formatVariantEnforcement,
   type ScarWithVariant,
 } from "../services/variant-assignment.js";
-import { addSurfacedScars, getCurrentSession } from "../services/session-state.js"; // OD-552
-import { getAgentIdentity } from "../services/agent-detection.js"; // OD-547
+import { addSurfacedScars, getCurrentSession } from "../services/session-state.js";
+import { getAgentIdentity } from "../services/agent-detection.js";
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
@@ -49,12 +49,12 @@ export interface RecallParams {
   plan: string;
   project?: Project;
   match_count?: number;
-  issue_id?: string; // OD-525: Required for variant assignment
-  similarity_threshold?: number; // OD-686: Minimum similarity to include results
+  issue_id?: string; // Required for variant assignment
+  similarity_threshold?: number; // Minimum similarity to include results
 }
 
 /**
- * Required verification block for enforcement gate (OD-487)
+ * Required verification block for enforcement gate
  */
 interface RequiredVerification {
   when: string;
@@ -81,7 +81,7 @@ interface ScarRecord {
   source_linear_issue?: string;
   similarity?: number;
   required_verification?: RequiredVerification;
-  // OD-508: LLM-cooperative enforcement fields
+  // LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
@@ -103,12 +103,12 @@ interface FormattedScar {
   source_issue?: string;
   similarity: number;
   required_verification?: RequiredVerification;
-  variant_info?: ScarWithVariant; // OD-525: Variant assignment info
-  // OD-508: LLM-cooperative enforcement fields
+  variant_info?: ScarWithVariant; // Variant assignment info
+  // LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
-  // OD-466: Knowledge triples for relationship context
+  // Knowledge triples for relationship context
   related_triples?: KnowledgeTriple[];
   // Behavioral decay
   decay_multiplier?: number;
@@ -139,7 +139,7 @@ function formatResponse(scars: FormattedScar[], plan: string, dismissals?: Map<s
 No past lessons match this plan closely enough. Scars accumulate as you work — create learnings during session close to build institutional memory.`;
   }
 
-  // OD-487: Check if any scars have required_verification (blocking gates)
+  // Check if any scars have required_verification (blocking gates)
   const scarsWithVerification = scars.filter((s) => s.required_verification?.blocking);
 
   const lines: string[] = [
@@ -149,7 +149,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     "",
   ];
 
-  // OD-487: Display blocking verification requirements FIRST and prominently
+  // Display blocking verification requirements FIRST and prominently
   if (scarsWithVerification.length > 0) {
     lines.push("═══════════════════════════════════════════════════════════════");
     lines.push("🚨 **VERIFICATION REQUIRED BEFORE PROCEEDING**");
@@ -196,7 +196,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       }
     }
 
-    // OD-525: Use variant enforcement text if available (blind to variant name)
+    // Use variant enforcement text if available (blind to variant name)
     if (scar.variant_info?.has_variants && scar.variant_info.variant) {
       const variantText = formatVariantEnforcement(scar.variant_info.variant, scar.title);
       lines.push(variantText);
@@ -218,7 +218,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       lines.push("*Applies when:* " + scar.applies_when.slice(0, 3).join(", "));
     }
 
-    // OD-530: Render LLM-cooperative enforcement fields (OD-508)
+    // Render LLM-cooperative enforcement fields
     if (scar.why_this_matters) {
       lines.push("");
       lines.push(`**Why this matters:** ${scar.why_this_matters}`);
@@ -240,7 +240,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       }
     }
 
-    // OD-466: Render related knowledge triples
+    // Render related knowledge triples
     if (scar.related_triples && scar.related_triples.length > 0) {
       lines.push("");
       lines.push("*Related knowledge:*");
@@ -293,9 +293,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   }
   const project: Project = params.project || getProject() as Project || "default";
   const matchCount = params.match_count || 3;
-  const issueId = params.issue_id; // OD-525: For variant assignment
+  const issueId = params.issue_id; // For variant assignment
 
-  // OD-686: Similarity threshold — suppress weak matches
+  // Similarity threshold — suppress weak matches
   const defaultThreshold = hasSupabase() ? 0.35 : 0.4;
   const similarityThreshold = params.similarity_threshold ?? defaultThreshold;
 
@@ -317,7 +317,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
           applies_when: [],
           similarity: scar.similarity || 0,
         }))
-        // OD-686: Filter below threshold
+        // Filter below threshold
         .filter((scar) => scar.similarity >= similarityThreshold);
 
       const latencyMs = timer.stop();
@@ -383,7 +383,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     let search_mode: "local" | "remote" = "remote";
     let network_call = true; // Assume network call until proven otherwise
 
-    // OD-489: Try local vector search first (fast, no Supabase hit)
+    // Try local vector search first (fast, no Supabase hit)
     // Falls back to Supabase scar_search if local cache isn't ready
     const searchTimer = new Timer();
 
@@ -413,7 +413,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
 
     const searchLatencyMs = searchTimer.stop();
 
-    // OD-547: Assign variants for A/B testing (dev tier only)
+    // Assign variants for A/B testing (dev tier only)
     // Agent identity is always available, so variants are always assigned
     const variantTimer = new Timer();
     const variantResults: Map<string, ScarWithVariant> = new Map();
@@ -439,7 +439,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         variantResults.set(scarId, variantInfo);
       }
 
-      // OD-525: Record enforcement metrics for variants (dev only)
+      // Record enforcement metrics for variants (dev only)
       if (hasMetrics()) {
         const metricsPromises = results
           .filter(({ variantInfo }) => variantInfo.has_variants && variantInfo.variant)
@@ -467,7 +467,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
 
     const variantLatencyMs = variantTimer.stop();
 
-    // OD-466: Fetch related knowledge triples for surfaced scars
+    // Fetch related knowledge triples for surfaced scars
     const tripleTimer = new Timer();
     const scarIds = rawScars.map((s) => s.id);
     const triplesMap = await supabase.fetchRelatedTriples(scarIds);
@@ -498,20 +498,20 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         source_issue: (scar as ScarRecord).source_linear_issue,
         similarity: scar.similarity || 0,
         required_verification: (scar as ScarRecord).required_verification,
-        variant_info: variantResults.get(scar.id), // OD-525
-        // OD-508: LLM-cooperative enforcement fields
+        variant_info: variantResults.get(scar.id),
+        // LLM-cooperative enforcement fields
         why_this_matters: (scar as ScarRecord).why_this_matters,
         action_protocol: (scar as ScarRecord).action_protocol,
         self_check_criteria: (scar as ScarRecord).self_check_criteria,
-        // OD-466: Knowledge triples
+        // Knowledge triples
         related_triples: triplesMap.get(scar.id),
         // Behavioral decay
         decay_multiplier: (scar as ScarRecord).decay_multiplier,
       }))
-      // OD-686: Filter below threshold
+      // Filter below threshold
       .filter((scar) => scar.similarity >= similarityThreshold);
 
-    // OD-552: Track surfaced scars for auto-bridge at session close
+    // Track surfaced scars for auto-bridge at session close
     const recallSurfacedAt = new Date().toISOString();
     const recallSurfacedScars: SurfacedScar[] = scars.map((scar) => ({
       scar_id: scar.id,
@@ -523,7 +523,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     }));
     addSurfacedScars(recallSurfacedScars);
 
-    // OD-552: Update per-session dir with accumulated surfaced scars
+    // Update per-session dir with accumulated surfaced scars
     try {
       const session = getCurrentSession();
       if (session) {
@@ -543,7 +543,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     const memoriesSurfaced = scars.map((s) => s.id);
     const similarityScores = scars.map((s) => s.similarity);
 
-    // OD-489: Build detailed performance breakdown for test harness
+    // Build detailed performance breakdown for test harness
     const breakdown: PerformanceBreakdown = {
       scar_search: buildComponentPerformance(
         searchLatencyMs,
@@ -594,7 +594,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         cache_hit,
         cache_age_ms,
         search_mode,
-        // OD-489: Detailed instrumentation
+        // Detailed instrumentation
         network_calls_made: perfData.network_calls_made,
         fully_local: perfData.fully_local,
       },

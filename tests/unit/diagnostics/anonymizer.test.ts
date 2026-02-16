@@ -1,7 +1,7 @@
 /**
  * Unit tests for anonymizer
  *
- * Issue: OD-584
+ *
  */
 
 import { describe, it, expect } from "vitest";

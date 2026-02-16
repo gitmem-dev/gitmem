@@ -10,7 +10,7 @@
  * - GITMEM_STALE_CHECK: "true" | "false" - Check for stale data (default: "true")
  * - SUPABASE_URL: Supabase project URL
  *
- * Issue: OD-473
+ *
  */
 
 import { getTier, hasSupabase, getTablePrefix } from "./tier.js";

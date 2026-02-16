@@ -4,7 +4,7 @@
  * Parses JSONL session transcripts, chunks them intelligently,
  * generates embeddings, and stores in orchestra_transcript_chunks.
  *
- * Issue: OD-540
+ *
  */
 
 import * as supabase from "./supabase-client.js";

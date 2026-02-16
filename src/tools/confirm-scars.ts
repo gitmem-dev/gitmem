@@ -218,7 +218,7 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
       if (error) {
         errors.push(error);
       } else {
-        // OD-690: Derive default relevance from decision if not provided
+        // Derive default relevance from decision if not provided
         const relevance = conf.relevance ??
           (conf.decision === "APPLYING" ? "high" : conf.decision === "N_A" ? "low" : "low");
         validConfirmations.push({

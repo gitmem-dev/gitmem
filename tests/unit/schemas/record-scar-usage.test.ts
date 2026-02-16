@@ -31,7 +31,7 @@ describe("RecordScarUsageParamsSchema", () => {
       const result = RecordScarUsageParamsSchema.safeParse({
         scar_id: validUUID,
         issue_id: "issue-123",
-        issue_identifier: "OD-123",
+        issue_identifier: "PROJ-123",
         session_id: "session-123",
         agent: "CLI",
         surfaced_at: validTimestamp,

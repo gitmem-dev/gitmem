@@ -115,7 +115,7 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
     // last_session field present (null is fine for first-ever session)
     expect("last_session" in data).toBe(true);
 
-    // OD-645: relevant_scars no longer in session_start result
+    // relevant_scars no longer in session_start result
     // Scars load on-demand via recall()
     expect(data).not.toHaveProperty("relevant_scars");
 

@@ -15,7 +15,7 @@ describe("SessionStartParamsSchema", () => {
     it("accepts full valid params", () => {
       const result = SessionStartParamsSchema.safeParse({
         agent_identity: "CLI",
-        linear_issue: "OD-123",
+        linear_issue: "PROJ-123",
         issue_title: "Test issue",
         issue_description: "Description here",
         issue_labels: ["bug", "urgent"],

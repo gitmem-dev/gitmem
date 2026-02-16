@@ -8,7 +8,7 @@
  *   npx gitmem check --full    — Full diagnostic (~30s)
  *   npx gitmem check --output report.json
  *
- * Issue: OD-584
+ *
  */
 
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "fs";

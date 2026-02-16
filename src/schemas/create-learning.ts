@@ -27,7 +27,7 @@ export const CreateLearningParamsSchema = z
     keywords: z.array(z.string()).optional(),
     source_linear_issue: z.string().optional(),
     project: ProjectSchema.optional(),
-    // OD-508: LLM-cooperative enforcement fields
+    // LLM-cooperative enforcement fields
     why_this_matters: z.string().optional(),
     action_protocol: z.array(z.string()).optional(),
     self_check_criteria: z.array(z.string()).optional(),

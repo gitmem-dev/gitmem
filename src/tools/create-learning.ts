@@ -5,7 +5,7 @@
  * Generates embeddings client-side and writes directly to Supabase REST API,
  * eliminating the ww-mcp Edge Function dependency.
  *
- * Performance target: <3000ms (OD-429)
+ * Performance target: <3000ms
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -113,7 +113,7 @@ export async function createLearning(
     created_at: new Date().toISOString(),
     persona_name: agentIdentity,
     source_date: new Date().toISOString().split("T")[0],
-    // OD-508: LLM-cooperative enforcement fields (optional)
+    // LLM-cooperative enforcement fields (optional)
     ...(params.why_this_matters && { why_this_matters: params.why_this_matters }),
     ...(params.action_protocol && { action_protocol: params.action_protocol }),
     ...(params.self_check_criteria && { self_check_criteria: params.self_check_criteria }),
@@ -183,7 +183,7 @@ export async function createLearning(
         network_call: true,
       };
 
-      // OD-539: Defense in depth - verify write succeeded
+      // Defense in depth - verify write succeeded
       // directUpsert now throws on empty result, but explicit check documents expectation
       if (!writeResult || !writeResult.id) {
         throw new Error(
@@ -194,7 +194,7 @@ export async function createLearning(
 
       console.error(`[create_learning] directUpsert succeeded, verified ID: ${writeResult.id}`);
 
-      // OD-466: Auto-create knowledge triples (tracked fire-and-forget)
+      // Auto-create knowledge triples (tracked fire-and-forget)
       getEffectTracker().track("triple_write", "learning", () =>
         writeTriplesForLearning({
           id: learningId,

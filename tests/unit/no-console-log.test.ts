@@ -5,7 +5,7 @@
  * which is the JSON-RPC channel. Any console.log corrupts the protocol.
  * Only console.error (stderr) is safe.
  *
- * Issue: OD-590
+ *
  */
 
 import { describe, it, expect } from "vitest";
@@ -28,7 +28,7 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
-describe("OD-590: no console.log in src/", () => {
+describe("no console.log in src/", () => {
   const srcDir = join(__dirname, "../../src");
   const files = collectTsFiles(srcDir);
 

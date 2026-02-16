@@ -82,7 +82,7 @@ Pure unit tests with no external dependencies. Fast, deterministic, run everywhe
 | **Hooks** | 2 files (`tests/unit/hooks/`) | format-utils, quick-retrieve |
 | **Diagnostics** | 4 files (`tests/unit/diagnostics/`) | anonymizer, channels, check-command, collector |
 | **Golden Regressions** | 1 file (`tests/unit/golden-regressions.test.ts`) | 11 tests replaying specific historical bugs |
-| **Standalone** | 3 files (`tests/od-*.test.ts`) | OD-525 variant assignment, OD-525 variant enforcement, OD-547 variant missing issue ID (21 tests total) |
+| **Standalone** | 3 files (`tests/variant-*.test.ts`) | Variant assignment, variant enforcement, variant missing issue ID (21 tests total) |
 
 ### Configuration
 
@@ -184,7 +184,7 @@ Pro tier at scale (1000 seeded scars):
 
 #### `organic-discovery.test.ts` — 2 tests, API calls
 
-Multi-session organic adoption measurement (OD-653). Tests whether agents discover and adopt gitmem with varying nudge configurations. Agent SDK-based, costs ~$0.30 per 3-session chain.
+Multi-session organic adoption measurement. Tests whether agents discover and adopt gitmem with varying nudge configurations. Agent SDK-based, costs ~$0.30 per 3-session chain.
 
 #### `user-journey.test.ts` — 6 tests, API calls (Tier 5)
 
@@ -266,16 +266,16 @@ Vitest `bench()` microbenchmarks measuring operation latency with statistical ri
 
 ### Performance Baselines (`tests/performance/baselines.ts`)
 
-Target latencies derived from OD-429 performance targets and production measurements. Tests fail if measurement exceeds baseline × 1.5 (alert threshold).
+Target latencies derived from performance targets and production measurements. Tests fail if measurement exceeds baseline × 1.5 (alert threshold).
 
 | Component | Baseline (ms) | Source |
 |-----------|--------------|--------|
-| `session_start_total` | 750 | OD-645 lean start |
+| `session_start_total` | 750 | Lean start |
 | `recall_with_scars` | 2000 | Production |
 | `recall_empty` | 500 | Production |
 | `scar_search_local` | 100 | Production |
 | `scar_search_remote` | 2000 | Production |
-| `session_close_total` | 1500 | OD-646 blocking path only |
+| `session_close_total` | 1500 | Blocking path only |
 | `create_learning` | 3000 | Production |
 | `create_decision` | 3000 | Production |
 | `cache_hit` | 5 | Production |

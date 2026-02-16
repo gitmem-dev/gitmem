@@ -20,7 +20,7 @@
  *   // ... run operations ...
  *   const metrics = collector.stop();
  *
- * Issue: OD-584
+ *
  */
 
 // Channel definitions and publisher

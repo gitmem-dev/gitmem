@@ -275,7 +275,7 @@ export const DEV_TOOLS = [
  *   dev  = 27
  *
  * If these numbers change, a tool was added/removed from definitions.ts.
- * Note: Aliases are hidden by default (OD-691). Set GITMEM_FULL_ALIASES=1 to show all.
+ * Note: Aliases are hidden by default. Set GITMEM_FULL_ALIASES=1 to show all.
  */
 export const EXPECTED_TOOL_COUNTS = {
   free: 21,

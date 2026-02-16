@@ -4,7 +4,7 @@
  * Subscribes to diagnostics_channel events and collects metrics
  * during diagnostic pass. Anonymizes data as it's collected.
  *
- * Issue: OD-584
+ *
  */
 
 import { subscribe, unsubscribe, Channel } from "diagnostics_channel";

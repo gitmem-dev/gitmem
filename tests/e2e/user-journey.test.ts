@@ -13,7 +13,7 @@
  * Requires: Claude CLI authenticated (costs real API calls)
  * Run with: npm run test:e2e -- tests/e2e/user-journey.test.ts
  *
- * Issue: OD-607
+ *
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

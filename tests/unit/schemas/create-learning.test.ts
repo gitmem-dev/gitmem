@@ -52,7 +52,7 @@ describe("CreateLearningParamsSchema", () => {
       }
     });
 
-    it("accepts scar with OD-508 LLM-cooperative fields", () => {
+    it("accepts scar with LLM-cooperative fields", () => {
       const result = CreateLearningParamsSchema.safeParse({
         learning_type: "scar",
         title: "Test Scar",

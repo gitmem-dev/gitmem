@@ -27,7 +27,7 @@ vi.mock("../services/tier.js", () => ({
 // Mock the supabase client
 vi.mock("../services/supabase-client.js", () => ({
   isConfigured: vi.fn(),
-  cachedScarSearch: vi.fn(), // OD-473: now uses cached version
+  cachedScarSearch: vi.fn(), // now uses cached version
   upsertRecord: vi.fn().mockResolvedValue(undefined), // For metrics recording
 }));
 
@@ -130,7 +130,7 @@ describe("recall", () => {
 
     expect(result.performance).toBeDefined();
     expect(result.performance.latency_ms).toBeGreaterThanOrEqual(0);
-    expect(result.performance.target_ms).toBe(2000); // OD-429 target for recall
+    expect(result.performance.target_ms).toBe(2000);
     expect(result.performance.meets_target).toBe(true);
     expect(result.performance.result_count).toBe(0);
   });

@@ -9,7 +9,7 @@
  *   4. npx gitmem install-hooks
  *   5. Start MCP server → session lifecycle
  *
- * Issue: OD-607
+ *
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

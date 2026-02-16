@@ -2,7 +2,7 @@
  * GitMem Performance Metrics Service
  *
  * Tracks latency, result counts, and relevance signals for all GitMem tools.
- * Implements OD-429 instrumentation layer.
+ * Instrumentation layer for performance tracking.
  */
 
 import { v4 as uuidv4 } from "uuid";
@@ -82,15 +82,15 @@ export interface QueryMetrics {
 }
 
 /**
- * Performance targets from OD-429
+ * Performance targets
  */
 export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   recall: 2000,
   search: 500,
   log: 500,
-  session_start: 750,     // OD-645: Lean start (was 1500)
-  session_refresh: 750,   // OD-645: Lean refresh (was 1500)
-  session_close: 1500,    // OD-645: Tightened (was 3000)
+  session_start: 750,     // Lean start (was 1500)
+  session_refresh: 750,   // Lean refresh (was 1500)
+  session_close: 1500,    // Tightened (was 3000)
   create_learning: 3000,
   create_decision: 3000,
   record_scar_usage: 1000,
@@ -166,7 +166,7 @@ export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
 
 /**
  * Re-export performance types from types/index.ts
- * OD-489: Enhanced instrumentation for test harness validation
+ * Enhanced instrumentation for test harness validation
  */
 export type {
   PerformanceData,
@@ -185,7 +185,7 @@ import type {
 } from "../types/index.js";
 
 /**
- * Build component performance data (OD-489)
+ * Build component performance data
  */
 export function buildComponentPerformance(
   latencyMs: number,
@@ -202,7 +202,7 @@ export function buildComponentPerformance(
 }
 
 /**
- * Count network calls from breakdown (OD-489)
+ * Count network calls from breakdown
  */
 export function countNetworkCalls(breakdown?: PerformanceBreakdown): number {
   if (!breakdown) return 0;
@@ -230,7 +230,7 @@ export function buildPerformanceData(
     cache_hit?: boolean;
     cache_age_ms?: number;
     search_mode?: "local" | "remote";
-    // OD-489: Detailed instrumentation
+    // Detailed instrumentation
     breakdown?: PerformanceBreakdown;
   }
 ): PerformanceData {
@@ -250,7 +250,7 @@ export function buildPerformanceData(
     cache_age_ms: options?.cache_age_ms,
     search_mode: options?.search_mode,
 
-    // OD-489: Detailed instrumentation for test harness
+    // Detailed instrumentation for test harness
     total_latency_ms: latencyMs,
     network_calls_made: networkCallsMade,
     fully_local: fullyLocal,

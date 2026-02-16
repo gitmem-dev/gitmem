@@ -14,7 +14,7 @@
  *
  * Run with: npx vitest run tests/e2e/organic-discovery/organic-discovery.test.ts --config vitest.e2e.config.ts
  *
- * Issue: OD-653
+ *
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";

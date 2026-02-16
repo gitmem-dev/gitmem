@@ -1,5 +1,5 @@
 /**
- * Unit tests for Thread Architecture — Supabase Integration (OD-626 Phase 1)
+ * Unit tests for Thread Architecture — Supabase Integration
  *
  * Tests the contract between the thread-manager and the orchestra_threads
  * Supabase table. All Supabase calls are mocked — no real network calls.
@@ -202,14 +202,14 @@ describe("Supabase CRUD: resolve_thread updates Supabase", () => {
     // Resolve locally (existing function)
     const resolved = resolveThread(threads, {
       threadId: "t-resolve1",
-      resolutionNote: "Fixed in OD-626",
+      resolutionNote: "Fixed in v1.0.2",
       sessionId: "session-456",
     });
 
     expect(resolved).not.toBeNull();
     expect(resolved!.status).toBe("resolved");
     expect(resolved!.resolved_at).toBeDefined();
-    expect(resolved!.resolution_note).toBe("Fixed in OD-626");
+    expect(resolved!.resolution_note).toBe("Fixed in v1.0.2");
     expect(resolved!.resolved_by_session).toBe("session-456");
 
     // Now simulate the Supabase write that the implementation should do
@@ -228,7 +228,7 @@ describe("Supabase CRUD: resolve_thread updates Supabase", () => {
       expect.objectContaining({
         thread_id: "t-resolve1",
         status: "resolved",
-        resolution_note: "Fixed in OD-626",
+        resolution_note: "Fixed in v1.0.2",
       })
     );
   });

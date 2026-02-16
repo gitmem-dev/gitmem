@@ -228,7 +228,7 @@ Create a new open thread. Runs semantic dedup check and writes knowledge graph t
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `text` | `string` | yes | Thread description |
-| `linear_issue` | `string` | no | Associated Linear issue (e.g., OD-XXX) |
+| `linear_issue` | `string` | no | Associated Linear issue (e.g., PROJ-123) |
 
 Returns: `{ thread, deduplicated?, dedup_details?, performance }`
 
@@ -335,7 +335,7 @@ Threads starting with `PROJECT STATE:` are treated specially:
 - Skipped during aggregation (not shown in thread lists)
 - Extracted separately by `session_start` for rapid project context
 
-Format: `PROJECT STATE: Project Name: OD-523done OD-524~note OD-525->next`
+Format: `PROJECT STATE: Project Name: PROJ-1done PROJ-2~note PROJ-3->next`
 
 ## Implementation
 

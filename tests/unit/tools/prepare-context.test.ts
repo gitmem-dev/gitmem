@@ -1,5 +1,5 @@
 /**
- * Unit tests for prepare_context tool (OD-594)
+ * Unit tests for prepare_context tool
  *
  * Tests the three format modes (full, compact, gate), token budgets,
  * severity sorting, error handling, and performance data.

@@ -73,7 +73,7 @@ describe("escapePostgRESTValue", () => {
   });
 
   it("passes clean values through", () => {
-    expect(escapePostgRESTValue("OD-466")).toBe("OD-466");
+    expect(escapePostgRESTValue("PROJ-466")).toBe("PROJ-466");
     expect(escapePostgRESTValue("Scar: Title Here")).toBe("Scar: Title Here");
   });
 

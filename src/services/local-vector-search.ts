@@ -11,7 +11,7 @@
  * - Deterministic results (same model + same data = same results)
  * - Per-container consistency (each loads same data)
  *
- * Issue: OD-473 (cache consistency)
+ * Cache consistency
  */
 
 import type { Project, RelevantScar } from "../types/index.js";
@@ -31,7 +31,7 @@ interface ScarRecord {
   project?: string;
   embedding?: number[];
   decay_multiplier?: number;
-  // OD-508: LLM-cooperative enforcement fields
+  // LLM-cooperative enforcement fields
   why_this_matters?: string;
   action_protocol?: string[];
   self_check_criteria?: string[];
@@ -247,7 +247,7 @@ export class LocalVectorSearch {
       severity: scar.severity || "medium",
       counter_arguments: scar.counter_arguments || [],
       similarity: Math.round(similarity * 1000) / 1000, // 3 decimal places
-      // OD-508: Include enriched fields for LLM-cooperative enforcement
+      // Include enriched fields for LLM-cooperative enforcement
       why_this_matters: scar.why_this_matters,
       action_protocol: scar.action_protocol,
       self_check_criteria: scar.self_check_criteria,

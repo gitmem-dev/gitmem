@@ -5,7 +5,7 @@
  * When no subscriber is attached, publish() is essentially a no-op.
  *
  * Pattern reference: @ibm/telemetry-js
- * Issue: OD-584
+ *
  */
 
 import { channel, Channel } from "diagnostics_channel";

@@ -1,5 +1,5 @@
 /**
- * Thread Lifecycle Manager (OD-thread-lifecycle)
+ * Thread Lifecycle Manager ()
  *
  * Core logic for thread lifecycle management:
  * - ID generation, migration from plain strings to ThreadObject
@@ -161,7 +161,7 @@ export function aggregateThreads(
     );
 
     for (const thread of normalized) {
-      // Skip PROJECT STATE threads (handled separately via OD-534)
+      // Skip PROJECT STATE threads
       if (thread.text.startsWith("PROJECT STATE:")) continue;
 
       // Deduplicate by both thread ID and normalized text content

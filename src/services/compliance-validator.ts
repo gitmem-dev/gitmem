@@ -3,7 +3,7 @@
  *
  * Validates session close compliance based on close type.
  *
- * Standard close requires (OD-491):
+ * Standard close requires:
  * - task_completion object with timestamps proving each step was done
  * - All 6 closing questions answered
  * - human_corrections field present (even if empty string)
@@ -27,7 +27,7 @@ export interface ValidationResult {
 const MIN_HUMAN_RESPONSE_GAP_MS = 3000;
 
 /**
- * Validate task_completion timestamps (OD-491)
+ * Validate task_completion timestamps
  *
  * Ensures:
  * 1. All timestamps are valid ISO strings
@@ -101,16 +101,16 @@ function validateTaskCompletion(tc: TaskCompletion): { errors: string[]; warning
 /**
  * Validate standard close parameters
  *
- * OD-491: Now requires task_completion with timestamps proving each step was done.
+ * Now requires task_completion with timestamps proving each step was done.
  */
 function validateStandardClose(params: SessionCloseParams): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // OD-491: task_completion is REQUIRED for standard close
+  // task_completion is REQUIRED for standard close
   if (!params.task_completion) {
     errors.push(
-      "Standard close requires task_completion object (OD-491). " +
+      "Standard close requires task_completion object. " +
       "You must complete each step: display questions → answer → ask human → wait for response"
     );
   } else {

@@ -176,7 +176,7 @@ export class LocalFileStorage {
     for (const r of results) {
       const l = byId.get(r.id);
       if (!l) continue;
-      // OD-684: Deprioritize starter scars (0.7x multiplier)
+      // Deprioritize starter scars (0.7x multiplier)
       const isStarter = !!(l as Record<string, unknown>).is_starter;
       const adjustedSimilarity = isStarter ? r.similarity * 0.7 : r.similarity;
       mapped.push({

@@ -4,7 +4,7 @@
  * Save full session transcript to Supabase storage for training data,
  * post-mortems, and pattern mining.
  *
- * Issue: OD-467
+ *
  */
 
 import { detectAgent } from "../services/agent-detection.js";

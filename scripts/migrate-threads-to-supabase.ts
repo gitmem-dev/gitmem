@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * One-Time Thread Migration Script (OD-625)
+ * One-Time Thread Migration Script
  *
  * Migrates existing thread entries from local .gitmem/threads.json files
  * and Supabase session records into the new `orchestra_threads` table.
@@ -612,7 +612,7 @@ function buildRow(deduped: DeduplicatedThread): OrchestraThreadRow {
     domain: extractDomain(canonical.text),
     project: PROJECT,
     metadata: {
-      migration_source: "OD-625",
+      migration_source: "thread-migration",
       migration_date: now,
       duplicate_count: duplicates.length,
       original_ids: duplicates.map((d) => d.id),
@@ -625,7 +625,7 @@ function buildRow(deduped: DeduplicatedThread): OrchestraThreadRow {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log("=== Thread Migration to Supabase (OD-625) ===");
+  console.log("=== Thread Migration to Supabase ===");
   console.log(`Mode: ${DRY_RUN ? "DRY RUN" : "LIVE"}`);
   console.log(
     `Supabase: ${supabaseConfig.url ? "configured" : "NOT configured"}`
@@ -663,7 +663,7 @@ async function main() {
   console.log("--- Step 3: Saving backup ---");
   const backup = {
     migration_date: new Date().toISOString(),
-    issue: "OD-625",
+    issue: "thread-migration",
     file_sources: fileSources.map((s) => ({
       path: s.path,
       count: s.threads.length,

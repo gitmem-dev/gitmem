@@ -5,7 +5,7 @@
  * agents/coda/src/services/supabase-mcp.js
  *
  * Uses JSON-RPC 2.0 protocol over HTTPS.
- * Integrates with CacheService for performance (OD-473).
+ * Integrates with CacheService for performance.
  */
 
 import type {
@@ -355,7 +355,7 @@ export async function directQueryAll<T = unknown>(
 }
 
 /**
- * Knowledge triple from knowledge_triples table (OD-466)
+ * Knowledge triple from knowledge_triples table
  */
 export interface KnowledgeTriple {
   subject: string;
@@ -369,7 +369,7 @@ export interface KnowledgeTriple {
 }
 
 /**
- * Fetch related knowledge triples for a set of scar IDs (OD-466)
+ * Fetch related knowledge triples for a set of scar IDs
  *
  * Queries knowledge_triples table where source_id matches any of the provided scar IDs.
  * Returns triples grouped by source_id for easy attachment to scars.
@@ -438,7 +438,7 @@ export async function directUpsert<T = unknown>(
 
   const result = await response.json() as T[];
 
-  // OD-539: Validate that write actually happened
+  // Validate that write actually happened
   // Supabase can return 200 OK with empty array [] when:
   // - RLS policy blocks the write
   // - Constraint violation handled gracefully
@@ -510,7 +510,7 @@ export async function directPatch<T = unknown>(
  * This bypasses ww-mcp because we need the embedding vectors for local search.
  * Returns learnings (scars, patterns, wins, anti-patterns) with full embedding data.
  *
- * NOTE: Changed from "scars only" to "all learning types" (OD-542 related fix)
+ * NOTE: Changed from "scars only" to "all learning types"
  */
 export async function loadScarsWithEmbeddings<T = unknown>(
   project?: string,
@@ -567,7 +567,7 @@ export async function scarSearch<T = unknown>(
 }
 
 /**
- * Scar search with caching (OD-473)
+ * Scar search with caching
  *
  * Returns cached results if available, otherwise fetches and caches.
  */
@@ -589,7 +589,7 @@ export async function cachedScarSearch<T = unknown>(
 }
 
 /**
- * List records with caching for decisions (OD-473)
+ * List records with caching for decisions
  */
 export async function cachedListDecisions<T = unknown>(
   project: Project = "default",
@@ -642,7 +642,7 @@ export async function cachedListWins<T = unknown>(
 }
 
 // ============================================================================
-// STORAGE API (for transcript persistence - OD-467)
+// STORAGE API
 // ============================================================================
 
 const TRANSCRIPT_BUCKET = "session-transcripts";

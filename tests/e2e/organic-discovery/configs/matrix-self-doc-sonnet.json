@@ -1,5 +1,5 @@
 {
-  "description": "Self-Documentation Nudge Probe — v4 nudge with explicit MEMORY.md mention, sonnet (OD-658)",
+  "description": "Self-Documentation Nudge Probe — v4 nudge with explicit MEMORY.md mention, sonnet",
   "model": "sonnet",
   "runs_per_config": 3,
   "configs": [

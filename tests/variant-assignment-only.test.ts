@@ -1,6 +1,6 @@
 /**
- * OD-525 Simplified Tests: Variant Assignment Logic
- * OD-547: Updated from issue-keyed to agent-keyed assignment
+ * Simplified Tests: Variant Assignment Logic
+ * Updated from issue-keyed to agent-keyed assignment
  *
  * Tests variant assignment without relying on ww-mcp (which requires valid JWT).
  * Focuses on testing the core variant assignment functionality.
@@ -18,7 +18,7 @@ import * as supabase from "../src/services/supabase-client.js";
 // Test configuration - use actual scar with variants
 const TEST_SCAR_ID = "debc6a79-f080-459b-85c6-01f073eca609"; // Containerization scar
 
-describe("OD-525: Variant Assignment Core Logic", () => {
+describe("Variant Assignment Core Logic", () => {
   beforeAll(() => {
     if (!supabase.isConfigured()) {
       throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
@@ -65,7 +65,7 @@ describe("OD-525: Variant Assignment Core Logic", () => {
     it("should store issue_id and session_id as metadata", async () => {
       const testAgent = `TEST-AGENT-META-${Date.now()}`;
       const metadata = {
-        issueId: "OD-547",
+        issueId: "PROJ-547",
         sessionId: "test-session-123",
       };
 

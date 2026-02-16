@@ -2,7 +2,7 @@
  * CacheService Unit Tests
  *
  * Tests for the GitMem file-based caching layer.
- * Issue: OD-473
+ *
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

@@ -1,5 +1,5 @@
 /**
- * Zod schemas for thread lifecycle tools (OD-thread-lifecycle)
+ * Zod schemas for thread lifecycle tools
  */
 
 import { z } from "zod";

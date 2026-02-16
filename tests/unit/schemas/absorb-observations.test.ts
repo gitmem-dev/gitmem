@@ -1,5 +1,5 @@
 /**
- * Unit tests for absorb_observations schema (OD-595)
+ * Unit tests for absorb_observations schema
  */
 
 import { describe, it, expect } from "vitest";
@@ -115,11 +115,11 @@ describe("AbsorbObservationsParamsSchema", () => {
 
   it("accepts params with task_id", () => {
     const result = AbsorbObservationsParamsSchema.safeParse({
-      task_id: "OD-595",
+      task_id: "PROJ-595",
       observations: [validObs],
     });
     expect(result.success).toBe(true);
-    expect(result.data?.task_id).toBe("OD-595");
+    expect(result.data?.task_id).toBe("PROJ-595");
   });
 
   it("accepts multiple observations", () => {

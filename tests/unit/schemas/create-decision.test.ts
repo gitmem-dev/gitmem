@@ -24,7 +24,7 @@ describe("CreateDecisionParamsSchema", () => {
         alternatives_considered: ["Manual validation", "Yup", "io-ts"],
         personas_involved: ["Alice", "Bob"],
         docs_affected: ["docs/systems/enforcement/roadmap.md", "CLAUDE.md"],
-        linear_issue: "OD-580",
+        linear_issue: "PROJ-580",
         session_id: "test-session-123",
         project: "my-project",
       });

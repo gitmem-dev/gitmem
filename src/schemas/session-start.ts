@@ -18,7 +18,7 @@ export const SessionStartParamsSchema = z.object({
   issue_description: z.string().optional(),
   issue_labels: z.array(z.string()).optional(),
   project: ProjectSchema.optional(),
-  /** OD-558: Force overwrite of existing active session */
+  /** Force overwrite of existing active session */
   force: z.boolean().optional(),
 });
 

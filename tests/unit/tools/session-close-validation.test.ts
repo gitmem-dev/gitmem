@@ -1,5 +1,5 @@
 /**
- * Tests for OD-548 (session_id UUID validation) and OD-640 (project enum removal)
+ * * Tests for session_id UUID validation and project enum removal
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -125,7 +125,7 @@ vi.mock("../../../src/services/thread-suggestions.js", () => ({
 
 import { sessionClose } from "../../../src/tools/session-close.js";
 
-describe("OD-548: session_close UUID validation", () => {
+describe("session_close UUID validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -284,7 +284,7 @@ describe("scars_applied string vs array handling", () => {
   });
 });
 
-describe("OD-640: project parameter accepts arbitrary strings", () => {
+describe("project parameter accepts arbitrary strings", () => {
   it("definitions.ts project fields have no enum restriction", async () => {
     // Import tool definitions and verify no project field has an enum
     const { TOOLS } = await import("../../../src/tools/definitions.js");

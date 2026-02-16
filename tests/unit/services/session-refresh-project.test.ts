@@ -1,5 +1,5 @@
 /**
- * Regression test for OD-668:
+ * Regression test:
  * session_refresh drops project context, falls back to "default"
  *
  * Bug: sessionRefresh() used `params.project || "default"` instead of
@@ -15,7 +15,7 @@ import {
   getProject,
 } from "../../../src/services/session-state.js";
 
-describe("session_refresh project resolution (OD-668)", () => {
+describe("session_refresh project resolution", () => {
   beforeEach(() => {
     clearCurrentSession();
   });

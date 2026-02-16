@@ -4,9 +4,9 @@
  * Initialize session, detect agent, load institutional context.
  * Returns threads and recent decisions. Scars surface via recall on demand.
  *
- * Performance target: <750ms (OD-645: Lean Start)
+ * Performance target: <750ms
  *
- * OD-645: Removed scar/wins queries from start pipeline.
+ * Removed scar/wins queries from start pipeline.
  * Scars load on-demand via recall(). Wins available via search/log.
  * loadLastSession and loadRecentDecisions run in parallel.
  * createSessionRecord is fire-and-forget.
@@ -17,7 +17,7 @@ import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
-// OD-645: Scar search removed from start pipeline (loads on-demand via recall)
+// Scar search removed from start pipeline (loads on-demand via recall)
 import { ensureInitialized } from "../services/startup.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
@@ -29,16 +29,16 @@ import {
   buildPerformanceData,
   buildComponentPerformance,
 } from "../services/metrics.js";
-import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars } from "../services/session-state.js"; // OD-547, OD-552
-import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // OD-thread-lifecycle
-import { deduplicateThreadList } from "../services/thread-dedup.js"; // OD-641
-import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js"; // OD-623, Phase 6
+import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScars } from "../services/session-state.js";
+import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // 
+import { deduplicateThreadList } from "../services/thread-dedup.js";
+import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
-// OD-645: Suggested threads removed from start display
+// Suggested threads removed from start display
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
 import type {
   SessionStartParams,
@@ -58,7 +58,7 @@ interface SessionRecord {
   decisions?: (string | { title: string; decision?: string })[];
   open_threads?: (string | ThreadObject)[];
   close_compliance?: Record<string, unknown> | null;
-  // OD-666: Rapport summary from Q8+Q9
+  // Rapport summary from Q8+Q9
   rapport_summary?: string | null;
   // From lite view (counts only)
   decision_count?: number;
@@ -76,7 +76,7 @@ function normalizeDecisions(decisions: (string | { title: string; decision?: str
   );
 }
 
-// OD-645: ScarRecord removed (scars load via recall, not session_start)
+// ScarRecord removed (scars load via recall, not session_start)
 
 interface DecisionRecord {
   id: string;
@@ -86,21 +86,21 @@ interface DecisionRecord {
   project?: string;
 }
 
-// OD-645: WinRecord removed (wins available via search/log)
+// WinRecord removed (wins available via search/log)
 
 /**
  * Aggregate open threads across multiple recent sessions.
  * Deduplicates by exact lowercase match. Excludes PROJECT STATE: threads
  * (handled separately). Only includes sessions from the last maxAgeDays.
  */
-// aggregateOpenThreads replaced by aggregateThreads from thread-manager.ts (OD-thread-lifecycle)
+// aggregateOpenThreads replaced by aggregateThreads from thread-manager.ts ()
 
 /**
  * Load the last CLOSED session for this agent.
  * Filters out orphaned sessions (those without close_compliance).
- * Uses _lite view for performance (OD-460 added arrays to view).
+ * Uses _lite view for performance.
  *
- * OD-489: Returns timing and network call info for instrumentation.
+ * Returns timing and network call info for instrumentation.
  */
 async function loadLastSession(
   agent: AgentIdentity,
@@ -130,7 +130,7 @@ async function loadLastSession(
 
   try {
     // Use _lite view for performance (excludes embedding)
-    // OD-460: View now includes decisions/open_threads arrays
+    // View now includes decisions/open_threads arrays
     const sessions = await supabase.listRecords<SessionRecord>({
       table: "orchestra_sessions_lite",
       filters: { agent, project },
@@ -138,7 +138,7 @@ async function loadLastSession(
       orderBy: { column: "created_at", ascending: false },
     });
 
-    // OD-623: Try loading threads from Supabase (source of truth) first
+    // Try loading threads from Supabase (source of truth) first
     let aggregated_open_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];
     let threadsFromSupabase = false;
@@ -209,10 +209,10 @@ async function loadLastSession(
   }
 }
 
-// OD-645: queryRelevantScars removed — scars load on-demand via recall()
+// queryRelevantScars removed — scars load on-demand via recall()
 
 /**
- * OD-666: Load recent rapport summaries across all agents for this project.
+ * Load recent rapport summaries across all agents for this project.
  * Returns up to 3 most recent sessions that have a non-null rapport_summary.
  * Cross-agent by design: CLI session rapport visible to DAC's next session.
  */
@@ -248,9 +248,9 @@ async function loadRecentRapport(
 }
 
 /**
- * Load recent decisions with caching (OD-473)
+ * Load recent decisions with caching
  *
- * OD-489: Returns timing and network call info for instrumentation.
+ * Returns timing and network call info for instrumentation.
  */
 async function loadRecentDecisions(
   project: Project,
@@ -265,7 +265,7 @@ async function loadRecentDecisions(
   const timer = new Timer();
 
   try {
-    // Use cached decisions query (OD-473)
+    // Use cached decisions query
     // Fetch extra to account for date filtering
     const { data: decisions, cache_hit, cache_age_ms } = await supabase.cachedListDecisions<DecisionRecord>(
       project,
@@ -311,18 +311,18 @@ async function loadRecentDecisions(
   }
 }
 
-// OD-645: loadRecentWins removed — wins available via search/log on-demand
+// loadRecentWins removed — wins available via search/log on-demand
 
 /**
  * Create a new session record
  *
- * OD-489: Returns timing and network call info for instrumentation.
+ * Returns timing and network call info for instrumentation.
  */
 async function createSessionRecord(
   agent: AgentIdentity,
   project: Project,
   linearIssue?: string,
-  preGeneratedId?: string  // OD-645: Accept pre-generated UUID for fire-and-forget pattern
+  preGeneratedId?: string  // Accept pre-generated UUID for fire-and-forget pattern
 ): Promise<{ session_id: string; latency_ms: number; network_call: boolean }> {
   const sessionId = preGeneratedId || uuidv4();
   const today = new Date().toISOString().split("T")[0];
@@ -334,7 +334,7 @@ async function createSessionRecord(
   }
 
   try {
-    // OD-cast: Capture asciinema recording path from Docker entrypoint
+    // Capture asciinema recording path from Docker entrypoint
     const recordingPath = process.env.GITMEM_RECORDING_PATH || null;
 
     await supabase.directUpsert("orchestra_sessions", {
@@ -427,7 +427,7 @@ async function sessionStartFree(
       order: "session_date.desc",
       limit: 10,
     });
-    // Aggregate threads across recent sessions (OD-thread-lifecycle)
+    // Aggregate threads across recent sessions ()
     const freeThreadResult = aggregateThreads(sessions as SessionRecord[]);
     freeAggregatedThreads = freeThreadResult.open;
 
@@ -445,7 +445,7 @@ async function sessionStartFree(
     console.error("[session_start] Failed to load last session:", error);
   }
 
-  // OD-645: Scars removed from start pipeline — load on-demand via recall
+  // Scars removed from start pipeline — load on-demand via recall
 
   // Load recent decisions from local storage (time-scoped to 5 days)
   let decisions: RecentDecision[] = [];
@@ -470,7 +470,7 @@ async function sessionStartFree(
     console.error("[session_start] Failed to load decisions:", error);
   }
 
-  // OD-645: Wins removed from start pipeline — available via search/log
+  // Wins removed from start pipeline — available via search/log
 
   // Create session record locally (skip if resuming existing session)
   if (!isResuming) {
@@ -500,10 +500,10 @@ async function sessionStartFree(
     .find((t) => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  // OD-645: Simplified performance data (no scars/wins)
+  // Simplified performance data (no scars/wins)
   const performance = buildPerformanceData("session_start", latencyMs, decisions.length + (lastSession ? 1 : 0));
 
-  // OD-645: surfacedScars initialized empty — populated by recall during session
+  // surfacedScars initialized empty — populated by recall during session
   const surfacedScars: SurfacedScar[] = [];
 
   // GIT-20: Persist to per-session dir, legacy file, and registry
@@ -528,7 +528,7 @@ async function sessionStartFree(
     threads: freeMergedThreads,
   });
 
-  // OD-645: No scars/wins in start result
+  // No scars/wins in start result
   const freeResult: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -603,7 +603,7 @@ function restoreSessionState(
 }
 
 /**
- * GIT-20 / OD-558: Check for existing active session and return it if found.
+ * Check for existing active session and return it if found.
  *
  * Uses the active-sessions registry (hostname+PID) to identify THIS process's
  * session, preventing cross-process session theft on shared filesystems.
@@ -844,10 +844,10 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
 /**
  * Execute session_start tool
  *
- * OD-489: Returns detailed performance breakdown for test harness validation.
+ * Returns detailed performance breakdown for test harness validation.
  * Key metrics: network_calls_made, fully_local, breakdown per component.
  *
- * OD-558: Guards against overwriting existing active sessions.
+ * Guards against overwriting existing active sessions.
  * Returns existing session if active-session.json exists (idempotent).
  * Pass force=true to override.
  */
@@ -862,7 +862,7 @@ export async function sessionStart(
   const agent = params.agent_identity || env.agent;
   const project: Project = params.project || getConfigProject() || "default";
 
-  // OD-558: Check for existing active session — reuse session_id but still load full context
+  // Check for existing active session — reuse session_id but still load full context
   const existingSession = checkExistingSession(agent, params.force);
   const isResuming = existingSession !== null;
 
@@ -881,9 +881,9 @@ export async function sessionStart(
       priorSession ? { surfacedScars: forceCarrySurfacedScars, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
   }
 
-  // 2. OD-645: Load last session + decisions in parallel (was sequential)
+  // 2. Load last session + decisions in parallel (was sequential)
   // Scars and wins removed from pipeline — load on-demand via recall/search
-  // OD-666: Rapport loading disabled — recording kept in session_close but not injected
+  // Rapport loading disabled — recording kept in session_close but not injected
   const [lastSessionResult, decisionsResult] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
@@ -892,10 +892,10 @@ export async function sessionStart(
   const lastSession = lastSessionResult.session;
   const decisions = decisionsResult.decisions;
 
-  // OD-645: surfacedScars initialized empty — populated by recall/confirm_scars during session
+  // surfacedScars initialized empty — populated by recall/confirm_scars during session
   const surfacedScars: SurfacedScar[] = [];
 
-  // 3. Create session record — fire-and-forget (OD-645)
+  // 3. Create session record — fire-and-forget
   // UUID generated locally, Supabase write runs in background
   let sessionId: string;
   if (isResuming) {
@@ -929,13 +929,13 @@ export async function sessionStart(
 
   const latencyMs = timer.stop();
 
-  // OD-534: Extract PROJECT STATE from last session if present
+  // Extract PROJECT STATE from last session if present
   const projectState = lastSession?.open_threads
     ?.map((t) => typeof t === "string" ? t : t.text)
     .find(t => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  // OD-645: Simplified performance breakdown (no scar_search, wins, session_create)
+  // Simplified performance breakdown (no scar_search, wins, session_create)
   const breakdown: PerformanceBreakdown = {
     last_session: buildComponentPerformance(
       lastSessionResult.latency_ms,
@@ -977,9 +977,9 @@ export async function sessionStart(
     console.warn("[session_start] Failed to persist session files:", error);
   }
 
-  // OD-547: Set active session for variant assignment in recall
-  // OD-552: Initialize with surfaced scars for auto-bridge at close time
-  // OD-thread-lifecycle: Initialize with merged threads (aggregated + mid-session preserved)
+  // Set active session for variant assignment in recall
+  // Initialize with surfaced scars for auto-bridge at close time
+  // : Initialize with merged threads (aggregated + mid-session preserved)
   // t-f7c2fa01: On resume OR force, preserve original startedAt so session_close duration is accurate
   const mergedScars = [...forceCarrySurfacedScars, ...surfacedScars];
   setCurrentSession({
@@ -994,7 +994,7 @@ export async function sessionStart(
     threads: mergedThreads,
   });
 
-  // OD-645: Build result — no scars/wins (load on-demand via recall/search)
+  // Build result — no scars/wins (load on-demand via recall/search)
   const openOnly = mergedThreads.filter(t => t.status === "open" || !t.status);
   // Strip bulky fields from last_session — open_threads used only for PROJECT STATE extraction above
   const slimLastSession = lastSession ? {
@@ -1010,7 +1010,7 @@ export async function sessionStart(
     ...(isResuming && { resumed: true }),
     detected_environment: env,
     last_session: slimLastSession,
-    ...(projectState && { project_state: projectState }), // OD-534
+    ...(projectState && { project_state: projectState }),
     ...(openOnly.length > 0 && { open_threads: openOnly }),
     recent_decisions: decisions,
     ...(recordingPath && { recording_path: recordingPath }),
@@ -1019,7 +1019,7 @@ export async function sessionStart(
     performance,
   };
 
-  // Record metrics (OD-645: simplified — no scar-related fields)
+  // Record metrics
   recordMetrics({
     id: metricsId,
     session_id: sessionId,
@@ -1068,7 +1068,7 @@ export async function sessionStart(
  * without creating a new session ID. Same lean pipeline as session_start
  * (last session, decisions, threads) but skips session creation.
  *
- * OD-645: Scars/wins removed — load on-demand via recall/search.
+ * Scars/wins removed — load on-demand via recall/search.
  *
  * Use when: mid-session context refresh after compaction, long gaps, or
  * when you need to remember where you left off.
@@ -1126,9 +1126,9 @@ export async function sessionRefresh(
     };
   }
 
-  // 2. OD-645: Load last session + decisions in parallel (same as session_start)
+  // 2. Load last session + decisions in parallel (same as session_start)
   // Scars and wins removed — load on-demand via recall/search
-  // OD-666: Rapport loading disabled — recording kept in session_close but not injected
+  // Rapport loading disabled — recording kept in session_close but not injected
   const [lastSessionResult, decisionsResult] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
@@ -1137,17 +1137,17 @@ export async function sessionRefresh(
   const lastSession = lastSessionResult.session;
   const decisions = decisionsResult.decisions;
 
-  // OD-645: surfacedScars not re-queried on refresh — existing ones preserved in session state
+  // surfacedScars not re-queried on refresh — existing ones preserved in session state
   const refreshAggregatedThreads = lastSessionResult.aggregated_open_threads;
   const refreshDisplayInfo = lastSessionResult.displayInfo;
 
-  // 3. Extract PROJECT STATE (OD-534)
+  // 3. Extract PROJECT STATE
   const projectState = lastSession?.open_threads
     ?.map((t) => typeof t === "string" ? t : t.text)
     .find(t => t.startsWith("PROJECT STATE:"))
     ?.replace(/^PROJECT STATE:\s*/, "");
 
-  // 4. OD-645: Simplified performance breakdown (no scar_search, wins)
+  // 4. Simplified performance breakdown (no scar_search, wins)
   const latencyMs = timer.stop();
   const breakdown: PerformanceBreakdown = {
     last_session: buildComponentPerformance(
@@ -1171,7 +1171,7 @@ export async function sessionRefresh(
 
   const recordingPath = process.env.GITMEM_RECORDING_PATH || undefined;
 
-  // OD-645: Build result — no scars/wins
+  // Build result — no scars/wins
   const result: SessionStartResult = {
     session_id: sessionId,
     agent,
@@ -1181,7 +1181,7 @@ export async function sessionRefresh(
     ...(projectState && { project_state: projectState }),
     // open_threads filled after merge below
     recent_decisions: decisions,
-    // OD-666: Rapport disabled — not injected into session context
+    // Rapport disabled — not injected into session context
     ...(recordingPath && { recording_path: recordingPath }),
     project,
     performance,
@@ -1213,7 +1213,7 @@ export async function sessionRefresh(
     linearIssue: currentSession?.linearIssue,
   });
 
-  // Record metrics (OD-645: simplified — no scar-related fields)
+  // Record metrics
   recordMetrics({
     id: metricsId,
     session_id: sessionId,

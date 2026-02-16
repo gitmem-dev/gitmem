@@ -1,5 +1,5 @@
 /**
- * Unit tests for quick-retrieve.ts (OD-612)
+ * Unit tests for quick-retrieve.ts
  *
  * Tests the quickRetrieve function and disk cache search.
  * Mocks external dependencies (tier, storage, local-vector-search, fs).

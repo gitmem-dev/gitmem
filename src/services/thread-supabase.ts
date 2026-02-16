@@ -1,5 +1,5 @@
 /**
- * Thread Supabase Service (OD-620, OD-621, OD-622, OD-623, OD-624)
+ * Thread Supabase Service
  *
  * Provides Supabase CRUD operations for the orchestra_threads table.
  * Supabase is the source of truth; local .gitmem/threads.json is a cache.
@@ -415,7 +415,7 @@ export async function syncThreadsToSupabase(
     return;
   }
 
-  // OD-thread-dedup: Load existing open threads once upfront for text-based dedup.
+  //  Load existing open threads once upfront for text-based dedup.
   // Prevents duplicate creation when closing ceremony generates new thread IDs
   // for threads that already exist with the same (or similar) text.
   let existingOpenThreads: { thread_id: string; text: string; status: string }[] = [];

@@ -5,7 +5,7 @@
  * these baselines by more than the alert threshold (1.5x).
  *
  * These baselines are derived from:
- * - OD-429 performance targets
+ * - Performance targets
  * - 2026-02-03 regression analysis (51s decisions query)
  * - Production measurements on real projects
  */
@@ -22,7 +22,7 @@ export const BASELINES = {
   scar_search_local: 100,
   scar_search_remote: 2000,
   session_create: 500,
-  session_start_total: 750,  // OD-645: Lean start (was 1500)
+  session_start_total: 750,  // Lean start (was 1500)
 
   // Recall components
   recall_with_scars: 2000,
@@ -39,7 +39,7 @@ export const BASELINES = {
   cold_start_cache_rebuild: 2000,
 
   // Session close
-  session_close_total: 1500,  // OD-646: Blocking path only (was ~3400ms with embed+transcript)
+  session_close_total: 1500,  // Blocking path only (was ~3400ms with embed+transcript)
 
   // Write operations
   create_learning: 3000,

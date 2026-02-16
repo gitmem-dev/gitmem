@@ -1,4 +1,4 @@
-# OD-658: Self-Documentation Nudge Probe — v4 Analysis
+# Self-Documentation Nudge Probe — v4 Analysis
 
 **Date:** 2026-02-12
 **Configs tested:** D1 (v4+h0), D2 (v4+h1), D3 (v4+h2)
@@ -76,7 +76,7 @@ This suggests the v4 nudge triggers a one-time "make it your own" impulse during
 
 ### 5. Hooks remain the dominant driver of discovery and persistence
 
-Consistent with OD-654 findings:
+Consistent with earlier findings:
 - Without hooks: 33-67% discovery, 0-50% persistence
 - With any hooks: 100% discovery, 100% persistence (both models)
 

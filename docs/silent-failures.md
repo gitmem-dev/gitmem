@@ -15,7 +15,7 @@ silently blocked by RLS policies, NOT NULL constraints, triggers, or schema
 mismatches. The API says "OK" but nothing was persisted.
 
 **Incidents:**
-- OD-539: `directUpsert` appeared to succeed, records never appeared in DB
+- `directUpsert` appeared to succeed, records never appeared in DB
 - Variant metrics: 10+ days of missing A/B test data. `fire-and-forget` with
   `.catch(() => {})` swallowed Supabase 400 errors from a NOT NULL constraint.
   The entire experiment ran blind.
@@ -48,7 +48,7 @@ The cache layer returns correct-looking results from outdated code or data:
 
 ### 4. "Verification Says Fail, But It Actually Worked"
 
-- OD-438: Verification reported "scars not acknowledged" but CODA-1 had output
+- Verification reported "scars not acknowledged" but CODA-1 had output
   the section correctly. Buffer truncation (FIFO `shift()`) discarded early
   output. Infrastructure bug looked identical to LLM failure.
 - `claude mcp list`: Reported "No MCP servers configured" right after
@@ -69,7 +69,7 @@ reach for often have the same class of bug.
 
 | Defense | Status | Coverage |
 |---------|--------|----------|
-| `directUpsert` empty array guard (OD-539) | Deployed | Upsert only, not patch |
+| `directUpsert` empty array guard | Deployed | Upsert only, not patch |
 | `create-learning.ts` write verification | Deployed | One tool |
 | Permissive detection cascade (5 sources) | Deployed | Plugin detection only |
 | `session_refresh` for zero-context recovery | Deployed | Manual invocation only |

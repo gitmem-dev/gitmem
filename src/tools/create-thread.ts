@@ -4,7 +4,7 @@
  * Create an open thread outside of session close. Threads track
  * unresolved work items that carry across sessions.
  *
- * OD-620: Writes to Supabase (source of truth) + local file (cache).
+ * Writes to Supabase (source of truth) + local file (cache).
  * Falls back to local-only if Supabase is unavailable.
  *
  * Phase 3: Semantic dedup gate — before creating, checks existing open
@@ -184,7 +184,7 @@ export async function createThread(
     ...(sessionId && { source_session: sessionId }),
   };
 
-  // OD-620: Write to Supabase (source of truth) with embedding — non-blocking on failure
+  // Write to Supabase (source of truth) with embedding — non-blocking on failure
   let supabaseSynced = false;
   const embeddingJson = newEmbedding ? JSON.stringify(newEmbedding) : null;
   const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);

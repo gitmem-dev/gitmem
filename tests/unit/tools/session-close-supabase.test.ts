@@ -294,7 +294,7 @@ describe("session_close Supabase path", () => {
     });
   });
 
-  describe("rapport summary (OD-666)", () => {
+  describe("rapport summary", () => {
     it("builds rapport_summary from Q8+Q9 answers", async () => {
       vi.mocked(supabase.getRecord).mockResolvedValue(createMockSession());
 
@@ -336,12 +336,12 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "standard",
-        linear_issue: "OD-123",
+        linear_issue: "PROJ-123",
         decisions: [{ title: "Chose X over Y", decision: "X", rationale: "because" }],
       });
 
       const upsertedData = vi.mocked(supabase.directUpsert).mock.calls[0][1] as Record<string, unknown>;
-      expect(upsertedData.session_title).toBe("OD-123 - Chose X over Y");
+      expect(upsertedData.session_title).toBe("PROJ-123 - Chose X over Y");
     });
 
     it("preserves custom session title", async () => {
@@ -352,7 +352,7 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "standard",
-        linear_issue: "OD-123",
+        linear_issue: "PROJ-123",
         decisions: [{ title: "Chose X over Y", decision: "X", rationale: "because" }],
       });
 
@@ -386,11 +386,11 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "quick",
-        linear_issue: "OD-999",
+        linear_issue: "PROJ-999",
       });
 
       const upsertedData = vi.mocked(supabase.directUpsert).mock.calls[0][1] as Record<string, unknown>;
-      expect(upsertedData.linear_issue).toBe("OD-999");
+      expect(upsertedData.linear_issue).toBe("PROJ-999");
     });
   });
 

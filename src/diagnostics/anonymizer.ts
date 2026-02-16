@@ -14,7 +14,7 @@
  * - Hostnames → excluded
  * - Platform/Node version → included
  *
- * Issue: OD-584
+ *
  */
 
 /**

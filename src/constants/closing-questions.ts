@@ -159,6 +159,7 @@ const REFLECTION_ALIASES: Record<string, string> = {
   capture: "institutional_memory_items",
   capture_as_memory: "institutional_memory_items",
   memory_items: "institutional_memory_items",
+  institutional_memory: "institutional_memory_items",
   // Q8-Q9 (rapport, not in CLOSING_QUESTIONS but used)
   q8_human_style: "human_work_style",
   q9_dynamic: "collaborative_dynamic",

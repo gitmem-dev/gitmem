@@ -47,17 +47,17 @@ On "closing", "done for now", or "wrapping up":
        "do_differently": "...",
        "what_worked": "...",
        "wrong_assumption": "...",
-       "scars_applied": "...",
-       "institutional_memory": "..."
+       "scars_applied": ["scar title 1", "scar title 2"],
+       "institutional_memory_items": "...",
+       "collaborative_dynamic": "Q8: How human preferred to work",
+       "rapport_notes": "Q9: What collaborative dynamic worked"
      },
      "task_completion": {
-       "started_at": "ISO timestamp",
-       "completed_at": "ISO timestamp",
        "questions_displayed_at": "ISO timestamp",
        "reflection_completed_at": "ISO timestamp",
        "human_asked_at": "ISO timestamp",
        "human_response_at": "ISO timestamp",
-       "human_response": "human's correction text or empty"
+       "human_response": "human's correction text or 'Looks good'"
      },
      "human_corrections": "",
      "scars_to_record": [],

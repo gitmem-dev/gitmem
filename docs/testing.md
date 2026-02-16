@@ -422,6 +422,21 @@ For user-journey tests, keep prompts simple and use `appendSystemPrompt` to cons
 
 ---
 
+## MCP Protocol Compliance
+
+A dedicated compliance suite validates gitmem-mcp against the MCP protocol specification. See [`docs/compliance/mcp-protocol-compliance.md`](compliance/mcp-protocol-compliance.md) for the full report.
+
+**Latest result:** 2026-02-16 · v1.0.3 · **36/36 PASS**
+
+```bash
+# Run compliance tests
+GITMEM_TIER=free node tests/compliance/mcp-protocol-compliance.mjs
+```
+
+Tests cover: protocol handshake, tool listing, JSON Schema validation for all tools, tool execution, error handling (correct -32601 codes), and JSON-RPC 2.0 response format compliance.
+
+---
+
 ## Known Limitations
 
 - **Pro E2E tests verify MCP success, not DB persistence.** The MCP server uses Supabase PostgREST (HTTP), not direct PostgreSQL. Passing a `postgres://` URI as `SUPABASE_URL` causes the server to fall back to local `.gitmem/` storage. Full DB persistence verification would require a PostgREST layer on top of the test container.

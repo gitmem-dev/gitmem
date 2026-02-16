@@ -1,7 +1,0 @@
-{"version":3,"term":{"cols":120,"rows":40},"timestamp":1771200000,"idle_time_limit":3.0,"command":"claude"}
-[0.1, "o", "Starting session...\r\n"]
-[1.0, "o", "User: Can you help me with this code?\r\n"]
-[2.0, "o", "Sure, let me take a look.\r\n"]
-[5.0, "o", "Here is the fix:\r\n"]
-[5.5, "o", "function foo() { return 42; }\r\n"]
-[10.0, "o", "Done.\r\n"]

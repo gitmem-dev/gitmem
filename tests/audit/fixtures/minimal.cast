@@ -1,8 +1,0 @@
-{"version":3,"term":{"cols":120,"rows":40},"timestamp":1771200000,"idle_time_limit":3.0,"command":"claude"}
-[0.1, "o", "Starting session...\r\n"]
-[0.5, "o", "gitmem \u2500\u2500 active\r\n"]
-[0.6, "o", "abc123 \u00b7 cli \u00b7 orchestra_dev\r\n"]
-[1.0, "o", "\r\n"]
-[2.0, "o", "Ready to work.\r\n"]
-[5.0, "o", "User: Hello\r\n"]
-[10.0, "o", "Session complete.\r\n"]

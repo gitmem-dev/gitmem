@@ -25,9 +25,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "tsc",
-    "release-status": "bash scripts/release-status.sh",
-    "audit:sessions": "npx tsx scripts/audit/cli.ts",
-    "test:audit": "vitest run --config vitest.audit.config.ts"
+    "release-status": "bash scripts/release-status.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",
@@ -57,6 +55,7 @@
     "!hooks/tests",
     "schema",
     "CLAUDE.md.template",
+    "cursorrules.template",
     "README.md",
     "CHANGELOG.md"
   ],

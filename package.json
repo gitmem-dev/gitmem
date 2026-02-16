@@ -1,6 +1,6 @@
 {
   "name": "gitmem-mcp",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Institutional memory for AI coding agents. Memory that compounds.",
   "type": "module",
   "main": "dist/index.js",

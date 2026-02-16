@@ -2,7 +2,7 @@
  * Resolved .gitmem directory path
  *
  * Solves: process.cwd() changes when agents cd into other repos (e.g., /workspace/gitmem),
- * but .gitmem/ was created in the project root (e.g., /workspace/orchestra/).
+ * but .gitmem/ was created in the project root.
  * The MCP server is long-running, so we resolve the path once and cache it.
  *
  * Resolution order:

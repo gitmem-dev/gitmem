@@ -3,6 +3,6 @@
   "description": "Enforces the GitMem institutional memory lifecycle through hooks — auto-starts sessions, reminds you to recall before consequential actions, and ensures proper session closure.",
   "author": {
     "name": "nTEG Labs",
-    "email": "support@nteg.com"
+    "email": "support@gitmem.ai"
   }
 }

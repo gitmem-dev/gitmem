@@ -11,7 +11,7 @@
  */
 
 import * as supabase from "../services/supabase-client.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -229,7 +229,7 @@ export async function log(params: LogParams): Promise<LogResult> {
       filters.created_at = `gte.${sinceDate}`;
     }
 
-    const records = await supabase.directQuery<LogEntry>("orchestra_learnings", {
+    const records = await supabase.directQuery<LogEntry>(getTableName("learnings"), {
       select: "id,title,learning_type,severity,created_at,source_linear_issue,project,persona_name",
       filters,
       order: "created_at.desc",
@@ -257,7 +257,7 @@ export async function log(params: LogParams): Promise<LogResult> {
     recordMetrics({
       id: metricsId,
       tool_name: "log",
-      tables_searched: ["orchestra_learnings"],
+      tables_searched: [getTableName("learnings")],
       latency_ms: latencyMs,
       result_count: records.length,
       phase_tag: "ad_hoc",

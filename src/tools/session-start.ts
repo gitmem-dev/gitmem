@@ -19,7 +19,7 @@ import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 // Scar search removed from start pipeline (loads on-demand via recall)
 import { ensureInitialized } from "../services/startup.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -132,7 +132,7 @@ async function loadLastSession(
     // Use _lite view for performance (excludes embedding)
     // View now includes decisions/open_threads arrays
     const sessions = await supabase.listRecords<SessionRecord>({
-      table: "orchestra_sessions_lite",
+      table: getTableName("sessions_lite"),
       filters: { agent, project },
       limit: 10, // Get several to find a closed one + aggregate threads
       orderBy: { column: "created_at", ascending: false },
@@ -226,7 +226,7 @@ async function loadRecentRapport(
       rapport_summary: string | null;
       created_at: string;
     }>({
-      table: "orchestra_sessions_lite",
+      table: getTableName("sessions_lite"),
       columns: "agent,rapport_summary,created_at",
       filters: { project },
       limit: 20, // Fetch more to find ones with rapport
@@ -337,7 +337,7 @@ async function createSessionRecord(
     // Capture asciinema recording path from Docker entrypoint
     const recordingPath = process.env.GITMEM_RECORDING_PATH || null;
 
-    await supabase.directUpsert("orchestra_sessions", {
+    await supabase.directUpsert(getTableName("sessions"), {
       id: sessionId,
       session_date: today,
       session_title: linearIssue ? `Session for ${linearIssue}` : "Interactive Session",
@@ -377,14 +377,14 @@ async function markSessionSuperseded(oldSessionId: string, newSessionId: string)
   try {
     // Check if session already has close_compliance (was properly closed)
     const existing = await supabase.directQuery<{ close_compliance: unknown }>(
-      "orchestra_sessions",
+      getTableName("sessions"),
       { filters: { id: oldSessionId }, select: "close_compliance" }
     );
     if (existing.length > 0 && existing[0].close_compliance != null) {
       // Already closed — don't overwrite
       return;
     }
-    await supabase.directPatch("orchestra_sessions",
+    await supabase.directPatch(getTableName("sessions"),
       { id: oldSessionId },
       {
         close_compliance: {
@@ -1026,7 +1026,7 @@ export async function sessionStart(
     agent: agent as "cli" | "desktop" | "autonomous" | "local" | "cloud",
     tool_name: "session_start",
     query_text: [params.issue_title, params.issue_description].filter(Boolean).join(" ").slice(0, 500),
-    tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],
+    tables_searched: [getTableName("sessions_lite"), getTableName("decisions_lite")],
     latency_ms: latencyMs,
     result_count: decisions.length + (lastSession ? 1 : 0),
     context_bytes: calculateContextBytes(result),
@@ -1220,7 +1220,7 @@ export async function sessionRefresh(
     agent: agent as "cli" | "desktop" | "autonomous" | "local" | "cloud",
     tool_name: "session_refresh",
     query_text: "mid-session context refresh",
-    tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],
+    tables_searched: [getTableName("sessions_lite"), getTableName("decisions_lite")],
     latency_ms: latencyMs,
     result_count: decisions.length + (lastSession ? 1 : 0),
     context_bytes: calculateContextBytes(result),

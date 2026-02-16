@@ -12,7 +12,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getThreads, getProject } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
 import { deduplicateThreadList } from "../services/thread-dedup.js";
@@ -119,7 +119,7 @@ export async function listThreads(
   if (allThreads === null && hasSupabase()) {
     try {
       const sessions = await supabase.listRecords<SessionRecord>({
-        table: "orchestra_sessions_lite",
+        table: getTableName("sessions_lite"),
         filters: { project },
         limit: 10,
         orderBy: { column: "created_at", ascending: false },
@@ -179,7 +179,7 @@ export async function listThreads(
     id: metricsId,
     tool_name: "list_threads",
     query_text: `list:${statusFilter}:${includeResolved ? "all" : "filtered"}`,
-    tables_searched: source === "supabase" ? ["orchestra_threads_lite"] : source === "aggregation" ? ["orchestra_sessions_lite"] : [],
+    tables_searched: source === "supabase" ? [getTableName("threads_lite")] : source === "aggregation" ? [getTableName("sessions_lite")] : [],
     latency_ms: latencyMs,
     result_count: threads.length,
     phase_tag: "ad_hoc",

@@ -17,7 +17,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { getGitmemDir } from "./gitmem-dir.js";
 import { directQuery } from "./supabase-client.js";
-import { hasSupabase } from "./tier.js";
+import { hasSupabase, getTableName } from "./tier.js";
 import { cosineSimilarity } from "./thread-dedup.js";
 import type { ThreadWithEmbedding } from "./thread-dedup.js";
 import type { ThreadSuggestion, Project } from "../types/index.js";
@@ -261,7 +261,7 @@ export async function loadRecentSessionEmbeddings(
       id: string;
       session_title: string | null;
       embedding: string | number[] | null;
-    }>("orchestra_sessions", {
+    }>(getTableName("sessions"), {
       select: "id,session_title,embedding",
       filters: {
         project,

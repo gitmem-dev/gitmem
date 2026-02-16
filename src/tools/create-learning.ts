@@ -17,7 +17,7 @@ import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
 import { generateVariantsForScar } from "../services/variant-generation.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { getProject } from "../services/session-state.js";
 import {
@@ -174,7 +174,7 @@ export async function createLearning(
 
       // Write directly to Supabase REST API (bypasses ww-mcp)
       const upsertStart = Date.now();
-      const writeResult = await supabase.directUpsert<{ id: string }>("orchestra_learnings", learningData);
+      const writeResult = await supabase.directUpsert<{ id: string }>(getTableName("learnings"), learningData);
       const upsertLatency = Date.now() - upsertStart;
       breakdown.upsert = {
         latency_ms: upsertLatency,
@@ -253,7 +253,7 @@ export async function createLearning(
     recordMetrics({
       id: metricsId,
       tool_name: "create_learning",
-      tables_searched: ["orchestra_learnings"],
+      tables_searched: [getTableName("learnings")],
       latency_ms: latencyMs,
       result_count: 1,
       phase_tag: "learning_capture",

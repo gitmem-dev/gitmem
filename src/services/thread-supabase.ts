@@ -10,7 +10,7 @@
  */
 
 import * as supabase from "./supabase-client.js";
-import { hasSupabase } from "./tier.js";
+import { hasSupabase, getTableName } from "./tier.js";
 import { computeVitality, computeLifecycleStatus, detectThreadClass } from "./thread-vitality.js";
 import type { ThreadClass, LifecycleStatus } from "./thread-vitality.js";
 import { normalizeText, deduplicateThreadList } from "./thread-dedup.js";
@@ -149,7 +149,7 @@ export async function createThreadInSupabase(
   try {
     const row = threadObjectToRow(thread, project, embedding);
     const result = await supabase.directUpsert<ThreadRow>(
-      "orchestra_threads",
+      getTableName("threads"),
       row
     );
     console.error(`[thread-supabase] Created thread ${thread.id} in Supabase`);
@@ -179,7 +179,7 @@ export async function resolveThreadInSupabase(
 
   try {
     // First, find the UUID primary key for this thread_id
-    const rows = await supabase.directQuery<ThreadRow>("orchestra_threads", {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
       select: "id,thread_id",
       filters: { thread_id: threadId },
       limit: 1,
@@ -203,7 +203,7 @@ export async function resolveThreadInSupabase(
       patchData.resolved_by_session = options.resolvedBySession;
     }
 
-    await supabase.directPatch("orchestra_threads", { id: uuid }, patchData);
+    await supabase.directPatch(getTableName("threads"), { id: uuid }, patchData);
     console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
     return true;
   } catch (error) {
@@ -249,7 +249,7 @@ export async function listThreadsFromSupabase(
       filters.status = "not.in.(resolved,archived)";
     }
 
-    const rows = await supabase.directQuery<ThreadRow>("orchestra_threads_lite", {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
       select: "*",
       filters,
       order: "vitality_score.desc,last_touched_at.desc",
@@ -279,7 +279,7 @@ export async function loadActiveThreadsFromSupabase(
 
   try {
     // Get only non-resolved, non-archived threads (open/active only)
-    const rows = await supabase.directQuery<ThreadRow>("orchestra_threads_lite", {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
       select: "*",
       filters: {
         project,
@@ -352,7 +352,7 @@ export async function touchThreadsInSupabase(
   for (const threadId of threadIds) {
     try {
       // Fetch current state (need created_at and thread_class for vitality recomputation)
-      const rows = await supabase.directQuery<ThreadRow>("orchestra_threads", {
+      const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
         select: "id,touch_count,created_at,thread_class,status",
         filters: { thread_id: threadId },
         limit: 1,
@@ -387,7 +387,7 @@ export async function touchThreadsInSupabase(
         delete metadata.dormant_since;
       }
 
-      await supabase.directPatch("orchestra_threads", { id: row.id }, {
+      await supabase.directPatch(getTableName("threads"), { id: row.id }, {
         touch_count: newTouchCount,
         last_touched_at: nowIso,
         vitality_score: vitality.vitality_score,
@@ -421,7 +421,7 @@ export async function syncThreadsToSupabase(
   let existingOpenThreads: { thread_id: string; text: string; status: string }[] = [];
   try {
     existingOpenThreads = await supabase.directQuery<{ thread_id: string; text: string; status: string }>(
-      "orchestra_threads",
+      getTableName("threads"),
       {
         select: "thread_id,text,status",
         filters: {
@@ -447,7 +447,7 @@ export async function syncThreadsToSupabase(
   for (const thread of threads) {
     try {
       // Check if thread exists in Supabase by ID
-      const existing = await supabase.directQuery<ThreadRow>("orchestra_threads", {
+      const existing = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
         select: "id,thread_id,status",
         filters: { thread_id: thread.id },
         limit: 1,
@@ -505,7 +505,7 @@ export async function archiveDormantThreads(
 
   try {
     // Fetch dormant threads
-    const rows = await supabase.directQuery<ThreadRow>("orchestra_threads", {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
       select: "id,thread_id,metadata",
       filters: {
         project,
@@ -525,7 +525,7 @@ export async function archiveDormantThreads(
       const daysDormant = (now.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysDormant >= dormantDays) {
-        await supabase.directPatch("orchestra_threads", { id: row.id }, {
+        await supabase.directPatch(getTableName("threads"), { id: row.id }, {
           status: "archived",
         });
         archived_ids.push(row.thread_id);
@@ -580,7 +580,7 @@ export async function loadOpenThreadEmbeddings(
       thread_id: string;
       text: string;
       embedding: string | number[] | null;
-    }>("orchestra_threads", {
+    }>(getTableName("threads"), {
       select: "thread_id,text,embedding",
       filters: {
         project,

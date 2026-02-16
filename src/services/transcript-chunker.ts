@@ -8,6 +8,7 @@
  */
 
 import * as supabase from "./supabase-client.js";
+import { getTableName } from "./tier.js";
 import type { Project } from "../types/index.js";
 
 // OpenRouter API configuration (same as local-vector-search)
@@ -291,7 +292,7 @@ export async function processTranscript(
         throw new Error("Supabase configuration missing");
       }
 
-      const restUrl = `${SUPABASE_URL}/rest/v1/orchestra_transcript_chunks?on_conflict=session_id,chunk_index`;
+      const restUrl = `${SUPABASE_URL}/rest/v1/${getTableName("transcript_chunks")}?on_conflict=session_id,chunk_index`;
 
       const response = await fetch(restUrl, {
         method: "POST",

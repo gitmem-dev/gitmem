@@ -9,7 +9,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { computeLifecycleStatus } from "../services/thread-vitality.js";
 import { archiveDormantThreads } from "../services/thread-supabase.js";
@@ -200,7 +200,7 @@ export async function cleanupThreads(
   }
 
   // Step 2: Fetch all non-resolved, non-archived threads
-  const rows = await supabase.directQuery<ThreadRow>("orchestra_threads_lite", {
+  const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
     select: "*",
     filters: {
       project,
@@ -266,7 +266,7 @@ export async function cleanupThreads(
     id: metricsId,
     tool_name: "cleanup_threads",
     query_text: `cleanup:${project}:auto_archive=${!!params.auto_archive}`,
-    tables_searched: ["orchestra_threads_lite"],
+    tables_searched: [getTableName("threads_lite")],
     latency_ms: latencyMs,
     result_count: totalOpen,
     phase_tag: "ad_hoc",

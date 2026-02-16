@@ -13,6 +13,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { getTableName } from "../services/tier.js";
 import { getThreads, getCurrentSession } from "../services/session-state.js";
 import {
   resolveThread as resolveThreadInList,
@@ -131,7 +132,7 @@ export async function resolveThread(
     id: metricsId,
     tool_name: "resolve_thread",
     query_text: `resolve:${params.thread_id || "text:" + params.text_match}`,
-    tables_searched: supabaseSynced ? ["orchestra_threads"] : [],
+    tables_searched: supabaseSynced ? [getTableName("threads")] : [],
     latency_ms: latencyMs,
     result_count: 1 + alsoResolved.length,
     phase_tag: "ad_hoc",

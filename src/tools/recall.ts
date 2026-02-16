@@ -16,7 +16,7 @@
 import * as supabase from "../services/supabase-client.js";
 import type { KnowledgeTriple } from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
-import { hasSupabase, hasVariants, hasMetrics } from "../services/tier.js";
+import { hasSupabase, hasVariants, hasMetrics, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -581,7 +581,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       id: metricsId,
       tool_name: "recall",
       query_text: plan,
-      tables_searched: search_mode === "local" ? [] : ["orchestra_learnings"],
+      tables_searched: search_mode === "local" ? [] : [getTableName("learnings")],
       latency_ms: latencyMs,
       result_count: scars.length,
       similarity_scores: similarityScores,

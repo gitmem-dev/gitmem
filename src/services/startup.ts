@@ -16,6 +16,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isConfigured, loadScarsWithEmbeddings } from "./supabase-client.js";
+import { getTableName } from "./tier.js";
 import { getGitmemDir } from "./gitmem-dir.js";
 import {
   initializeLocalSearch,
@@ -145,7 +146,7 @@ async function getRemoteScarStats(): Promise<{
     // Quick query to get count and latest timestamp (no embeddings needed)
     // Cross-project — matches unified cache loading
     // Filter embedding=not.is.null to match cache indexing (which skips entries without embeddings)
-    const learnings = await directQuery<{ id: string; updated_at?: string }>("orchestra_learnings", {
+    const learnings = await directQuery<{ id: string; updated_at?: string }>(getTableName("learnings"), {
       select: "id,updated_at",
       filters: {
         learning_type: "in.(scar,pattern,win,anti_pattern)",

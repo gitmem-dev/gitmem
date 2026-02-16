@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getConfirmations, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
@@ -975,7 +975,7 @@ export async function sessionClose(
         session_date: string;
         close_compliance: Record<string, unknown> | null;
       }>({
-        table: "orchestra_sessions_lite",
+        table: getTableName("sessions_lite"),
         filters: { agent },
         limit: 10,
         orderBy: { column: "created_at", ascending: false },
@@ -1095,7 +1095,7 @@ export async function sessionClose(
     // Try Supabase first
     try {
       existingSession = await supabase.getRecord<Record<string, unknown>>(
-        "orchestra_sessions",
+        getTableName("sessions"),
         sessionId
       );
     } catch {
@@ -1205,7 +1205,7 @@ export async function sessionClose(
   try {
     // Upsert session WITHOUT embedding (fast path)
     // Embedding + thread detection run fire-and-forget after
-    await supabase.directUpsert("orchestra_sessions", sessionData);
+    await supabase.directUpsert(getTableName("sessions"), sessionData);
 
     // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
@@ -1222,7 +1222,7 @@ export async function sessionClose(
           if (embeddingVector) {
             const embeddingJson = JSON.stringify(embeddingVector);
             // Update session with embedding (PATCH, not upsert — row already exists)
-            await supabase.directPatch("orchestra_sessions",
+            await supabase.directPatch(getTableName("sessions"),
               { id: sessionId },
               { embedding: embeddingJson }
             );
@@ -1275,7 +1275,7 @@ export async function sessionClose(
       session_id: sessionId,
       agent: agentIdentity as "cli" | "desktop" | "autonomous" | "local" | "cloud",
       tool_name: "session_close",
-      tables_searched: ["orchestra_sessions"],
+      tables_searched: [getTableName("sessions")],
       latency_ms: latencyMs,
       result_count: 1,
       phase_tag: "session_close",

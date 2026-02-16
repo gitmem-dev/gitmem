@@ -10,7 +10,7 @@
  */
 
 import { directPatch, isConfigured } from "../services/supabase-client.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { flushCache } from "../services/startup.js";
 import { Timer } from "../services/metrics.js";
@@ -55,7 +55,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
 
     if (hasSupabase() && isConfigured()) {
       // Pro/dev: patch in Supabase
-      await directPatch("orchestra_learnings", { id: `eq.${params.id}` }, {
+      await directPatch(getTableName("learnings"), { id: `eq.${params.id}` }, {
         is_active: false,
         archived_at: archivedAt,
       });

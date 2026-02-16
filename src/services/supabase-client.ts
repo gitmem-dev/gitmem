@@ -14,6 +14,7 @@ import type {
   SupabaseSearchOptions,
 } from "../types/index.js";
 import { getCache } from "./cache.js";
+import { getTableName } from "./tier.js";
 
 // --- PostgREST Input Sanitization ---
 
@@ -528,7 +529,7 @@ export async function loadScarsWithEmbeddings<T = unknown>(
       filters.project = project;
     }
 
-    const learnings = await directQuery<T>("orchestra_learnings", {
+    const learnings = await directQuery<T>(getTableName("learnings"), {
       select: "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type,decay_multiplier",
       filters,
       order: "updated_at.desc",
@@ -602,7 +603,7 @@ export async function cachedListDecisions<T = unknown>(
     limit,
     async () =>
       listRecords<T>({
-        table: "orchestra_decisions_lite",
+        table: getTableName("decisions_lite"),
         limit,
         orderBy: { column: "created_at", ascending: false },
       })
@@ -626,7 +627,7 @@ export async function cachedListWins<T = unknown>(
     limit,
     async () =>
       listRecords<T>({
-        table: "orchestra_learnings_lite",
+        table: getTableName("learnings_lite"),
         columns,
         filters: {
           learning_type: "win",
@@ -732,7 +733,7 @@ export async function saveTranscript(
   // Update the session record with transcript_path (direct REST API)
   let patch_warning: string | undefined;
   try {
-    await directPatch("orchestra_sessions",
+    await directPatch(getTableName("sessions"),
       { id: sessionId },
       { transcript_path: path }
     );
@@ -758,7 +759,7 @@ export async function getTranscript(
 ): Promise<{ transcript: string; path: string } | null> {
   // First, get the session to find transcript_path
   const session = await getRecord<{ transcript_path?: string }>(
-    "orchestra_sessions",
+    getTableName("sessions"),
     sessionId
   );
 

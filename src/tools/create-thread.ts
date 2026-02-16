@@ -15,6 +15,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
+import { getTableName } from "../services/tier.js";
 import { getThreads, setThreads, getCurrentSession, getProject } from "../services/session-state.js";
 import {
   generateThreadId,
@@ -147,7 +148,7 @@ export async function createThread(
       id: metricsId,
       tool_name: "create_thread" as any,
       query_text: `dedup:${dedupResult.matched_thread_id}`,
-      tables_searched: ["orchestra_threads"],
+      tables_searched: [getTableName("threads")],
       latency_ms: latencyMs,
       result_count: 0,
       phase_tag: "ad_hoc",
@@ -213,7 +214,7 @@ export async function createThread(
     id: metricsId,
     tool_name: "create_thread" as any,
     query_text: `create:${thread.id}`,
-    tables_searched: supabaseSynced ? ["orchestra_threads"] : [],
+    tables_searched: supabaseSynced ? [getTableName("threads")] : [],
     latency_ms: latencyMs,
     result_count: 1,
     phase_tag: "ad_hoc",

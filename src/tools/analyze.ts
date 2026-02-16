@@ -22,7 +22,7 @@ import {
   formatReflections,
   formatBlindspots,
 } from "../services/analytics.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import {
   Timer,

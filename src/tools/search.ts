@@ -13,7 +13,7 @@
 
 import * as supabase from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -313,7 +313,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
       id: metricsId,
       tool_name: "search",
       query_text: query,
-      tables_searched: search_mode === "local" ? [] : ["orchestra_learnings"],
+      tables_searched: search_mode === "local" ? [] : [getTableName("learnings")],
       latency_ms: latencyMs,
       result_count: results.length,
       similarity_scores: results.map(r => r.similarity),

@@ -15,7 +15,7 @@ import { wrapDisplay } from "../services/display-protocol.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { writeTriplesForDecision } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { getProject } from "../services/session-state.js";
 import {
@@ -83,7 +83,7 @@ export async function createDecision(
 
       // Write directly to Supabase REST API (bypasses ww-mcp)
       const upsertStart = Date.now();
-      await supabase.directUpsert("orchestra_decisions", decisionData);
+      await supabase.directUpsert(getTableName("decisions"), decisionData);
       breakdown.upsert = {
         latency_ms: Date.now() - upsertStart,
         source: "supabase",
@@ -128,7 +128,7 @@ export async function createDecision(
       id: metricsId,
       session_id: params.session_id,
       tool_name: "create_decision",
-      tables_searched: ["orchestra_decisions"],
+      tables_searched: [getTableName("decisions")],
       latency_ms: latencyMs,
       result_count: 1,
       phase_tag: "decision_capture",

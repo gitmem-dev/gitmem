@@ -19,7 +19,7 @@
 import * as supabase from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
 import { getProject } from "../services/session-state.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -232,7 +232,7 @@ function buildResult(
     id: metricsId,
     tool_name: "prepare_context",
     query_text: `prepare_context:${format}:${plan.slice(0, 80)}`,
-    tables_searched: search_mode === "local" ? [] : ["orchestra_learnings"],
+    tables_searched: search_mode === "local" ? [] : [getTableName("learnings")],
     latency_ms: latencyMs,
     result_count: scars_included,
     phase_tag: "recall",

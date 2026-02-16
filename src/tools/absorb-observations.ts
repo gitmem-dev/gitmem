@@ -15,7 +15,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { wrapDisplay } from "../services/display-protocol.js";
 import { addObservations, getObservations, getCurrentSession } from "../services/session-state.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import * as supabase from "../services/supabase-client.js";
 import {
   Timer,
@@ -65,7 +65,7 @@ export async function absorbObservations(
   // 3. Optionally persist to Supabase (fire-and-forget, non-fatal)
   const session = getCurrentSession();
   if (hasSupabase() && supabase.isConfigured() && session) {
-    supabase.directUpsert("orchestra_sessions", {
+    supabase.directUpsert(getTableName("sessions"), {
       id: session.sessionId,
       task_observations: getObservations(),
     }).catch((err) => {

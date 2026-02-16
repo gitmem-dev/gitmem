@@ -9,6 +9,7 @@
 
 import { directQuery, directQueryAll, safeInFilter } from "./supabase-client.js";
 import { getCache } from "./cache.js";
+import { getTableName } from "./tier.js";
 import type { Project } from "../types/index.js";
 
 // --- Types ---
@@ -93,7 +94,7 @@ export async function querySessionsByDateRange(
         "created_at": `gte.${startDate}`,
       };
 
-      return directQueryAll<SessionRecord>("orchestra_sessions", {
+      return directQueryAll<SessionRecord>(getTableName("sessions"), {
         select: "id,session_title,session_date,agent,linear_issue,decisions,open_threads,closing_reflection,close_compliance,created_at,project",
         filters,
         order: "created_at.desc",
@@ -231,7 +232,7 @@ export async function queryRepeatMistakes(
     is_active: "eq.true",
   };
 
-  const repeats = await directQuery<RepeatMistakeRecord>("orchestra_learnings", {
+  const repeats = await directQuery<RepeatMistakeRecord>(getTableName("learnings"), {
     select: "id,title,related_scar_id,repeat_mistake_details,created_at",
     filters,
     order: "created_at.desc",
@@ -262,7 +263,7 @@ export async function enrichScarUsageTitles(
   // Fetch titles from orchestra_learnings
   const ids = Array.from(idsNeedingResolution);
   const learnings = await directQuery<{ id: string; title: string; severity: string }>(
-    "orchestra_learnings",
+    getTableName("learnings"),
     {
       select: "id,title,severity",
       filters: {

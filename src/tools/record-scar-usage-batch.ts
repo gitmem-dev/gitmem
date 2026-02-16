@@ -5,7 +5,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { Timer, recordMetrics, buildPerformanceData } from "../services/metrics.js";
 import type {
   RecordScarUsageBatchParams,
@@ -49,7 +49,7 @@ async function resolveScarIdentifier(
 
     // Try exact title match first
     const titleResult = await supabase.listRecords<ScarRecord>({
-      table: "orchestra_learnings",
+      table: getTableName("learnings"),
       columns: "id,title,description,scar_type,severity",
       filters: { ...filters, title: identifier },
       limit: 1,
@@ -61,7 +61,7 @@ async function resolveScarIdentifier(
 
     // Try partial title match (get more records to search)
     const partialResult = await supabase.listRecords<ScarRecord>({
-      table: "orchestra_learnings",
+      table: getTableName("learnings"),
       columns: "id,title,description,scar_type,severity",
       filters: { ...filters },
       limit: 100,
@@ -171,7 +171,7 @@ export async function recordScarUsageBatch(
     recordMetrics({
       id: metricsId,
       tool_name: "record_scar_usage_batch",
-      tables_searched: ["scar_usage", "orchestra_learnings"],
+      tables_searched: ["scar_usage", getTableName("learnings")],
       latency_ms: latencyMs,
       result_count: usageIds.length,
       phase_tag: "scar_tracking",

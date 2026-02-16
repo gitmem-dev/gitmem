@@ -367,9 +367,10 @@ function formatCloseDisplay(
       const ref = s.reference_type === "explicit" ? "applied" :
                   s.reference_type === "implicit" ? "implicit" :
                   s.reference_type === "acknowledged" ? "ack'd" :
-                  s.reference_type === "refuted" ? "REFUTED" : s.reference_type;
-      const id = s.scar_identifier.length > 12 ? s.scar_identifier.slice(0, 8) : s.scar_identifier;
-      lines.push(`  ${id}  ${ref.padEnd(8)}  ${truncate(s.reference_context, 50)}`);
+                  s.reference_type === "refuted" ? "REFUTED" : (s.reference_type || "?");
+      const scarId = s.scar_identifier || "(unknown)";
+      const id = scarId.length > 12 ? scarId.slice(0, 8) : scarId;
+      lines.push(`  ${id}  ${ref.padEnd(8)}  ${truncate(s.reference_context || "", 50)}`);
     }
   }
 
@@ -860,6 +861,34 @@ export async function sessionClose(
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
+  }
+
+  // Sanitize scars_to_record: agents frequently write create_learning shape
+  // ({title, description, severity}) instead of ScarUsageEntry shape
+  // ({scar_identifier, reference_type, reference_context}).
+  // Filter out entries missing required fields to prevent crashes in formatCloseDisplay.
+  if (Array.isArray(params.scars_to_record) && params.scars_to_record.length > 0) {
+    const valid: typeof params.scars_to_record = [];
+    for (const entry of params.scars_to_record) {
+      if (entry && typeof entry === "object" && typeof entry.scar_identifier === "string" && entry.scar_identifier.length > 0) {
+        valid.push(entry);
+      } else {
+        // Try to salvage: if agent wrote {title, description} instead of {scar_identifier, reference_context}
+        const raw = entry as unknown as Record<string, unknown>;
+        if (raw && typeof raw.title === "string" && raw.title.length > 0) {
+          valid.push({
+            scar_identifier: raw.title as string,
+            reference_type: (typeof raw.reference_type === "string" ? raw.reference_type : "acknowledged") as "explicit" | "implicit" | "acknowledged" | "refuted" | "none",
+            reference_context: (typeof raw.description === "string" ? raw.description : "auto-coerced from payload") as string,
+            surfaced_at: new Date().toISOString(),
+          });
+          console.error(`[session_close] Coerced malformed scar entry "${raw.title}" → scar_identifier`);
+        } else {
+          console.error(`[session_close] Dropped malformed scars_to_record entry: ${JSON.stringify(entry).slice(0, 100)}`);
+        }
+      }
+    }
+    params.scars_to_record = valid.length > 0 ? valid : undefined;
   }
 
   // Normalize closing_reflection field aliases (q1_broke → what_broke, etc.)

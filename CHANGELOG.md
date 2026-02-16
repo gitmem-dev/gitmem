@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-02-16
+
+### Fixed
+- **Session close crash on malformed scars_to_record**: Agents writing `{title, description, severity}` (create_learning shape) instead of `{scar_identifier, reference_type, reference_context}` (ScarUsageEntry shape) in closing payload caused `Cannot read properties of undefined (reading 'length')` crash in `formatCloseDisplay`. Now auto-coerces salvageable entries and drops invalid ones with warnings.
+- **Defensive property access in formatCloseDisplay**: Guard against undefined `scar_identifier`, `reference_type`, and `reference_context` as belt-and-suspenders protection.
+
 ## [1.0.3] - 2026-02-15
 
 ### Changed

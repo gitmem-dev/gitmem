@@ -36,7 +36,7 @@ import { processTranscript } from "../services/transcript-chunker.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getGitmemPath, getGitmemDir, getSessionPath } from "../services/gitmem-dir.js";
+import { getGitmemPath, getGitmemDir, getSessionPath, getSessionDir } from "../services/gitmem-dir.js";
 import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
 import { loadSuggestions, saveSuggestions, detectSuggestedThreads, loadRecentSessionEmbeddings } from "../services/thread-suggestions.js";
 import { writeAgentBriefing } from "../services/agent-briefing.js";
@@ -432,9 +432,9 @@ function cleanupSessionFiles(sessionId: string): void {
     console.warn("[session_close] Failed to unregister session:", error);
   }
 
-  // 2. Delete per-session directory
+  // 2. Delete per-session directory (sanitized via getSessionDir to prevent traversal)
   try {
-    const sessionDir = path.join(getGitmemDir(), "sessions", sessionId);
+    const sessionDir = getSessionDir(sessionId);
     if (fs.existsSync(sessionDir)) {
       fs.rmSync(sessionDir, { recursive: true, force: true });
       console.error(`[session_close] Cleaned up session directory: ${sessionDir}`);

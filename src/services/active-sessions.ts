@@ -14,7 +14,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getGitmemDir, getSessionPath } from "./gitmem-dir.js";
+import { getGitmemDir, getSessionPath, sanitizePathComponent } from "./gitmem-dir.js";
 import { ActiveSessionsRegistrySchema } from "../schemas/active-sessions.js";
 import type { ActiveSessionEntry, ActiveSessionsRegistry } from "../types/index.js";
 import { withLockSync } from "./file-lock.js";
@@ -312,6 +312,7 @@ function pruneOrphanedDirs(gitmemDir: string, registry: ActiveSessionsRegistry):
  */
 function cleanupSessionDir(gitmemDir: string, sessionId: string): void {
   try {
+    sanitizePathComponent(sessionId, "sessionId");
     const sessionDir = path.join(gitmemDir, "sessions", sessionId);
     if (fs.existsSync(sessionDir)) {
       fs.rmSync(sessionDir, { recursive: true, force: true });

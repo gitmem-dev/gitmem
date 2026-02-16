@@ -14,7 +14,7 @@ describe("SessionCloseParamsSchema", () => {
   describe("valid inputs", () => {
     it("accepts minimal valid params", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test-session-123",
+        session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         close_type: "quick",
       });
       expect(result.success).toBe(true);
@@ -24,7 +24,7 @@ describe("SessionCloseParamsSchema", () => {
       const closeTypes = ["standard", "quick", "autonomous", "retroactive"];
       for (const closeType of closeTypes) {
         const result = SessionCloseParamsSchema.safeParse({
-          session_id: "test-session",
+          session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
           close_type: closeType,
         });
         expect(result.success).toBe(true);
@@ -33,7 +33,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("accepts full valid params with standard close", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test-session",
+        session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         close_type: "standard",
         task_completion: {
           questions_displayed_at: "2026-02-03T10:00:00Z",
@@ -65,7 +65,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("accepts standard close with rapport fields (OD-666)", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test-session",
+        session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         close_type: "standard",
         closing_reflection: {
           what_broke: "Nothing",
@@ -98,7 +98,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("rejects missing close_type", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test-session",
+        session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       });
       expect(result.success).toBe(false);
     });
@@ -112,10 +112,71 @@ describe("SessionCloseParamsSchema", () => {
     });
   });
 
+  describe("path traversal prevention", () => {
+    it("rejects session_id with path traversal", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "../../etc/passwd",
+        close_type: "quick",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects session_id with arbitrary string", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "not-a-valid-id",
+        close_type: "quick",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts valid UUID session_id", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        close_type: "quick",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts valid short hex session_id", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "a1b2c3d4",
+        close_type: "quick",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects transcript_path with path traversal", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "a1b2c3d4",
+        close_type: "quick",
+        transcript_path: "/home/user/../../../etc/shadow",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects transcript_path with null bytes", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "a1b2c3d4",
+        close_type: "quick",
+        transcript_path: "/home/user/file.txt\0.json",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts valid transcript_path", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "a1b2c3d4",
+        close_type: "quick",
+        transcript_path: "/home/user/.claude/projects/session.jsonl",
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe("type mismatches", () => {
     it("rejects invalid close_type", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "invalid",
       });
       expect(result.success).toBe(false);
@@ -123,7 +184,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("rejects non-array open_threads", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "quick",
         open_threads: "single thread",
       });
@@ -132,7 +193,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("rejects negative ceremony_duration_ms", () => {
       const result = SessionCloseParamsSchema.safeParse({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "quick",
         ceremony_duration_ms: -100,
       });
@@ -143,7 +204,7 @@ describe("SessionCloseParamsSchema", () => {
   describe("validateSessionCloseParams warnings", () => {
     it("warns when standard close lacks task_completion", () => {
       const result = validateSessionCloseParams({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "standard",
       });
       expect(result.success).toBe(true);
@@ -152,7 +213,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("warns when standard close lacks closing_reflection", () => {
       const result = validateSessionCloseParams({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "standard",
       });
       expect(result.success).toBe(true);
@@ -161,7 +222,7 @@ describe("SessionCloseParamsSchema", () => {
 
     it("no warnings for quick close without task_completion", () => {
       const result = validateSessionCloseParams({
-        session_id: "test",
+        session_id: "a1b2c3d4",
         close_type: "quick",
       });
       expect(result.success).toBe(true);
@@ -256,7 +317,7 @@ describe("ClosingReflectionSchema", () => {
 
   it("accepts learnings_created as array of objects (agent reality)", () => {
     const result = SessionCloseParamsSchema.safeParse({
-      session_id: "test",
+      session_id: "a1b2c3d4",
       close_type: "quick",
       learnings_created: [
         { id: "abc", title: "test scar", type: "scar" },
@@ -268,7 +329,7 @@ describe("ClosingReflectionSchema", () => {
 
   it("accepts learnings_created as array of strings (schema original)", () => {
     const result = SessionCloseParamsSchema.safeParse({
-      session_id: "test",
+      session_id: "a1b2c3d4",
       close_type: "quick",
       learnings_created: ["learning-1", "learning-2"],
     });
@@ -277,7 +338,7 @@ describe("ClosingReflectionSchema", () => {
 
   it("accepts learnings_created as mixed array", () => {
     const result = SessionCloseParamsSchema.safeParse({
-      session_id: "test",
+      session_id: "a1b2c3d4",
       close_type: "quick",
       learnings_created: ["learning-1", { id: "abc", title: "scar", type: "scar" }],
     });

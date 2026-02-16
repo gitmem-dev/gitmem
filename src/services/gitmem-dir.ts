@@ -14,6 +14,21 @@
 import * as path from "path";
 import * as fs from "fs";
 
+/**
+ * Validate a string intended for use as a single path component (directory name or filename).
+ * Rejects path traversal sequences, directory separators, and null bytes.
+ * Throws on invalid input — callers should validate before reaching this layer.
+ */
+export function sanitizePathComponent(value: string, label: string): string {
+  if (!value || typeof value !== "string") {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  if (value.includes("..") || value.includes("/") || value.includes("\\") || value.includes("\0")) {
+    throw new Error(`${label} contains invalid characters (path traversal rejected)`);
+  }
+  return value;
+}
+
 let cachedGitmemDir: string | null = null;
 
 /**
@@ -70,6 +85,7 @@ export function getGitmemPath(filename: string): string {
  * Creates the directory if it doesn't exist.
  */
 export function getSessionDir(sessionId: string): string {
+  sanitizePathComponent(sessionId, "sessionId");
   const sessionsDir = path.join(getGitmemDir(), "sessions", sessionId);
   if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
@@ -82,6 +98,7 @@ export function getSessionDir(sessionId: string): string {
  * Get a file path within a per-session directory.
  */
 export function getSessionPath(sessionId: string, filename: string): string {
+  sanitizePathComponent(filename, "filename");
   return path.join(getSessionDir(sessionId), filename);
 }
 

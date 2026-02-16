@@ -73,8 +73,20 @@ export type ScarUsageEntry = z.infer<typeof ScarUsageEntrySchema>;
 /**
  * Session close parameters schema
  */
+// Session ID must be UUID or 8-char hex short-ID (no path traversal)
+const SessionIdSchema = z.string().min(1, "session_id is required").refine(
+  (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) || /^[0-9a-f]{8}$/i.test(val),
+  { message: "session_id must be a UUID or 8-char hex short-ID" }
+);
+
+// Transcript path must not contain path traversal sequences
+const SafeTranscriptPathSchema = z.string().refine(
+  (val) => !val.includes("..") && !val.includes("\0"),
+  { message: "transcript_path must not contain path traversal sequences" }
+);
+
 export const SessionCloseParamsSchema = z.object({
-  session_id: z.string().min(1, "session_id is required"),
+  session_id: SessionIdSchema,
   close_type: CloseTypeSchema,
   task_completion: TaskCompletionSchema.optional(),
   closing_reflection: ClosingReflectionSchema.optional(),
@@ -87,7 +99,7 @@ export const SessionCloseParamsSchema = z.object({
   ceremony_duration_ms: z.number().nonnegative().optional(),
   scars_to_record: z.array(ScarUsageEntrySchema).optional(),
   capture_transcript: z.boolean().optional(),
-  transcript_path: z.string().optional(),
+  transcript_path: SafeTranscriptPathSchema.optional(),
 });
 
 export type SessionCloseParams = z.infer<typeof SessionCloseParamsSchema>;

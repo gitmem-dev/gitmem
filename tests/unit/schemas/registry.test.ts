@@ -30,7 +30,7 @@ describe("resolveToolName", () => {
 describe("validateToolArgs", () => {
   it("returns null for valid session_close params", () => {
     const error = validateToolArgs("session_close", {
-      session_id: "test-session",
+      session_id: "a1b2c3d4",
       close_type: "quick",
     });
     expect(error).toBeNull();
@@ -38,7 +38,7 @@ describe("validateToolArgs", () => {
 
   it("returns null for valid alias params", () => {
     const error = validateToolArgs("gitmem-sc", {
-      session_id: "test-session",
+      session_id: "a1b2c3d4",
       close_type: "quick",
     });
     expect(error).toBeNull();
@@ -54,7 +54,7 @@ describe("validateToolArgs", () => {
 
   it("returns error for invalid close_type", () => {
     const error = validateToolArgs("session_close", {
-      session_id: "test",
+      session_id: "a1b2c3d4",
       close_type: "invalid_type",
     });
     expect(error).not.toBeNull();
@@ -63,7 +63,7 @@ describe("validateToolArgs", () => {
 
   it("returns error for invalid ceremony_duration_ms", () => {
     const error = validateToolArgs("session_close", {
-      session_id: "test",
+      session_id: "a1b2c3d4",
       close_type: "quick",
       ceremony_duration_ms: -100,
     });

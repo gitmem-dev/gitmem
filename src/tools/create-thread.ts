@@ -64,7 +64,7 @@ export interface CreateThreadResult {
   deduplicated?: boolean;
   /** Phase 3: dedup gate details */
   dedup?: {
-    method: "embedding" | "text_normalization" | "skipped";
+    method: "embedding" | "token_overlap" | "text_normalization" | "skipped";
     similarity: number | null;
     matched_thread_id: string | null;
   };

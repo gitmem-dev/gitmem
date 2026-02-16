@@ -11,7 +11,12 @@ import {
   normalizeText,
   cosineSimilarity,
   deduplicateThreadList,
+  tokenize,
+  tokenOverlap,
+  extractIssuePrefix,
   DEDUP_SIMILARITY_THRESHOLD,
+  TOKEN_OVERLAP_THRESHOLD,
+  TOKEN_OVERLAP_ISSUE_PREFIX_THRESHOLD,
 } from "../../../src/services/thread-dedup.js";
 import type { ThreadWithEmbedding } from "../../../src/services/thread-dedup.js";
 import type { ThreadObject } from "../../../src/types/index.js";
@@ -184,19 +189,29 @@ describe("checkDuplicate — text fallback", () => {
 
     expect(result.is_duplicate).toBe(true);
     expect(result.matched_thread_id).toBe("t-existing");
-    expect(result.method).toBe("text_normalization");
-    expect(result.similarity).toBeNull();
+    // Token overlap catches this before text normalization since tokens are identical
+    expect(["token_overlap", "text_normalization"]).toContain(result.method);
   });
 
-  it("does NOT flag near-miss text as duplicate (high precision)", () => {
+  it("catches near-miss text via token overlap", () => {
     const existing = [
       makeThread("t-existing", "Fix auth timeout", null),
     ];
 
     const result = checkDuplicate("Fix authentication timeout", null, existing);
 
+    expect(result.is_duplicate).toBe(true);
+    expect(result.method).toBe("token_overlap");
+  });
+
+  it("does NOT flag genuinely different text as duplicate", () => {
+    const existing = [
+      makeThread("t-existing", "Fix auth timeout", null),
+    ];
+
+    const result = checkDuplicate("Deploy new staging environment to production", null, existing);
+
     expect(result.is_duplicate).toBe(false);
-    expect(result.method).toBe("text_normalization");
   });
 });
 
@@ -279,5 +294,185 @@ describe("deduplicateThreadList", () => {
     const result = deduplicateThreadList(threads);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("t-aaa");
+  });
+
+  it("catches near-duplicate threads via token overlap", () => {
+    const threads = [
+      makeThreadObject("t-aaa", "OD-692: Twitter env vars need to be verified in container after restart. MCP config entry for twitter-mcp still needs to be added on host machine."),
+      makeThreadObject("t-bbb", "OD-692: Twitter env vars need to be verified in container — original task deferred after credential incident"),
+    ];
+    const result = deduplicateThreadList(threads);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("t-aaa");
+  });
+});
+
+// ===========================================================================
+// 6. tokenize
+// ===========================================================================
+
+describe("tokenize", () => {
+  it("lowercases and splits on non-alphanumeric", () => {
+    const tokens = tokenize("Fix Auth Timeout");
+    expect(tokens).toContain("fix");
+    expect(tokens).toContain("auth");
+    expect(tokens).toContain("timeout");
+  });
+
+  it("removes stop words", () => {
+    const tokens = tokenize("Fix the auth timeout in the container");
+    expect(tokens).not.toContain("the");
+    expect(tokens).not.toContain("in");
+    expect(tokens).toContain("fix");
+    expect(tokens).toContain("auth");
+    expect(tokens).toContain("container");
+  });
+
+  it("removes single-character tokens", () => {
+    const tokens = tokenize("a b c fix");
+    expect(tokens).toContain("fix");
+    expect(tokens.size).toBe(1);
+  });
+
+  it("handles issue prefixes as tokens", () => {
+    const tokens = tokenize("OD-692: Fix the bug");
+    expect(tokens).toContain("od-692");
+    expect(tokens).toContain("fix");
+    expect(tokens).toContain("bug");
+  });
+
+  it("returns empty set for all stop words", () => {
+    const tokens = tokenize("the a an is it");
+    expect(tokens.size).toBe(0);
+  });
+});
+
+// ===========================================================================
+// 7. tokenOverlap
+// ===========================================================================
+
+describe("tokenOverlap", () => {
+  it("returns 1.0 for identical sets", () => {
+    const a = new Set(["fix", "auth", "timeout"]);
+    expect(tokenOverlap(a, a)).toBe(1.0);
+  });
+
+  it("returns 0 for disjoint sets", () => {
+    const a = new Set(["fix", "auth"]);
+    const b = new Set(["deploy", "staging"]);
+    expect(tokenOverlap(a, b)).toBe(0);
+  });
+
+  it("returns 0 for empty sets", () => {
+    expect(tokenOverlap(new Set(), new Set(["fix"]))).toBe(0);
+    expect(tokenOverlap(new Set(["fix"]), new Set())).toBe(0);
+  });
+
+  it("uses min(|A|,|B|) as denominator (overlap coefficient)", () => {
+    // A is a subset of B → overlap = 1.0 (all of A found in B)
+    const a = new Set(["fix", "auth"]);
+    const b = new Set(["fix", "auth", "timeout", "container"]);
+    expect(tokenOverlap(a, b)).toBe(1.0);
+  });
+
+  it("computes correct overlap for partial match", () => {
+    const a = new Set(["fix", "auth", "timeout"]);
+    const b = new Set(["fix", "deploy", "timeout"]);
+    // intersection = {fix, timeout} = 2, min(3,3) = 3
+    expect(tokenOverlap(a, b)).toBeCloseTo(2 / 3, 6);
+  });
+});
+
+// ===========================================================================
+// 8. extractIssuePrefix
+// ===========================================================================
+
+describe("extractIssuePrefix", () => {
+  it("extracts OD-692 prefix", () => {
+    expect(extractIssuePrefix("OD-692: Fix the bug")).toBe("OD-692");
+  });
+
+  it("extracts lowercase prefix and uppercases", () => {
+    expect(extractIssuePrefix("od-123: something")).toBe("OD-123");
+  });
+
+  it("extracts PROJ-1 style prefix", () => {
+    expect(extractIssuePrefix("PROJ-1: short")).toBe("PROJ-1");
+  });
+
+  it("returns null for no prefix", () => {
+    expect(extractIssuePrefix("Fix the bug")).toBeNull();
+    expect(extractIssuePrefix("123 something")).toBeNull();
+  });
+});
+
+// ===========================================================================
+// 9. checkDuplicate — token overlap mode (the real bug case)
+// ===========================================================================
+
+describe("checkDuplicate — token overlap mode", () => {
+  it("catches the actual OD-692 duplicate (no embeddings)", () => {
+    const existing = [
+      makeThread(
+        "t-c57a4fd3",
+        "OD-692: Twitter env vars need to be verified in container after restart. MCP config entry for twitter-mcp still needs to be added on host machine.",
+        null
+      ),
+    ];
+
+    const result = checkDuplicate(
+      "OD-692: Twitter env vars need to be verified in container — original task deferred after credential incident",
+      null,
+      existing
+    );
+
+    expect(result.is_duplicate).toBe(true);
+    expect(result.method).toBe("token_overlap");
+    expect(result.matched_thread_id).toBe("t-c57a4fd3");
+    expect(result.similarity).toBeGreaterThan(TOKEN_OVERLAP_ISSUE_PREFIX_THRESHOLD);
+  });
+
+  it("uses lower threshold when issue prefix matches", () => {
+    const existing = [
+      makeThread("t-aaa", "OD-100: Setup database migrations for new schema", null),
+    ];
+
+    // Same prefix but different enough words — would fail at 0.6 but pass at 0.4
+    const result = checkDuplicate(
+      "OD-100: Database migration setup blocked by permissions",
+      null,
+      existing
+    );
+
+    expect(result.is_duplicate).toBe(true);
+    expect(result.method).toBe("token_overlap");
+  });
+
+  it("does not false-positive on unrelated threads", () => {
+    const existing = [
+      makeThread("t-aaa", "OD-692: Twitter env vars need to be verified", null),
+    ];
+
+    const result = checkDuplicate(
+      "Set up GitHub Actions CI pipeline for automated testing",
+      null,
+      existing
+    );
+
+    expect(result.is_duplicate).toBe(false);
+  });
+
+  it("does not false-positive on different issue prefixes with low word overlap", () => {
+    const existing = [
+      makeThread("t-aaa", "OD-100: Fix authentication timeout", null),
+    ];
+
+    const result = checkDuplicate(
+      "OD-200: Deploy staging environment",
+      null,
+      existing
+    );
+
+    expect(result.is_duplicate).toBe(false);
   });
 });

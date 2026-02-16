@@ -24,7 +24,8 @@
     "test:all": "npm run test:unit && npm run test:smoke && npm run test:integration && npm run test:perf && npm run test:e2e",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsc"
+    "prepublishOnly": "tsc",
+    "release-status": "bash scripts/release-status.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0",

@@ -65,8 +65,11 @@ const MOCK_SCARS = [
 ];
 
 // --- Disk cache setup/teardown ---
+// Set GITMEM_DIR so getGitmemDir() resolves to our test path (not ~/.gitmem)
+const TEST_GITMEM_DIR = path.join(process.cwd(), ".gitmem");
+process.env.GITMEM_DIR = TEST_GITMEM_DIR;
 
-const CACHE_DIR = path.join(process.cwd(), ".gitmem", "cache");
+const CACHE_DIR = path.join(TEST_GITMEM_DIR, "cache");
 const CACHE_PATH = path.join(CACHE_DIR, "hook-scars.json");
 
 function writeDiskCache(scars: unknown[]): void {

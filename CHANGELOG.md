@@ -10,16 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2026-02-15
 
 ### Changed
-- **Tool alias consolidation (OD-691)**: Reduced advertised tools from 55 to 20 (free tier). Aliases still work when called directly. Set `GITMEM_FULL_ALIASES=1` to restore all.
-- **Starter scars reduced (OD-684)**: Ship with 3 high-quality starter scars instead of 12. Starter scars deprioritized with 0.7x score multiplier so earned scars outrank them.
-- **Recall similarity threshold (OD-686)**: Weak matches below threshold (0.4 BM25, 0.35 embeddings) are suppressed. Empty results show helpful guidance instead of noise.
-- **Adaptive session closing (OD-685)**: Auto-detects ceremony level (micro/standard/full) based on session activity. Removed hard rejection gate that blocked standard closes on short sessions.
-- **Scar relevance feedback (OD-690)**: Optional `relevance` field (high/low/noise) on `confirm_scars` for recall quality improvement. Defaults derived from decision type.
-- **Pro tier messaging (OD-688)**: Rewritten from agent's perspective with concrete value propositions.
+- **Tool alias consolidation**: Reduced advertised tools from 55 to 20 (free tier). Aliases still work when called directly. Set `GITMEM_FULL_ALIASES=1` to restore all.
+- **Starter scars reduced**: Ship with 3 high-quality starter scars instead of 12. Starter scars deprioritized with 0.7x score multiplier so earned scars outrank them.
+- **Recall similarity threshold**: Weak matches below threshold (0.4 BM25, 0.35 embeddings) are suppressed. Empty results show helpful guidance instead of noise.
+- **Adaptive session closing**: Auto-detects ceremony level (micro/standard/full) based on session activity. Removed hard rejection gate that blocked standard closes on short sessions.
+- **Scar relevance feedback**: Optional `relevance` field (high/low/noise) on `confirm_scars` for recall quality improvement. Defaults derived from decision type.
+- **Pro tier messaging**: Rewritten from agent's perspective with concrete value propositions.
 
 ### Added
-- **Agent briefing (OD-689)**: Generates `.gitmem/agent-briefing.md` at session close with memory state summary for MEMORY.md bridge.
-- **PMEM/GitMem boundary docs (OD-687)**: README section documenting how GitMem complements MEMORY.md/cursorrules.
+- **Agent briefing**: Generates `.gitmem/agent-briefing.md` at session close with memory state summary for MEMORY.md bridge.
+- **PMEM/GitMem boundary docs**: README section documenting how GitMem complements MEMORY.md/cursorrules.
 
 ## [1.0.2] - 2026-02-15
 
@@ -31,12 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-02-10
 
 ### Added
-- **Hooks plugin bundled**: `gitmem install-hooks` / `uninstall-hooks` CLI commands (OD-605, OD-606)
+- **Hooks plugin bundled**: `gitmem install-hooks` / `uninstall-hooks` CLI commands
 - **CLI `check` command wired**: `gitmem check` now reachable from CLI (was defined but unreachable)
-- **Fresh-install E2E tests**: 16 integration tests covering CLI commands, hooks, and MCP server lifecycle (OD-607)
-- **README rewrite**: External-developer-facing docs with no internal jargon (OD-608)
+- **Fresh-install E2E tests**: 16 integration tests covering CLI commands, hooks, and MCP server lifecycle
+- **README rewrite**: External-developer-facing docs with no internal jargon
 - **CONTRIBUTING.md**: Dev setup, testing tiers, and PR guidelines
-- **First public npm release** (OD-609)
+- **First public npm release**
 
 ### Changed
 - Package name standardized to `gitmem-mcp` for npm
@@ -46,11 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-02-08
 
 ### Added
-- **Full monorepo sync**: Standalone repo is now source of truth (Option A — OD-574, GIT-1)
+- **Full monorepo sync**: Standalone repo is now source of truth
 - **Zod schemas**: 14 schema files for all tool parameter validation (`src/schemas/`)
 - **Diagnostics suite**: Health checks, channel instrumentation, anonymization (`src/diagnostics/`)
 - **Single source of truth constants**: Closing questions defined once (`src/constants/closing-questions.ts`)
-- **Multi-agent tools**: `prepare_context` and `absorb_observations` (GitMem v2 Phase 1-2)
+- **Multi-agent tools**: `prepare_context` and `absorb_observations`
 - **Tool definitions module**: Centralized tool registration (`src/tools/definitions.ts`)
 - **Commands module**: `gitmem check` CLI health diagnostics (`src/commands/check.ts`)
 - **Full test suite**: 354+ unit tests across 20 test files, plus integration, e2e, and performance benchmarks

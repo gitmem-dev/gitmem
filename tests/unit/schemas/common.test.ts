@@ -37,10 +37,25 @@ describe("ProjectSchema", () => {
 });
 
 describe("AgentIdentitySchema", () => {
-  const validAgents = ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud", "Unknown"];
+  const validAgents = ["cli", "desktop", "autonomous", "local", "cloud", "Unknown"];
+  const legacyAgents = ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"];
 
   it.each(validAgents)("accepts %s", (agent) => {
     expect(AgentIdentitySchema.safeParse(agent).success).toBe(true);
+  });
+
+  it.each(legacyAgents)("accepts and normalizes legacy %s", (agent) => {
+    const result = AgentIdentitySchema.safeParse(agent);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toBe(agent); // should be normalized
+    }
+  });
+
+  it("normalizes CLI to cli", () => {
+    const result = AgentIdentitySchema.safeParse("CLI");
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe("cli");
   });
 
   it("rejects invalid agent", () => {

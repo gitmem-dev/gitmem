@@ -3,8 +3,8 @@
 # gitmem-hooks — Integration Tests
 # Tests all four hook scripts against real scenarios
 #
-# Updated for Phase 1 multi-session registry format (GIT-19):
-#   - active-sessions.json (plural) with {"sessions": [...]} array
+# Uses multi-session registry format:
+#   - active-sessions.json with {"sessions": [...]} array
 #   - Per-session data at .gitmem/sessions/{session_id}/session.json
 # ============================================================================
 
@@ -45,7 +45,7 @@ trap "rm -rf $TMPDIR" EXIT
 cd "$TMPDIR"
 
 # ============================================================================
-# Helpers: multi-session registry format (Phase 1, GIT-19)
+# Helpers: multi-session registry format
 # ============================================================================
 
 # Create multi-session registry (replaces old active-session.json singular)

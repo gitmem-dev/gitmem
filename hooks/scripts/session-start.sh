@@ -183,7 +183,7 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
 
     # Instruct agent to call session_start via MCP.
     # The MCP server creates sessions with its own PID, enabling multi-session
-    # isolation (Phase 1, GIT-19). CLI binary invocation was removed because
+    # isolation. CLI binary invocation was removed because
     # the CLI PID dies immediately, defeating PID-based session identity.
     #
     # NOTE: ToolSearch (tengu_mcp_tool_search) was removed. MCP tools load

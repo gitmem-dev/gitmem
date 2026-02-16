@@ -371,7 +371,7 @@ export function migrateFromLegacy(): boolean {
       // 2. Create registry with single entry
       const entry: ActiveSessionEntry = {
         session_id: old.session_id,
-        agent: old.agent || "CLI",
+        agent: old.agent || "cli",
         started_at: old.started_at || new Date().toISOString(),
         hostname: old.hostname || os.hostname(),
         pid: old.pid || process.pid,

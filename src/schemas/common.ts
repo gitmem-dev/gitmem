@@ -13,15 +13,23 @@ export type Project = string;
 /**
  * Agent identity enum
  */
-export const AgentIdentitySchema = z.enum([
-  "CLI",
-  "DAC",
-  "CODA-1",
-  "Brain_Local",
-  "Brain_Cloud",
-  "Unknown",
+const LEGACY_AGENT_MAP: Record<string, string> = {
+  "CLI": "cli",
+  "DAC": "desktop",
+  "CODA-1": "autonomous",
+  "Brain_Local": "local",
+  "Brain_Cloud": "cloud",
+};
+
+const VALID_AGENTS = new Set([
+  "cli", "desktop", "autonomous", "local", "cloud", "Unknown",
+  "CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud",
 ]);
-export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
+
+export const AgentIdentitySchema = z.string()
+  .refine((val) => VALID_AGENTS.has(val), { message: "Invalid agent identity" })
+  .transform((val) => (LEGACY_AGENT_MAP[val] || val) as AgentIdentity);
+export type AgentIdentity = "cli" | "desktop" | "autonomous" | "local" | "cloud" | "Unknown";
 
 /**
  * Learning type enum (scar, win, pattern)

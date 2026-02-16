@@ -38,7 +38,7 @@ IS_MEANINGFUL=false
 ACTIVE_SESSIONS=".gitmem/active-sessions.json"
 SESSION_STARTED=false
 if [ -f "$ACTIVE_SESSIONS" ]; then
-    # Check if registry has active session entries (Phase 1 multi-session, GIT-19)
+    # Check if registry has active session entries
     if command -v jq &>/dev/null; then
         [ "$(jq '.sessions | length' "$ACTIVE_SESSIONS" 2>/dev/null || echo 0)" -gt 0 ] 2>/dev/null && SESSION_STARTED=true
     elif command -v node &>/dev/null; then

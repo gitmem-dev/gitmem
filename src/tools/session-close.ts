@@ -1150,7 +1150,7 @@ export async function sessionClose(
   // OD-538: Capture transcript if enabled (default true for CLI/DAC)
   let transcriptStatus: TranscriptStatus | undefined;
   const shouldCaptureTranscript = params.capture_transcript !== false &&
-    (agentIdentity === "CLI" || agentIdentity === "DAC");
+    (agentIdentity === "cli" || agentIdentity === "desktop");
 
   if (shouldCaptureTranscript) {
     const transcriptResult = await captureSessionTranscript(sessionId, params, existingSession, isRetroactive);
@@ -1200,9 +1200,9 @@ export async function sessionClose(
             console.error("[session_close] Embedding saved to session");
 
             // Phase 5: Implicit thread detection (chained after embedding)
-            const suggestProject = (existingSession?.project as string) || "default";
-            const recentSessions = await loadRecentSessionEmbeddings(suggestProject as any, 30, 20);
-            const threadEmbs = await loadOpenThreadEmbeddings(suggestProject as any);
+            const suggestProject: string = (existingSession?.project as string) || "default";
+            const recentSessions = await loadRecentSessionEmbeddings(suggestProject, 30, 20);
+            const threadEmbs = await loadOpenThreadEmbeddings(suggestProject);
             if (recentSessions && threadEmbs) {
               const existing = loadSuggestions();
               const updated = detectSuggestedThreads(
@@ -1237,14 +1237,14 @@ export async function sessionClose(
 
     // Update relevance data for memories applied during session
     if (normalizedScarsApplied.length > 0) {
-      updateRelevanceData(sessionId, normalizedScarsApplied).catch(() => {});
+      updateRelevanceData(sessionId, normalizedScarsApplied).catch((err) => console.error("[session_close] updateRelevanceData failed:", err instanceof Error ? err.message : err));
     }
 
     // Record metrics
     recordMetrics({
       id: metricsId,
       session_id: sessionId,
-      agent: agentIdentity as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
+      agent: agentIdentity as "cli" | "desktop" | "autonomous" | "local" | "cloud",
       tool_name: "session_close",
       tables_searched: ["orchestra_sessions"],
       latency_ms: latencyMs,

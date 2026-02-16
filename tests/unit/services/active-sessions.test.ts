@@ -27,7 +27,7 @@ let tmpDir: string;
 function makeEntry(overrides: Partial<ActiveSessionEntry> = {}): ActiveSessionEntry {
   return {
     session_id: overrides.session_id || "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-    agent: overrides.agent || "CLI",
+    agent: overrides.agent || "cli",
     started_at: overrides.started_at || new Date().toISOString(),
     hostname: overrides.hostname || os.hostname(),
     pid: overrides.pid ?? process.pid,
@@ -221,7 +221,7 @@ describe("findSessionById", () => {
 
     const found = findSessionById(entry.session_id);
     expect(found).not.toBeNull();
-    expect(found!.agent).toBe("CLI");
+    expect(found!.agent).toBe("cli");
   });
 
   it("returns null for unknown ID", () => {
@@ -458,7 +458,7 @@ describe("atomic write behavior", () => {
   });
 });
 
-describe("migrateFromLegacy (GIT-23)", () => {
+describe("migrateFromLegacy", () => {
   it("migrates old active-session.json to new format", () => {
     const oldData = {
       session_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -476,7 +476,7 @@ describe("migrateFromLegacy (GIT-23)", () => {
     const sessions = listActiveSessions();
     expect(sessions).toHaveLength(1);
     expect(sessions[0].session_id).toBe(oldData.session_id);
-    expect(sessions[0].agent).toBe("CLI");
+    expect(sessions[0].agent).toBe("cli");
 
     // Per-session directory should exist
     const sessionFile = path.join(tmpDir, "sessions", oldData.session_id, "session.json");

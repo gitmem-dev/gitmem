@@ -20,7 +20,7 @@ import {
 export const TOOLS = [
   {
     name: "recall",
-    description: "Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons. OD-525: Integrates variant assignment when issue_id provided.",
+    description: "Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons. Integrates variant assignment when issue_id provided.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -39,7 +39,7 @@ export const TOOLS = [
         },
         issue_id: {
           type: "string",
-          description: "Linear issue identifier for variant assignment (e.g., 'OD-525'). When provided, scars with variants will be randomly assigned and formatted accordingly.",
+          description: "Linear issue identifier for variant assignment (e.g., 'PROJ-123'). When provided, scars with variants will be randomly assigned and formatted accordingly.",
         },
         similarity_threshold: {
           type: "number",
@@ -95,7 +95,7 @@ export const TOOLS = [
       properties: {
         agent_identity: {
           type: "string",
-          enum: ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"],
+          enum: ["cli", "desktop", "autonomous", "local", "cloud"],
           description: "Override agent identity (auto-detects if not provided)",
         },
         linear_issue: {
@@ -122,7 +122,7 @@ export const TOOLS = [
         },
         force: {
           type: "boolean",
-          description: "Force create new session even if one already exists (OD-558)",
+          description: "Force create new session even if one already exists",
         },
       },
     },
@@ -334,7 +334,7 @@ export const TOOLS = [
         },
         agent: {
           type: "string",
-          description: "Agent identity (CLI, DAC, CODA-1, etc.)",
+          description: "Agent identity (e.g., cli, desktop, autonomous)",
         },
         variant_id: {
           type: "string",
@@ -394,7 +394,7 @@ export const TOOLS = [
               },
               agent: {
                 type: "string",
-                description: "Agent identity (CLI, DAC, CODA-1, etc.)",
+                description: "Agent identity (e.g., cli, desktop, autonomous)",
               },
             },
             required: ["scar_identifier", "surfaced_at", "reference_type", "reference_context"],
@@ -412,7 +412,7 @@ export const TOOLS = [
   },
   {
     name: "save_transcript",
-    description: "Save full session transcript to storage for training data and post-mortems (OD-467)",
+    description: "Save full session transcript to storage for training data and post-mortems",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -440,7 +440,7 @@ export const TOOLS = [
   },
   {
     name: "get_transcript",
-    description: "Retrieve a session transcript from storage (OD-467)",
+    description: "Retrieve a session transcript from storage",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -820,7 +820,7 @@ export const TOOLS = [
       properties: {
         agent_identity: {
           type: "string",
-          enum: ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"],
+          enum: ["cli", "desktop", "autonomous", "local", "cloud"],
           description: "Override agent identity (auto-detects if not provided)",
         },
         linear_issue: {
@@ -847,7 +847,7 @@ export const TOOLS = [
         },
         force: {
           type: "boolean",
-          description: "Force create new session even if one already exists (OD-558)",
+          description: "Force create new session even if one already exists",
         },
       },
     },
@@ -1059,7 +1059,7 @@ export const TOOLS = [
         },
         agent: {
           type: "string",
-          description: "Agent identity (CLI, DAC, CODA-1, etc.)",
+          description: "Agent identity (e.g., cli, desktop, autonomous)",
         },
         variant_id: {
           type: "string",
@@ -1119,7 +1119,7 @@ export const TOOLS = [
               },
               agent: {
                 type: "string",
-                description: "Agent identity (CLI, DAC, CODA-1, etc.)",
+                description: "Agent identity (e.g., cli, desktop, autonomous)",
               },
             },
             required: ["scar_identifier", "surfaced_at", "reference_type", "reference_context"],
@@ -1455,7 +1455,7 @@ export const TOOLS = [
       properties: {
         agent_identity: {
           type: "string",
-          enum: ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud"],
+          enum: ["cli", "desktop", "autonomous", "local", "cloud"],
           description: "Override agent identity (auto-detects if not provided)",
         },
         linear_issue: {
@@ -1482,7 +1482,7 @@ export const TOOLS = [
         },
         force: {
           type: "boolean",
-          description: "Force create new session even if one already exists (OD-558)",
+          description: "Force create new session even if one already exists",
         },
       },
     },
@@ -1859,7 +1859,7 @@ export const TOOLS = [
         },
         agent: {
           type: "string",
-          description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+          description: "Filter by agent identity (e.g., cli, desktop, autonomous)",
         },
         format: {
           type: "string",
@@ -1892,7 +1892,7 @@ export const TOOLS = [
         },
         agent: {
           type: "string",
-          description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+          description: "Filter by agent identity (e.g., cli, desktop, autonomous)",
         },
         format: {
           type: "string",
@@ -1925,7 +1925,7 @@ export const TOOLS = [
         },
         agent: {
           type: "string",
-          description: "Filter by agent identity (e.g., CLI, DAC, CODA-1)",
+          description: "Filter by agent identity (e.g., cli, desktop, autonomous)",
         },
         format: {
           type: "string",
@@ -2093,7 +2093,7 @@ export const TOOLS = [
 
   {
     name: "graph_traverse",
-    description: "Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to OD-466', 'what did CLI produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.",
+    description: "Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to this issue', 'what did this agent produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -2104,7 +2104,7 @@ export const TOOLS = [
         },
         node: {
           type: "string",
-          description: "Starting node. Examples: 'OD-466', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats.",
+          description: "Starting node. Examples: 'PROJ-123', 'cli', 'Scar: Done ≠ Deployed'. Required for all lenses except stats.",
         },
         predicate: {
           type: "string",
@@ -2141,7 +2141,7 @@ export const TOOLS = [
         },
         node: {
           type: "string",
-          description: "Starting node (e.g., 'OD-466', 'CLI')",
+          description: "Starting node (e.g., 'PROJ-123', 'cli')",
         },
         predicate: {
           type: "string",

@@ -26,7 +26,7 @@ set -e
 HOOK_INPUT=$(cat -)
 
 # ============================================================================
-# Resolve active session from registry (Phase 1 multi-session, GIT-19)
+# Resolve active session from registry
 # ============================================================================
 
 ACTIVE_SESSIONS=".gitmem/active-sessions.json"

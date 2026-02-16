@@ -21,7 +21,7 @@ HOOK_INPUT=$(cat -)
 # Graceful degradation: skip if no active gitmem session
 # ============================================================================
 
-# Check active sessions registry (Phase 1 multi-session, GIT-19)
+# Check active sessions registry
 ACTIVE_SESSIONS=".gitmem/active-sessions.json"
 if [ ! -f "$ACTIVE_SESSIONS" ]; then
     exit 0

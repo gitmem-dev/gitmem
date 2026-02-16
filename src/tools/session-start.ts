@@ -152,7 +152,7 @@ async function loadLastSession(
       console.error(`[session_start] Loaded ${aggregated_open_threads.length} open threads from Supabase`);
 
       // Phase 6: Auto-archive dormant threads (fire-and-forget)
-      archiveDormantThreads(project).catch(() => {});
+      archiveDormantThreads(project).catch((err) => console.error("[session_start] archiveDormantThreads failed:", err instanceof Error ? err.message : err));
     } else {
       // Fallback: aggregate from session records (original behavior)
       const threadResult = aggregateThreads(sessions);
@@ -547,10 +547,13 @@ async function sessionStartFree(
   // Write display to per-session dir
   try {
     const sessionFilePath = getSessionPath(sessionId, "session.json");
-    const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    const raw = fs.readFileSync(sessionFilePath, "utf-8");
+    const sessionData = JSON.parse(raw);
     sessionData.display = freeResult.display;
     fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
-  } catch { /* non-critical */ }
+  } catch (err) {
+    console.error("[session_start] Failed to write display to session file:", err instanceof Error ? err.message : err);
+  }
 
   return freeResult;
 }
@@ -1020,7 +1023,7 @@ export async function sessionStart(
   recordMetrics({
     id: metricsId,
     session_id: sessionId,
-    agent: agent as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
+    agent: agent as "cli" | "desktop" | "autonomous" | "local" | "cloud",
     tool_name: "session_start",
     query_text: [params.issue_title, params.issue_description].filter(Boolean).join(" ").slice(0, 500),
     tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],
@@ -1088,10 +1091,10 @@ export async function sessionRefresh(
 
   if (currentSession) {
     sessionId = currentSession.sessionId;
-    agent = (currentSession.agent as AgentIdentity) || "CLI";
+    agent = (currentSession.agent as AgentIdentity) || "cli";
     project = params.project || currentSession.project || "default";
   } else {
-    // GIT-20: Fallback — check registry for this process, then legacy file
+    // Fallback — check registry for this process, then legacy file
     const mySession = findSessionByHostPid(os.hostname(), process.pid);
     let raw: Record<string, unknown> | null = null;
 
@@ -1101,14 +1104,14 @@ export async function sessionRefresh(
     if (!raw || !raw.session_id) {
       return {
         session_id: "",
-        agent: "CLI",
+        agent: "cli",
         refreshed: true,
         message: "No active session — call session_start first",
         performance: buildPerformanceData("session_refresh", timer.stop(), 0),
       };
     }
     sessionId = raw.session_id as string;
-    agent = (raw.agent as AgentIdentity) || "CLI";
+    agent = (raw.agent as AgentIdentity) || "cli";
     project = params.project || (raw.project as Project) || "default";
   }
 
@@ -1214,7 +1217,7 @@ export async function sessionRefresh(
   recordMetrics({
     id: metricsId,
     session_id: sessionId,
-    agent: agent as "CLI" | "DAC" | "CODA-1" | "Brain_Local" | "Brain_Cloud",
+    agent: agent as "cli" | "desktop" | "autonomous" | "local" | "cloud",
     tool_name: "session_refresh",
     query_text: "mid-session context refresh",
     tables_searched: ["orchestra_sessions_lite", "orchestra_decisions_lite"],

@@ -55,13 +55,13 @@ export interface PerformanceData {
   search_mode?: "local" | "remote";
 }
 
-// Agent identities
+// Agent identities (execution environments)
 export type AgentIdentity =
-  | "CLI"
-  | "DAC"
-  | "CODA-1"
-  | "Brain_Local"
-  | "Brain_Cloud"
+  | "cli"
+  | "desktop"
+  | "autonomous"
+  | "local"
+  | "cloud"
   | "Unknown";
 
 export type Project = string;
@@ -575,7 +575,7 @@ export interface ResolveThreadResult {
   performance: PerformanceData;
 }
 
-// --- GIT-19: Multi-Session Concurrency ---
+// --- Multi-Session Concurrency ---
 
 /** A single entry in the active-sessions registry */
 export interface ActiveSessionEntry {

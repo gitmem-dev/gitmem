@@ -26,12 +26,24 @@ describe("SessionStartParamsSchema", () => {
       expect(result.data?.force).toBe(true);
     });
 
-    it("accepts all agent identities", () => {
-      const agents = ["CLI", "DAC", "CODA-1", "Brain_Local", "Brain_Cloud", "Unknown"];
+    it("accepts all agent identities (new names)", () => {
+      const agents = ["cli", "desktop", "autonomous", "local", "cloud", "Unknown"];
       for (const agent of agents) {
         const result = SessionStartParamsSchema.safeParse({ agent_identity: agent });
         expect(result.success).toBe(true);
         expect(result.data?.agent_identity).toBe(agent);
+      }
+    });
+
+    it("accepts and normalizes legacy agent names", () => {
+      const legacyMap: Record<string, string> = {
+        "CLI": "cli", "DAC": "desktop", "CODA-1": "autonomous",
+        "Brain_Local": "local", "Brain_Cloud": "cloud",
+      };
+      for (const [legacy, normalized] of Object.entries(legacyMap)) {
+        const result = SessionStartParamsSchema.safeParse({ agent_identity: legacy });
+        expect(result.success).toBe(true);
+        expect(result.data?.agent_identity).toBe(normalized);
       }
     });
 

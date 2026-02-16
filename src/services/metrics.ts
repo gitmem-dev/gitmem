@@ -55,11 +55,11 @@ export type PhaseTag =
  * Agent identities
  */
 export type AgentIdentity =
-  | "CLI"
-  | "DAC"
-  | "CODA-1"
-  | "Brain_Local"
-  | "Brain_Cloud";
+  | "cli"
+  | "desktop"
+  | "autonomous"
+  | "local"
+  | "cloud";
 
 /**
  * Metrics data for a query

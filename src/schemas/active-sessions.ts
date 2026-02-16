@@ -1,5 +1,5 @@
 /**
- * Zod schemas for active-sessions.json registry (GIT-19)
+ * Zod schemas for active-sessions.json registry
  *
  * Validates data read from disk — defensive parsing of potentially corrupted JSON.
  */

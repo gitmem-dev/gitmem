@@ -53,27 +53,21 @@ export function detectAgent(): DetectedEnvironment {
 
   if (entrypoint === "cli") {
     if (docker) {
-      // CLI in Docker container
-      agent = "CLI";
+      agent = "cli";
     } else if (process.env.GITMEM_AGENT_HOSTNAME && (hostname === process.env.GITMEM_AGENT_HOSTNAME)) {
-      // CLI on configured server = CODA-1
-      agent = "CODA-1";
+      agent = "autonomous";
     } else {
-      // CLI elsewhere (fallback)
-      agent = "CLI";
+      agent = "cli";
     }
   } else if (entrypoint === "claude-desktop") {
-    // Desktop app code tab
-    agent = "DAC";
+    agent = "desktop";
   } else if (!entrypoint) {
-    // No entrypoint - could be Brain Local or Brain Cloud
     if (hasFilesystemAccess()) {
-      agent = "Brain_Local";
+      agent = "local";
     } else {
-      agent = "Brain_Cloud";
+      agent = "cloud";
     }
   } else {
-    // Unknown entrypoint
     agent = "Unknown";
   }
 
@@ -83,6 +77,23 @@ export function detectAgent(): DetectedEnvironment {
     hostname,
     agent,
   };
+}
+
+/**
+ * Normalize legacy agent names to new generic names.
+ * Accepts both old (CLI, DAC, CODA-1, Brain_Local, Brain_Cloud)
+ * and new (cli, desktop, autonomous, local, cloud) formats.
+ */
+const LEGACY_MAP: Record<string, AgentIdentity> = {
+  "CLI": "cli",
+  "DAC": "desktop",
+  "CODA-1": "autonomous",
+  "Brain_Local": "local",
+  "Brain_Cloud": "cloud",
+};
+
+export function normalizeAgent(input: string): AgentIdentity {
+  return LEGACY_MAP[input] || input as AgentIdentity;
 }
 
 /**

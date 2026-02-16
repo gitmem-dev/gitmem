@@ -1,0 +1,47 @@
+# GitMem Clean Room — Cursor IDE New User Experience
+#
+# Simulates a brand new Cursor user with nothing installed.
+# No gitmem, no pre-config — just node + git + .cursor/ directory.
+# Mirrors Dockerfile.npm but with Cursor signals instead of Claude Code.
+#
+# Build (from gitmem/ root — needs the tarball):
+#   npm pack  # creates gitmem-mcp-*.tgz
+#   docker build -t gitmem-cursor -f testing/clean-room/Dockerfile.cursor .
+#   docker run -it --rm gitmem-cursor
+#
+# Then test exactly what the website says:
+#   npx gitmem-mcp init
+#
+# Expected: auto-detects Cursor, creates .cursor/mcp.json, .cursorrules, .cursor/hooks.json
+
+FROM node:20-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    jq \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install gitmem from local tarball (not published npm — contains Cursor changes)
+COPY gitmem-mcp-*.tgz /tmp/gitmem-mcp.tgz
+RUN npm install -g /tmp/gitmem-mcp.tgz && rm /tmp/gitmem-mcp.tgz
+
+# No Claude Code installed — this is a Cursor-only environment
+
+# Create non-root developer user with project dir
+RUN useradd -m -s /bin/bash developer \
+ && mkdir -p /home/developer/my-project \
+ && chown developer:developer /home/developer/my-project
+USER developer
+WORKDIR /home/developer/my-project
+
+# Init a git repo (gitmem expects one)
+RUN git init && git config user.email "dev@test.local" && git config user.name "Test Dev"
+
+# Create .cursor/ directory — this is what Cursor IDE creates on first open.
+# Its presence triggers gitmem's auto-detection to choose the Cursor path.
+RUN mkdir -p .cursor
+
+# Nothing else. Bare Cursor project. Just like a real new user.
+CMD ["bash"]

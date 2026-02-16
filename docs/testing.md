@@ -1,6 +1,6 @@
 # GitMem Testing Guide
 
-> **Last Updated:** 2026-02-13 · **Test Totals:** 728 tests across 6 tiers
+> **Last Updated:** 2026-02-16 · **Test Totals:** 764 tests across 6 tiers
 
 ## Test Pyramid Overview
 
@@ -23,16 +23,58 @@ GitMem uses a 6-tier testing pyramid. Each tier adds cost/time but tests closer 
 
 ### CI Pipeline
 
-The GitHub Actions CI (`.github/workflows/ci.yml`) runs on push to `main` and PRs:
+Source: `.github/workflows/ci.yml`
 
-| Step | What runs | Matrix |
-|------|-----------|--------|
-| Type check | `npm run typecheck` | Node 18, 20, 22 |
-| Build | `npm run build` | Node 18, 20, 22 |
-| Unit tests | `npm test` | Node 18, 20, 22 |
-| Smoke (free) | `npm run test:smoke:free` | Node 18, 20, 22 |
+**Triggers:** Push to `main`, push of `v*` tags, PRs against `main`.
 
-**Not in CI:** Integration (needs Docker), E2E pro tests (needs Docker), User Journey (needs Claude API key), Performance (benchmarks). These must be run locally or in a Docker-enabled environment.
+#### Build job (matrix: Node 18, 20, 22)
+
+Each step does exactly one thing. No step re-runs another step's work.
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| Type check | `npm run typecheck` | `tsc --noEmit` — verify types, no output |
+| Build | `npm run build` | `tsc` — compile to `dist/` |
+| Unit tests | `npm run test:unit` | 764 tests via vitest (one execution) |
+| Smoke test | `npm run test:smoke:free` | 4 MCP integration tests (server boot, tools, session lifecycle) |
+
+#### Publish job (tag pushes only)
+
+Runs after all 3 build matrix jobs pass. Only fires on `v*` tag pushes.
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| Install | `npm ci --legacy-peer-deps` | Clean install (legacy-peer-deps for zod@4 conflict) |
+| Build | `npm run build` | `tsc` — compile to `dist/` |
+| Publish | `npm publish` | Publish to npm via `NPM_TOKEN` secret. `prepublishOnly` runs `tsc` (compile only, no tests) |
+
+#### Release workflow
+
+```bash
+# 1. Make changes, commit
+# 2. Bump version
+npm version patch  # or: edit package.json + CHANGELOG.md manually
+# 3. Tag and push
+git tag v1.0.X
+git push origin main --tags
+# CI builds → tests → publishes automatically
+```
+
+#### What's NOT in CI
+
+| Test tier | Why not | How to run |
+|-----------|---------|-----------|
+| Integration (Tier 3) | Needs Docker | `npm run test:integration` locally |
+| E2E pro (Tier 4) | Needs Docker | `npm run test:e2e` locally |
+| User Journey (Tier 5) | Needs Claude API key, costs ~$0.30 | `npm run test:e2e -- tests/e2e/user-journey.test.ts` |
+| Performance (Tier 6) | Benchmarks, not pass/fail | `npm run test:perf` |
+
+#### CI design principles
+
+- **`build` = compile only.** Never embed tests in the build script. CI has dedicated test steps.
+- **`prepublishOnly` = compile only.** The publish job runs after all tests pass — no need to re-test.
+- **`--legacy-peer-deps`** required because `@anthropic-ai/claude-agent-sdk` depends on `zod@^4.0.0` while gitmem uses `zod@3.x`.
+- **Tests set `GITMEM_DIR`** to temp directories. Without this, tests write to `~/.gitmem/` (which may not exist in CI) or `process.cwd()/.gitmem/` (wrong path when `GITMEM_DIR` is set elsewhere).
 
 ---
 

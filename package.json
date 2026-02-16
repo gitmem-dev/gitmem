@@ -46,9 +46,12 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/**/*.test.*",
     "bin",
     "hooks",
+    "!hooks/tests",
     "schema",
     "CLAUDE.md.template",
     "README.md",

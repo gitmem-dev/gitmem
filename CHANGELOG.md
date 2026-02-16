@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-02-16
+
+### Changed
+- **CI pipeline cleanup**: `build` script is now just `tsc` (was `tsc && npm run test:unit`). Tests ran 8x per CI run due to `build`, `test`, and `prepublishOnly` all triggering the same 764-test suite. Now each step does one thing: typecheck, compile, test, smoke, publish.
+
 ## [1.0.10] - 2026-02-16
 
 ### Fixed

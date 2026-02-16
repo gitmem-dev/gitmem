@@ -2276,7 +2276,9 @@ export function getRegisteredTools() {
     if (GRAPH_TOOL_NAMES.has(tool.name)) {
       return hasSupabase();
     }
-    if (ARCHIVE_TOOL_NAMES.has(tool.name)) {
+    // archive_learning works on both free (local JSON) and pro (Supabase) tiers
+    // Only gate the aliases
+    if (ARCHIVE_TOOL_NAMES.has(tool.name) && tool.name !== "archive_learning") {
       return hasSupabase();
     }
     return true;

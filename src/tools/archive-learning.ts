@@ -11,8 +11,9 @@
 
 import { directPatch, isConfigured } from "../services/supabase-client.js";
 import { hasSupabase } from "../services/tier.js";
+import { getStorage } from "../services/storage.js";
 import { flushCache } from "../services/startup.js";
-import { Timer, buildPerformanceData } from "../services/metrics.js";
+import { Timer } from "../services/metrics.js";
 import { wrapDisplay } from "../services/display-protocol.js";
 
 export interface ArchiveLearningParams {
@@ -48,38 +49,49 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
     };
   }
 
-  if (!hasSupabase() || !isConfigured()) {
-    const msg = "archive_learning requires Supabase (pro/dev tier)";
-    return {
-      success: false,
-      id: params.id,
-      cache_flushed: false,
-      display: wrapDisplay(msg),
-      error: msg,
-      performance_ms: timer.stop(),
-    };
-  }
-
   try {
     const archivedAt = new Date().toISOString();
-
-    await directPatch("orchestra_learnings", { id: `eq.${params.id}` }, {
-      is_active: false,
-      archived_at: archivedAt,
-    });
-
-    // Flush local cache so archived scar is immediately excluded
     let cacheFlushed = false;
-    try {
-      await flushCache();
-      cacheFlushed = true;
-    } catch {
-      console.error("[archive-learning] Cache flush failed (non-fatal)");
+
+    if (hasSupabase() && isConfigured()) {
+      // Pro/dev: patch in Supabase
+      await directPatch("orchestra_learnings", { id: `eq.${params.id}` }, {
+        is_active: false,
+        archived_at: archivedAt,
+      });
+
+      try {
+        await flushCache();
+        cacheFlushed = true;
+      } catch {
+        console.error("[archive-learning] Cache flush failed (non-fatal)");
+      }
+    } else {
+      // Free tier: update in local JSON
+      const storage = getStorage();
+      const existing = await storage.get<Record<string, unknown>>("learnings", params.id);
+      if (!existing) {
+        const msg = `Learning ${params.id} not found in local storage`;
+        return {
+          success: false,
+          id: params.id,
+          cache_flushed: false,
+          display: wrapDisplay(msg),
+          error: msg,
+          performance_ms: timer.stop(),
+        };
+      }
+      await storage.upsert("learnings", {
+        ...existing,
+        id: params.id,
+        is_active: false,
+        archived_at: archivedAt,
+      });
     }
 
     const latencyMs = timer.stop();
     const reasonText = params.reason ? ` Reason: ${params.reason}` : "";
-    const display = `Archived learning ${params.id}.${reasonText}\nCache ${cacheFlushed ? "flushed" : "flush failed"} (${latencyMs}ms)`;
+    const display = `Archived learning ${params.id}.${reasonText}\n(${latencyMs}ms)`;
 
     return {
       success: true,

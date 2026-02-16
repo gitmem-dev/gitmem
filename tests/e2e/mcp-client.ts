@@ -278,7 +278,7 @@ export const DEV_TOOLS = [
  * Note: Aliases are hidden by default (OD-691). Set GITMEM_FULL_ALIASES=1 to show all.
  */
 export const EXPECTED_TOOL_COUNTS = {
-  free: 20,
+  free: 21,
   pro: 26,
   dev: 30,
 } as const;

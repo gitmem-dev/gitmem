@@ -72,17 +72,17 @@ When `session_start` runs, it loads context from these sources:
 
 | Data | Pro/Dev Tier Source | Free Tier Source |
 |------|--------------------|--------------------|
-| Last session (decisions, reflection) | Supabase `orchestra_sessions` | `.gitmem/sessions.json` |
-| Open threads | Supabase `orchestra_threads` | `.gitmem/threads.json` |
-| Recent decisions | Supabase `orchestra_decisions` | `.gitmem/sessions.json` (embedded) |
-| Scars for recall | Supabase `orchestra_learnings` | `.gitmem/learnings.json` |
+| Last session (decisions, reflection) | Supabase `sessions` | `.gitmem/sessions.json` |
+| Open threads | Supabase `threads` | `.gitmem/threads.json` |
+| Recent decisions | Supabase `decisions` | `.gitmem/sessions.json` (embedded) |
+| Scars for recall | Supabase `learnings` | `.gitmem/learnings.json` |
 | Suggested threads | `.gitmem/suggested-threads.json` | `.gitmem/suggested-threads.json` |
 
 ### What `recall` needs
 
 | Tier | Source | Search Method |
 |------|--------|---------------|
-| Pro/Dev | Supabase `orchestra_learnings` | Semantic (embedding cosine similarity) |
+| Pro/Dev | Supabase `learnings` | Semantic (embedding cosine similarity) |
 | Pro/Dev (cached) | `~/.cache/gitmem/results/` | Local vector search (15-min TTL) |
 | Free | `.gitmem/learnings.json` | Keyword tokenization match |
 
@@ -90,11 +90,11 @@ When `session_start` runs, it loads context from these sources:
 
 | Data | Pro/Dev Destination | Free Destination |
 |------|--------------------|--------------------|
-| Session record | Supabase `orchestra_sessions` | `.gitmem/sessions.json` |
-| New learnings | Supabase `orchestra_learnings` | `.gitmem/learnings.json` |
-| Decisions | Supabase `orchestra_decisions` | `.gitmem/decisions.json` |
-| Thread state | Supabase `orchestra_threads` + `.gitmem/threads.json` | `.gitmem/threads.json` |
-| Scar usage | Supabase `orchestra_scar_usage` | `.gitmem/scar_usage.json` |
+| Session record | Supabase `sessions` | `.gitmem/sessions.json` |
+| New learnings | Supabase `learnings` | `.gitmem/learnings.json` |
+| Decisions | Supabase `decisions` | `.gitmem/decisions.json` |
+| Thread state | Supabase `threads` + `.gitmem/threads.json` | `.gitmem/threads.json` |
+| Scar usage | Supabase `scar_usage` | `.gitmem/scar_usage.json` |
 | Transcript | Supabase storage bucket | Not captured |
 
 ## The Container Problem

@@ -1,7 +1,7 @@
 /**
  * Thread Supabase Service
  *
- * Provides Supabase CRUD operations for the orchestra_threads table.
+ * Provides Supabase CRUD operations for the threads table.
  * Supabase is the source of truth; local .gitmem/threads.json is a cache.
  *
  * Uses directQuery/directUpsert (PostgREST) like other Supabase operations
@@ -19,7 +19,7 @@ import type { ThreadObject, Project } from "../types/index.js";
 
 // ---------- Supabase Row Types ----------
 
-/** Shape of a row in orchestra_threads / orchestra_threads_lite */
+/** Shape of a row in threads / threads_lite */
 export interface ThreadRow {
   id: string;           // UUID primary key
   thread_id: string;    // "t-XXXXXXXX"
@@ -214,7 +214,7 @@ export async function resolveThreadInSupabase(
 
 /**
  * List threads from Supabase with project filter.
- * Uses orchestra_threads_lite view (no embedding column).
+ * Uses threads_lite view (no embedding column).
  * Returns null if Supabase is unavailable (caller should fall back to local).
  */
 export async function listThreadsFromSupabase(
@@ -267,7 +267,7 @@ export async function listThreadsFromSupabase(
 
 /**
  * Load active (non-archived, non-resolved) threads from Supabase for session_start.
- * Uses orchestra_threads_lite view ordered by vitality_score DESC.
+ * Uses threads_lite view ordered by vitality_score DESC.
  * Returns null if Supabase is unavailable.
  */
 export async function loadActiveThreadsFromSupabase(
@@ -565,7 +565,7 @@ function parseEmbedding(raw: string | number[] | null | undefined): number[] | n
 
 /**
  * Load open threads WITH embeddings from Supabase for dedup comparison.
- * Uses the full orchestra_threads table (not _lite view) to include embedding column.
+ * Uses the full threads table (not _lite view) to include embedding column.
  * Returns null if Supabase is unavailable.
  */
 export async function loadOpenThreadEmbeddings(

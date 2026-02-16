@@ -89,7 +89,7 @@ Integration and pro E2E tests use [Testcontainers](https://node.testcontainers.o
 - `docker info` must succeed
 - Tests skip gracefully when Docker is unavailable
 
-**Docker-in-Docker (CLI container):** The Orchestra CLI container mounts the host Docker socket (`/var/run/docker.sock`), enabling Testcontainers to work inside the container.
+**Docker-in-Docker:** If running inside a container, mount the host Docker socket (`/var/run/docker.sock`) to enable Testcontainers.
 
 ### Auth Schema Stub
 
@@ -194,7 +194,7 @@ Tests the CLI commands a new user runs when installing gitmem:
 - **Init CLI**: `gitmem init` creates `.gitmem/`, starter scars, permissions in `.claude/settings.json`
 - **Check CLI**: `gitmem check` health check passes on initialized project
 - **Hooks CLI**: `gitmem install-hooks` writes project-level hooks, preserves existing permissions, `--force` overwrites, `gitmem uninstall-hooks` removes hooks cleanly
-- **Hook Script Output**: Direct execution of `session-start.sh` and `session-close-check.sh` verifying protocol wording ("YOU (the agent) ANSWER"), no `orchestra_dev` leaks
+- **Hook Script Output**: Direct execution of `session-start.sh` and `session-close-check.sh` verifying protocol wording ("YOU (the agent) ANSWER"), no internal reference leaks
 - **Output Sanitization**: All CLI commands checked for internal reference leaks; `CLAUDE.md.template` and `starter-scars.json` verified clean
 
 #### `free-tier.test.ts` — 15 tests, free
@@ -279,7 +279,7 @@ What it verifies:
 2. **MCP tools registered** — init event lists 10+ `mcp__gitmem__*` tools, core tools present, server status "connected"
 3. **Agent calls session_start** — observed via PreToolUse hook callback
 4. **Agent calls recall** — observed via PreToolUse hook callback, session completes successfully
-5. **No orchestra references** — hook output and result text checked
+5. **No internal references** — hook output and result text checked
 6. **Correct ceremony wording** — "YOU (the agent) ANSWER" and "session_start" in hook output
 
 Test setup creates a temp directory with:

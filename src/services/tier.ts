@@ -116,8 +116,7 @@ export function hasEnforcementFields(): boolean {
  * Get the table prefix for the current tier
  */
 export function getTablePrefix(): string {
-  // All tiers default to orchestra_ until gitmem_ schema migration is complete.
-  // Override with GITMEM_TABLE_PREFIX env var when ready.
+  // Default prefix for all tiers. Override with GITMEM_TABLE_PREFIX env var.
   return process.env.GITMEM_TABLE_PREFIX || "orchestra_";
 }
 

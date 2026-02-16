@@ -137,7 +137,7 @@ export async function analyze(params: AnalyzeParams): Promise<AnalyzeResult> {
           queryScarUsageByDateRange(startDate, endDate, project, params.agent),
           queryRepeatMistakes(startDate, endDate, project),
         ]);
-        // Resolve missing scar titles from orchestra_learnings
+        // Resolve missing scar titles from the learnings table
         const usages = await enrichScarUsageTitles(rawUsages);
         data = computeBlindspots(usages, repeats, days);
         break;

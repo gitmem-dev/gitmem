@@ -218,7 +218,7 @@ export async function queryScarUsageByDateRange(
 }
 
 /**
- * Fetch repeat mistakes from orchestra_learnings within a date range.
+ * Fetch repeat mistakes from the learnings table within a date range.
  */
 export async function queryRepeatMistakes(
   startDate: string,
@@ -244,7 +244,7 @@ export async function queryRepeatMistakes(
 }
 
 /**
- * Resolve scar titles and severities from orchestra_learnings for scar_usage
+ * Resolve scar titles and severities from the learnings table for scar_usage
  * records that have null/missing title data.
  */
 export async function enrichScarUsageTitles(
@@ -260,7 +260,7 @@ export async function enrichScarUsageTitles(
 
   if (idsNeedingResolution.size === 0) return usages;
 
-  // Fetch titles from orchestra_learnings
+  // Fetch titles from the learnings table
   const ids = Array.from(idsNeedingResolution);
   const learnings = await directQuery<{ id: string; title: string; severity: string }>(
     getTableName("learnings"),

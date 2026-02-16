@@ -139,6 +139,13 @@ Your AI agent likely has its own memory file (MEMORY.md, .cursorrules, etc.). He
 
 **Tip:** Include `.gitmem/agent-briefing.md` in your MEMORY.md for a lightweight bridge between the two systems.
 
+## Privacy & Data
+
+- **Local-first** — All data stored in `.gitmem/` on your machine by default
+- **No telemetry** — GitMem does not collect usage data or phone home
+- **Cloud opt-in** — Pro tier Supabase backend requires explicit configuration via environment variables
+- **Your data** — Sessions, scars, and decisions belong to you. Delete `.gitmem/` to remove everything
+
 ## Development
 
 ```bash

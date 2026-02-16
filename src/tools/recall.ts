@@ -266,7 +266,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
 /**
  * Execute recall tool
  *
- * Queries orchestra_learnings for scars matching the provided plan
+ * Queries the learnings table for scars matching the provided plan
  * using weighted semantic search (severity-weighted, temporally-decayed).
  */
 export async function recall(params: RecallParams): Promise<RecallResult> {

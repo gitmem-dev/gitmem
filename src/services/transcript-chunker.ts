@@ -2,7 +2,7 @@
  * Transcript Chunking Service
  *
  * Parses JSONL session transcripts, chunks them intelligently,
- * generates embeddings, and stores in orchestra_transcript_chunks.
+ * generates embeddings, and stores in the transcript_chunks table.
  *
  *
  */

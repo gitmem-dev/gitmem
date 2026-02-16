@@ -1,7 +1,7 @@
 /**
  * create_learning Tool
  *
- * Create scar, win, or pattern entry in orchestra_learnings.
+ * Create scar, win, or pattern entry in the learnings table.
  * Generates embeddings client-side and writes directly to Supabase REST API,
  * eliminating the ww-mcp Edge Function dependency.
  *

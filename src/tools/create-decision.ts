@@ -1,7 +1,7 @@
 /**
  * create_decision Tool
  *
- * Log architectural/operational decision to orchestra_decisions.
+ * Log architectural/operational decision to the decisions table.
  * Generates embeddings client-side and writes directly to Supabase REST API,
  * eliminating the ww-mcp Edge Function dependency.
  *

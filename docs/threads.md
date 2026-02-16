@@ -309,13 +309,13 @@ The runtime cache. An array of `ThreadObject` values, updated on every `create_t
 
 Pending thread suggestions from implicit detection. Array of `ThreadSuggestion` objects with embeddings and evidence session lists.
 
-### Remote: `orchestra_threads` (Supabase)
+### Remote: `threads` table (Supabase)
 
 Source of truth. Full table with columns for vitality scoring, lifecycle status, embeddings, metadata (including `dormant_since`), and knowledge graph relationships.
 
-### Remote: `orchestra_sessions.open_threads`
+### Remote: `sessions.open_threads`
 
-Legacy JSONB column on the sessions table. Written during `session_close`. Used as fallback when `orchestra_threads` table is unavailable.
+Legacy JSONB column on the sessions table. Written during `session_close`. Used as fallback when the `threads` table is unavailable.
 
 ## Format Normalization
 

@@ -5,8 +5,8 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/v/gitmem-mcp?style=flat-square&color=ed1e25&label=npm" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/dm/gitmem-mcp?style=flat-square&color=333333&label=downloads" alt="npm downloads" /></a>
-  <img src="https://img.shields.io/badge/license-MIT-ed1e25?style=flat-square" alt="MIT License" />
-  <img src="https://img.shields.io/badge/build-passing-333333?style=flat-square" alt="Build" />
+  <a href="https://github.com/nTEG-dev/gitmem/blob/main/LICENSE"><img src="https://img.shields.io/github/license/nTEG-dev/gitmem?style=flat-square&color=ed1e25" alt="MIT License" /></a>
+  <a href="https://github.com/nTEG-dev/gitmem/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nTEG-dev/gitmem/ci.yml?style=flat-square&color=333333&label=build" alt="Build" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D22-ed1e25?style=flat-square" alt="Node.js >= 22" />
 </p>
 

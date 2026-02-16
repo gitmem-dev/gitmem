@@ -3,8 +3,8 @@
 /**
  * GitMem Uninstall
  *
- * Cleanly reverses everything `npx gitmem init` did.
- * Usage: npx gitmem uninstall [--yes] [--all]
+ * Cleanly reverses everything `npx gitmem-mcp init` did.
+ * Usage: npx gitmem-mcp uninstall [--yes] [--all]
  */
 
 import {

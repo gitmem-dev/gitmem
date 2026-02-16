@@ -13,7 +13,7 @@ This gives you a pristine project with no `.gitmem/`, no `.claude/`, no `.mcp.js
 
 ---
 
-## Step 1: `npx gitmem init`
+## Step 1: `npx gitmem-mcp init`
 
 **Run:**
 ```bash
@@ -37,7 +37,7 @@ cat .claude/settings.json                          # should show permissions
 
 ---
 
-## Step 2: `npx gitmem init` (idempotency)
+## Step 2: `npx gitmem-mcp init` (idempotency)
 
 **Run the same command again:**
 ```bash
@@ -51,7 +51,7 @@ npx gitmem-mcp init
 
 ---
 
-## Step 3: `npx gitmem configure`
+## Step 3: `npx gitmem-mcp configure`
 
 **Run:**
 ```bash
@@ -80,7 +80,7 @@ EOF
 
 ---
 
-## Step 4: `npx gitmem check`
+## Step 4: `npx gitmem-mcp check`
 
 **Run:**
 ```bash
@@ -95,7 +95,7 @@ npx gitmem-mcp check
 
 ---
 
-## Step 5: `npx gitmem install-hooks`
+## Step 5: `npx gitmem-mcp install-hooks`
 
 **Run:**
 ```bash

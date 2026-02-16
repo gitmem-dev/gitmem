@@ -102,8 +102,8 @@ npm run test:all
 ### Diagnostic Check
 
 ```bash
-npx gitmem check          # Quick health check (~5s)
-npx gitmem check --full   # Full diagnostic with benchmarks (~30s)
+npx gitmem-mcp check          # Quick health check (~5s)
+npx gitmem-mcp check --full   # Full diagnostic with benchmarks (~30s)
 ```
 
 ## Making Changes

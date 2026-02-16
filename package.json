@@ -1,13 +1,13 @@
 {
   "name": "gitmem-mcp",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Institutional memory for AI coding agents. Memory that compounds.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "gitmem": "bin/gitmem.js",
-    "gitmem-mcp": "dist/index.js"
+    "gitmem-mcp": "bin/gitmem.js"
   },
   "scripts": {
     "build": "tsc && npm run test:unit",

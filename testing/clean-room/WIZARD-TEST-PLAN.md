@@ -1,7 +1,7 @@
 # GitMem Wizard — Clean Room Test Plan
 
 **Date:** 2026-02-15
-**Purpose:** Validate the `npx gitmem init` wizard as a first-time user in a clean environment.
+**Purpose:** Validate the `npx gitmem-mcp init` wizard as a first-time user in a clean environment.
 
 ---
 
@@ -28,7 +28,7 @@ This builds a Docker container with:
 ### Test 1.1 — Run the wizard
 
 ```bash
-npx gitmem init
+npx gitmem-mcp init
 ```
 
 **Observe:**
@@ -81,7 +81,7 @@ cat .gitignore
 ### Test 1.3 — Health check
 
 ```bash
-npx gitmem check
+npx gitmem-mcp check
 ```
 
 - [ ] Tier shows "free"
@@ -91,7 +91,7 @@ npx gitmem check
 ### Test 1.4 — Idempotency
 
 ```bash
-npx gitmem init --yes
+npx gitmem-mcp init --yes
 ```
 
 - [ ] Wizard detects existing config for each step
@@ -192,7 +192,7 @@ Exit Claude.
 ### Test 4.1 — Clean uninstall (preserve data)
 
 ```bash
-npx gitmem uninstall
+npx gitmem-mcp uninstall
 ```
 
 - [ ] Asks to confirm each removal step
@@ -218,7 +218,7 @@ ls .gitmem/
 ### Test 4.2 — Full uninstall (delete data)
 
 ```bash
-npx gitmem uninstall --all
+npx gitmem-mcp uninstall --all
 ```
 
 - [ ] Deletes `.gitmem/` directory
@@ -232,7 +232,7 @@ ls .gitmem/ 2>&1
 ### Test 4.3 — Reinstall after uninstall
 
 ```bash
-npx gitmem init --yes
+npx gitmem-mcp init --yes
 ```
 
 - [ ] Fresh install works after uninstall
@@ -246,8 +246,8 @@ npx gitmem init --yes
 ### Test 5.1 — Dry run mode
 
 ```bash
-npx gitmem uninstall --all --yes  # clean slate
-npx gitmem init --dry-run
+npx gitmem-mcp uninstall --all --yes  # clean slate
+npx gitmem-mcp init --dry-run
 ```
 
 - [ ] Shows what WOULD be configured
@@ -256,7 +256,7 @@ npx gitmem init --dry-run
 ### Test 5.2 — With project name
 
 ```bash
-npx gitmem init --yes --project my-cool-project
+npx gitmem-mcp init --yes --project my-cool-project
 ```
 
 - [ ] Project name appears in `.gitmem/config.json`

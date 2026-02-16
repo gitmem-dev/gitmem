@@ -14,7 +14,7 @@ A Claude Code **plugin** that enforces the GitMem institutional memory lifecycle
 ## Installation
 
 ```bash
-npx gitmem install-hooks
+npx gitmem-mcp install-hooks
 ```
 
 This copies the hooks plugin to `~/.claude/plugins/gitmem-hooks/`. Restart Claude Code to activate.
@@ -22,7 +22,7 @@ This copies the hooks plugin to `~/.claude/plugins/gitmem-hooks/`. Restart Claud
 ### Uninstall
 
 ```bash
-npx gitmem uninstall-hooks
+npx gitmem-mcp uninstall-hooks
 ```
 
 Removes the plugin, cleans up settings and temp state.

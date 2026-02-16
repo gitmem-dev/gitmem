@@ -32,7 +32,7 @@ Instead, please email **security@gitmem.ai** with:
 The following are in scope:
 
 - The `gitmem-mcp` npm package
-- The `npx gitmem init` CLI wizard
+- The `npx gitmem-mcp init` CLI wizard
 - MCP server tool implementations
 - Local storage backends (`.gitmem/` directory)
 - Bundled hooks and scripts

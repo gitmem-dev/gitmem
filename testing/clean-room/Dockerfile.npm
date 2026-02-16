@@ -1,0 +1,36 @@
+# GitMem Clean Room — New User Experience
+#
+# Simulates a brand new user with nothing installed.
+# No gitmem, no pre-config — just node + git + claude.
+#
+# Build & run:
+#   docker build -t gitmem-npm -f testing/clean-room/Dockerfile.npm testing/clean-room/
+#   docker run -it --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gitmem-npm
+#
+# Then test exactly what the website says:
+#   npx gitmem-mcp init
+
+FROM node:20-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    jq \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code (as root, before user switch)
+RUN npm install -g @anthropic-ai/claude-code
+
+# Create non-root developer user with project dir
+RUN useradd -m -s /bin/bash developer \
+ && mkdir -p /home/developer/my-project \
+ && chown developer:developer /home/developer/my-project
+USER developer
+WORKDIR /home/developer/my-project
+
+# Init a git repo (gitmem expects one)
+RUN git init && git config user.email "dev@test.local" && git config user.name "Test Dev"
+
+# Nothing else. Bare project. Just like a real new user.
+CMD ["bash"]

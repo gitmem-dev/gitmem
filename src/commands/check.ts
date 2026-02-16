@@ -4,9 +4,9 @@
  * Diagnostic CLI command for health checks and benchmarks.
  *
  * Usage:
- *   npx gitmem check           — Quick health check (~5s)
- *   npx gitmem check --full    — Full diagnostic (~30s)
- *   npx gitmem check --output report.json
+ *   npx gitmem-mcp check           — Quick health check (~5s)
+ *   npx gitmem-mcp check --full    — Full diagnostic (~30s)
+ *   npx gitmem-mcp check --output report.json
  *
  *
  */

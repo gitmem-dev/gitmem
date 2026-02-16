@@ -37,31 +37,31 @@ function printUsage() {
 GitMem — Institutional Memory for AI Coding
 
 Usage:
-  npx gitmem init              Interactive setup wizard (recommended)
-  npx gitmem init --yes        Non-interactive setup (accept all defaults)
-  npx gitmem init --dry-run    Show what would be configured
-  npx gitmem uninstall         Clean removal of gitmem from project
-  npx gitmem uninstall --all   Also delete .gitmem/ data directory
+  npx gitmem-mcp init              Interactive setup wizard (recommended)
+  npx gitmem-mcp init --yes        Non-interactive setup (accept all defaults)
+  npx gitmem-mcp init --dry-run    Show what would be configured
+  npx gitmem-mcp uninstall         Clean removal of gitmem from project
+  npx gitmem-mcp uninstall --all   Also delete .gitmem/ data directory
 
 Other commands:
-  npx gitmem setup             Output SQL for Supabase schema setup (pro/dev tier)
-  npx gitmem configure         Generate .mcp.json config for Claude Code
-  npx gitmem check             Run diagnostic health check
-  npx gitmem check --full      Full diagnostic with benchmarks
-  npx gitmem install-hooks     Install Claude Code hooks (standalone)
-  npx gitmem uninstall-hooks   Remove Claude Code hooks (standalone)
-  npx gitmem server            Start MCP server (default)
-  npx gitmem help              Show this help message
+  npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)
+  npx gitmem-mcp configure         Generate .mcp.json config for Claude Code
+  npx gitmem-mcp check             Run diagnostic health check
+  npx gitmem-mcp check --full      Full diagnostic with benchmarks
+  npx gitmem-mcp install-hooks     Install Claude Code hooks (standalone)
+  npx gitmem-mcp uninstall-hooks   Remove Claude Code hooks (standalone)
+  npx gitmem-mcp server            Start MCP server (default)
+  npx gitmem-mcp help              Show this help message
 
 Quick Start:
-  npx gitmem init              One command sets up everything
-  npx gitmem uninstall         One command removes everything
+  npx gitmem-mcp init              One command sets up everything
+  npx gitmem-mcp uninstall         One command removes everything
 
 Pro Tier (with Supabase):
   1. Create free Supabase project → database.new
-  2. npx gitmem setup   (copy SQL → Supabase SQL Editor)
+  2. npx gitmem-mcp setup   (copy SQL → Supabase SQL Editor)
   3. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars
-  4. npx gitmem init    (auto-detects pro tier)
+  4. npx gitmem-mcp init    (auto-detects pro tier)
   5. Start coding — memory is active!
 `);
 }
@@ -489,8 +489,22 @@ function cmdInstallHooks() {
     }
   }
 
-  // Build hook entries using node_modules path (resolved from CWD)
-  const relScripts = "node_modules/gitmem-mcp/hooks/scripts";
+  // Copy hook scripts to .gitmem/hooks/ (works regardless of npx vs local install)
+  const gitmemDir = join(process.cwd(), ".gitmem");
+  const destHooksDir = join(gitmemDir, "hooks");
+  if (!existsSync(destHooksDir)) {
+    mkdirSync(destHooksDir, { recursive: true });
+  }
+  for (const file of readdirSync(scriptsDir)) {
+    if (file.endsWith(".sh")) {
+      const src = join(scriptsDir, file);
+      const dest = join(destHooksDir, file);
+      writeFileSync(dest, readFileSync(src));
+      chmodSync(dest, 0o755);
+    }
+  }
+
+  const relScripts = ".gitmem/hooks";
   const gitmemHooks = {
     SessionStart: [
       {
@@ -548,7 +562,7 @@ function cmdInstallHooks() {
       console.log("GitMem hooks already installed in .claude/settings.json");
       console.log("");
       console.log("To reinstall (overwrite), run:");
-      console.log("  npx gitmem install-hooks --force");
+      console.log("  npx gitmem-mcp install-hooks --force");
       return;
     }
   }
@@ -586,14 +600,14 @@ function cmdInstallHooks() {
   if (!mcpFound) {
     console.log("WARNING: gitmem MCP server not detected in .mcp.json.");
     console.log("  Hooks will be silent until gitmem MCP is configured.");
-    console.log("  Run: npx gitmem configure");
+    console.log("  Run: npx gitmem-mcp configure");
     console.log("");
   }
 
   console.log("Installed! Hooks will activate on next Claude Code session.");
   console.log("");
   console.log("To update after a gitmem version bump:");
-  console.log("  npx gitmem install-hooks --force");
+  console.log("  npx gitmem-mcp install-hooks --force");
 }
 
 /**
@@ -679,7 +693,7 @@ function cmdUninstallHooks() {
   console.log("Notes:");
   console.log("  - gitmem MCP server config (.mcp.json) was NOT modified");
   console.log("  - Restart Claude Code for changes to take effect");
-  console.log("  - To reinstall: npx gitmem install-hooks");
+  console.log("  - To reinstall: npx gitmem-mcp install-hooks");
 }
 
 switch (command) {

@@ -4,7 +4,7 @@
  * GitMem Init Wizard
  *
  * Interactive setup that detects existing config, prompts, and merges.
- * Usage: npx gitmem init [--yes] [--dry-run] [--project <name>]
+ * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>]
  */
 
 import {
@@ -86,7 +86,7 @@ function buildMcpConfig() {
 }
 
 function buildHooks() {
-  const relScripts = "node_modules/gitmem-mcp/hooks/scripts";
+  const relScripts = ".gitmem/hooks";
   return {
     SessionStart: [
       {
@@ -457,12 +457,19 @@ async function stepHooks() {
     return;
   }
 
-  // Make hook scripts executable
+  // Copy hook scripts to .gitmem/hooks/ (works regardless of npx vs local install)
+  const destHooksDir = join(gitmemDir, "hooks");
+  if (!existsSync(destHooksDir)) {
+    mkdirSync(destHooksDir, { recursive: true });
+  }
   if (existsSync(hooksScriptsDir)) {
     try {
       for (const file of readdirSync(hooksScriptsDir)) {
         if (file.endsWith(".sh")) {
-          chmodSync(join(hooksScriptsDir, file), 0o755);
+          const src = join(hooksScriptsDir, file);
+          const dest = join(destHooksDir, file);
+          writeFileSync(dest, readFileSync(src));
+          chmodSync(dest, 0o755);
         }
       }
     } catch {
@@ -628,7 +635,7 @@ async function main() {
     console.log("  Dry run complete — no files were modified.");
   } else {
     console.log("  Setup complete! Start Claude Code — memory is active.");
-    console.log("  To remove: npx gitmem uninstall");
+    console.log("  To remove: npx gitmem-mcp uninstall");
   }
   console.log("");
 

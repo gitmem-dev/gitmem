@@ -23,7 +23,7 @@ docker build -q -t gitmem-wizard -f testing/clean-room/Dockerfile.wizard testing
 echo "3/3  Launching clean room..."
 echo ""
 echo "  You are a fresh user. gitmem is npm-installed but NOT configured."
-echo "  Run: npx gitmem init"
+echo "  Run: npx gitmem-mcp init"
 echo "  Then: claude"
 echo ""
 docker run -it --rm \

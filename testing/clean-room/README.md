@@ -18,10 +18,10 @@ docker compose run --rm smoke
 Runs 8 checks:
 1. NPM_TOKEN exists
 2. GitHub Packages auth works
-3. `npx gitmem init` downloads package and loads starter scars
+3. `npx gitmem-mcp init` downloads package and loads starter scars
 4. 12 starter scars in `.gitmem/learnings.json`
 5. All local storage files created
-6. `npx gitmem configure` outputs valid config
+6. `npx gitmem-mcp configure` outputs valid config
 7. `.mcp.json` written from config output
 8. MCP server starts, 2-session lifecycle test passes
 
@@ -36,10 +36,10 @@ docker compose run --rm manual
 Inside the container:
 ```bash
 # 1. Init gitmem
-npx gitmem init
+npx gitmem-mcp init
 
 # 2. Generate and write config
-npx gitmem configure
+npx gitmem-mcp configure
 # Copy the JSON output to .mcp.json
 
 # 3. Install Claude Code

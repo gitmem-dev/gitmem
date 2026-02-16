@@ -65,7 +65,7 @@ PASS=$((PASS + 1))
 echo "Check 2: GitHub Packages auth"
 check "npm whoami" npm whoami --registry=https://npm.pkg.github.com
 
-# ── Check 3: npx gitmem init ──
+# ── Check 3: npx gitmem-mcp init ──
 echo "Check 3: gitmem init (free tier)"
 npx -y @nteg-dev/gitmem init 2>&1 | while IFS= read -r line; do echo "        $line"; done
 if [ -f ".gitmem/learnings.json" ]; then

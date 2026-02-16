@@ -26,7 +26,7 @@ Works with **Claude Code**, **Claude Desktop**, **Cursor**, and any MCP-compatib
 ## Quick Start
 
 ```bash
-npx gitmem init
+npx gitmem-mcp init
 ```
 
 One command. The wizard sets up everything:
@@ -40,8 +40,8 @@ One command. The wizard sets up everything:
 Already have existing config? The wizard merges without destroying anything. Re-running is safe.
 
 ```bash
-npx gitmem init --yes       # Non-interactive
-npx gitmem init --dry-run   # Preview changes
+npx gitmem-mcp init --yes       # Non-interactive
+npx gitmem-mcp init --dry-run   # Preview changes
 ```
 
 ## How It Works
@@ -73,16 +73,16 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 - **Session Continuity** — Context, threads, and rapport carry across sessions
 - **Closing Ceremony** — Structured reflection captures what broke, what worked, and what to do differently
 - **20+ MCP Tools** — Full toolkit for memory management, search, threads, and multi-agent coordination
-- **Zero Config** — `npx gitmem init` and you're running
+- **Zero Config** — `npx gitmem-mcp init` and you're running
 - **Non-Destructive** — Merges with your existing `.mcp.json`, `CLAUDE.md`, and hooks
 
 ## Supported Clients
 
 | Client | Setup |
 |--------|-------|
-| **Claude Code** | `npx gitmem init` (auto-detected) |
-| **Claude Desktop** | `npx gitmem init` or add to `claude_desktop_config.json` |
-| **Cursor** | `npx gitmem init` or add to `.cursor/mcp.json` |
+| **Claude Code** | `npx gitmem-mcp init` (auto-detected) |
+| **Claude Desktop** | `npx gitmem-mcp init` or add to `claude_desktop_config.json` |
+| **Cursor** | `npx gitmem-mcp init` or add to `.cursor/mcp.json` |
 | **Any MCP client** | Add `npx -y gitmem-mcp` as an MCP server |
 
 <details>
@@ -105,12 +105,12 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 
 | Command | Description |
 |---------|-------------|
-| `npx gitmem init` | Interactive setup wizard |
-| `npx gitmem init --yes` | Non-interactive setup |
-| `npx gitmem init --dry-run` | Preview changes |
-| `npx gitmem uninstall` | Clean removal (preserves `.gitmem/` data) |
-| `npx gitmem uninstall --all` | Full removal including data |
-| `npx gitmem check` | Diagnostic health check |
+| `npx gitmem-mcp init` | Interactive setup wizard |
+| `npx gitmem-mcp init --yes` | Non-interactive setup |
+| `npx gitmem-mcp init --dry-run` | Preview changes |
+| `npx gitmem-mcp uninstall` | Clean removal (preserves `.gitmem/` data) |
+| `npx gitmem-mcp uninstall --all` | Full removal including data |
+| `npx gitmem-mcp check` | Diagnostic health check |
 
 ## Pro Tier — Coming Soon
 

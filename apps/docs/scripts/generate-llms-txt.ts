@@ -110,7 +110,7 @@ Add GitMem to any MCP-compatible AI agent:
 
 \`\`\`bash
 # Recommended: interactive setup (Claude Code, Cursor, etc.)
-cd your-project && npx gitmem init
+cd your-project && npx gitmem-mcp init
 
 # Or add the MCP server directly
 claude mcp add gitmem -- npx -y gitmem-mcp
@@ -165,7 +165,7 @@ console.error(`Generated llms.txt (${pages.length} pages indexed)`);
 let full = `# GitMem — Complete Documentation
 
 > GitMem is an MCP server that gives AI coding agents persistent institutional memory.
-> Install: \`npx gitmem init\` or add MCP server \`npx -y gitmem-mcp\`
+> Install: \`npx gitmem-mcp init\` or add MCP server \`npx -y gitmem-mcp\`
 > Source: ${BASE_URL}
 > Index: ${BASE_URL}/llms.txt
 

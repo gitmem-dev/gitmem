@@ -12,7 +12,7 @@ A clear description of what the bug is.
 
 ## Steps to Reproduce
 
-1. Run `npx gitmem ...`
+1. Run `npx gitmem-mcp ...`
 2. ...
 3. See error
 
@@ -26,7 +26,7 @@ What actually happened. Include error messages or logs if available.
 
 ## Environment
 
-- **GitMem version:** (run `npx gitmem --version`)
+- **GitMem version:** (run `npx gitmem-mcp --version`)
 - **Node.js version:** (run `node --version`)
 - **OS:** (e.g., macOS 15, Ubuntu 24.04, Windows 11)
 - **MCP Client:** (e.g., Claude Code, Cursor, Claude Desktop)
@@ -36,7 +36,7 @@ What actually happened. Include error messages or logs if available.
 If applicable, paste the output of:
 
 ```bash
-npx gitmem check
+npx gitmem-mcp check
 ```
 
 ## Additional Context

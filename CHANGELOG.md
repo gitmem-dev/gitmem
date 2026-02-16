@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-02-16
+
+### Fixed
+- **Thread dedup without API key**: Dedup silently fell back to exact text match when no embedding API key (OpenAI/OpenRouter/Ollama) was set — which is the default for free tier users. Near-duplicate threads with the same topic but different wording slipped through. Added zero-dependency token overlap coefficient as a middle tier (threshold 0.6, lowered to 0.4 when threads share an issue prefix like `OD-692:`). Also upgraded `deduplicateThreadList` with the same logic. +18 unit tests.
+
 ## [1.0.12] - 2026-02-16
 
 ### Fixed

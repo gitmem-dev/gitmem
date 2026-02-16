@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-02-16
+
+### Fixed
+- **CI smoke test**: `session_close` test looked for `active-sessions.json` at `process.cwd()` instead of `GITMEM_DIR`, failing in CI where they differ.
+- **CI peer dependencies**: Added `--legacy-peer-deps` to `npm ci` for `zod@4` conflict with `claude-agent-sdk`.
+- **CI unit test**: `quick-retrieve.test.ts` now sets `GITMEM_DIR` so disk cache tests resolve correctly in CI.
+
 ## [1.0.9] - 2026-02-16
 
 ### Fixed

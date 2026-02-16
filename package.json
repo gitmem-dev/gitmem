@@ -70,7 +70,7 @@
     "type": "git",
     "url": "https://github.com/nTEG-dev/gitmem.git"
   },
-  "homepage": "https://github.com/nTEG-dev/gitmem#readme",
+  "homepage": "https://gitmem.ai",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"

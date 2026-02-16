@@ -118,8 +118,8 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
     vi.spyOn(process, "cwd").mockReturnValue(subDir);
 
     const result = getGitmemDir();
-    // Falls back to CWD since active-session.json is no longer a sentinel
-    expect(result).toBe(path.join(subDir, ".gitmem"));
+    // Falls back to ~/.gitmem since active-session.json is no longer a sentinel
+    expect(result).toBe(path.join(os.homedir(), ".gitmem"));
   });
 
   it("prefers active-sessions.json over config.json at same level", () => {
@@ -137,13 +137,13 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
     expect(result).toBe(gitmemDir);
   });
 
-  it("falls back to CWD when no sentinel found", () => {
+  it("falls back to ~/.gitmem when no sentinel found", () => {
     const emptyDir = path.join(tmpDir, "empty");
     fs.mkdirSync(emptyDir, { recursive: true });
 
     vi.spyOn(process, "cwd").mockReturnValue(emptyDir);
 
     const result = getGitmemDir();
-    expect(result).toBe(path.join(emptyDir, ".gitmem"));
+    expect(result).toBe(path.join(os.homedir(), ".gitmem"));
   });
 });

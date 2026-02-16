@@ -2,7 +2,7 @@
  * Local File Storage — Free Tier Backend
  *
  * Stores scars, sessions, decisions, and scar usage as JSON files
- * in the .gitmem/ directory of the current project.
+ * in the .gitmem/ directory (defaults to ~/.gitmem, overridable via GITMEM_DIR).
  *
  * Provides keyword-based search (no embeddings needed).
  */
@@ -10,6 +10,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { bm25Search, type BM25Document } from "./bm25.js";
+import { getGitmemDir } from "./gitmem-dir.js";
 import type { RelevantScar } from "../types/index.js";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -19,7 +20,7 @@ export class LocalFileStorage {
   private basePath: string;
 
   constructor(basePath?: string) {
-    this.basePath = basePath || path.join(process.cwd(), ".gitmem");
+    this.basePath = basePath || getGitmemDir();
     this.ensureDir();
   }
 

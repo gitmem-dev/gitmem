@@ -13,6 +13,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import type { ThreadObject, ThreadStatus } from "../types/index.js";
 import { normalizeText } from "./thread-dedup.js";
+import { getGitmemDir } from "./gitmem-dir.js";
 
 // ---------- ID Generation ----------
 
@@ -235,8 +236,7 @@ export function resolveThread(
 const THREADS_FILENAME = "threads.json";
 
 function getThreadsFilePath(): string {
-  const gitmemDir = path.join(process.cwd(), ".gitmem");
-  return path.join(gitmemDir, THREADS_FILENAME);
+  return path.join(getGitmemDir(), THREADS_FILENAME);
 }
 
 /**
@@ -260,7 +260,7 @@ export function loadThreadsFile(): ThreadObject[] {
  * Save threads to .gitmem/threads.json.
  */
 export function saveThreadsFile(threads: ThreadObject[]): void {
-  const gitmemDir = path.join(process.cwd(), ".gitmem");
+  const gitmemDir = getGitmemDir();
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
   }

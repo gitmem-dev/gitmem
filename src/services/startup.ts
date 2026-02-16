@@ -16,6 +16,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isConfigured, loadScarsWithEmbeddings } from "./supabase-client.js";
+import { getGitmemDir } from "./gitmem-dir.js";
 import {
   initializeLocalSearch,
   reinitializeLocalSearch,
@@ -44,7 +45,7 @@ let backgroundRefreshInterval: ReturnType<typeof setInterval> | null = null;
  */
 function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
   try {
-    const gitmemDir = path.join(process.cwd(), ".gitmem", "cache");
+    const gitmemDir = path.join(getGitmemDir(), "cache");
     if (!fs.existsSync(gitmemDir)) {
       fs.mkdirSync(gitmemDir, { recursive: true });
     }

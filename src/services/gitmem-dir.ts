@@ -6,13 +6,15 @@
  * The MCP server is long-running, so we resolve the path once and cache it.
  *
  * Resolution order:
- * 1. Cached path from session_start (most reliable — session_start created the directory)
- * 2. Walk up from process.cwd() looking for existing .gitmem/ sentinels
- * 3. Fall back to process.cwd()/.gitmem (original behavior)
+ * 1. GITMEM_DIR env var (explicit override)
+ * 2. Cached path from session_start (most reliable — session_start created the directory)
+ * 3. Walk up from process.cwd() looking for existing .gitmem/ sentinels (backward compat)
+ * 4. Fall back to ~/.gitmem (developer-scoped, survives across projects/containers)
  */
 
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 
 /**
  * Validate a string intended for use as a single path component (directory name or filename).
@@ -41,14 +43,31 @@ export function setGitmemDir(dir: string): void {
 
 /**
  * Get the resolved .gitmem directory path
+ *
+ * Resolution order:
+ * 1. GITMEM_DIR env var (explicit override)
+ * 2. Cached path from session_start (most reliable)
+ * 3. Walk up from CWD looking for existing .gitmem/ sentinels (backward compat)
+ * 4. Fall back to ~/.gitmem (developer-scoped, survives across projects/containers)
  */
 export function getGitmemDir(): string {
-  // 1. Use cached path from session_start
+  // 1. GITMEM_DIR env var (explicit override, highest priority)
+  const envDir = process.env.GITMEM_DIR;
+  if (envDir) {
+    if (!cachedGitmemDir || cachedGitmemDir !== envDir) {
+      cachedGitmemDir = envDir;
+      console.error(`[gitmem-dir] Using GITMEM_DIR env var: ${envDir}`);
+    }
+    return envDir;
+  }
+
+  // 2. Use cached path from session_start
   if (cachedGitmemDir && fs.existsSync(cachedGitmemDir)) {
     return cachedGitmemDir;
   }
 
-  // 2. Walk up from CWD looking for existing .gitmem directory
+  // 3. Walk up from CWD looking for existing .gitmem directory
+  //    Backward compat: finds project-scoped .gitmem/ from older installations.
   //    Sentinel files checked in priority order:
   //    - active-sessions.json  (multi-session registry, GIT-19)
   //    - config.json           (project-level gitmem config)
@@ -67,9 +86,9 @@ export function getGitmemDir(): string {
     dir = path.dirname(dir);
   }
 
-  // 3. Fall back to CWD (original behavior)
-  const fallback = path.join(process.cwd(), ".gitmem");
-  console.error(`[gitmem-dir] Falling back to CWD: ${fallback}`);
+  // 4. Fall back to ~/.gitmem (developer-scoped — survives across projects and containers)
+  const fallback = path.join(os.homedir(), ".gitmem");
+  console.error(`[gitmem-dir] Falling back to home dir: ${fallback}`);
   return fallback;
 }
 

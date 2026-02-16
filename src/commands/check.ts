@@ -26,6 +26,7 @@ import {
 } from "../diagnostics/index.js";
 import { getCache, CacheService } from "../services/cache.js";
 import { getTier, hasSupabase } from "../services/tier.js";
+import { getGitmemDir } from "../services/gitmem-dir.js";
 
 // Report version for schema compatibility
 const REPORT_VERSION = "1.0.0";
@@ -310,7 +311,7 @@ async function runQuickCheck(): Promise<{
   // Data volume (counts only)
   let dataVolume: DiagnosticReport["dataVolume"] | undefined;
   try {
-    const gitmemDir = join(process.cwd(), ".gitmem");
+    const gitmemDir = getGitmemDir();
     let localCacheFiles = 0;
     let localCacheBytes = 0;
 
@@ -519,7 +520,7 @@ export async function runCheck(options: CheckOptions): Promise<void> {
   };
 
   // Determine output path
-  const gitmemDir = join(process.cwd(), ".gitmem");
+  const gitmemDir = getGitmemDir();
   if (!existsSync(gitmemDir)) {
     mkdirSync(gitmemDir, { recursive: true });
   }

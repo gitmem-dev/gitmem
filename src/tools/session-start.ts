@@ -662,7 +662,7 @@ function writeSessionFiles(
   supabaseAuthoritative?: boolean,
   startedAt?: Date,
 ): ThreadObject[] {
-  const gitmemDir = path.join(process.cwd(), ".gitmem");
+  const gitmemDir = getGitmemDir();
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
   }

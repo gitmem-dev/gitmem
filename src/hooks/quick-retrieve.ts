@@ -22,6 +22,7 @@ import { getStorage } from "../services/storage.js";
 import { hasSupabase } from "../services/tier.js";
 import { isLocalSearchReady, localScarSearch } from "../services/local-vector-search.js";
 import { bm25Search, type BM25Document } from "../services/bm25.js";
+import { getGitmemDir } from "../services/gitmem-dir.js";
 import { formatCompact, estimateTokens } from "./format-utils.js";
 import type { FormattableScar } from "./format-utils.js";
 import type { RelevantScar } from "../types/index.js";
@@ -90,7 +91,7 @@ export async function quickRetrieve(
  * Uses BM25 ranking with field boosting (title 3x, keywords 2x, description 1x).
  */
 function searchDiskCache(query: string, k: number): FormattableScar[] {
-  const cachePath = path.join(process.cwd(), ".gitmem", "cache", "hook-scars.json");
+  const cachePath = path.join(getGitmemDir(), "cache", "hook-scars.json");
   if (!fs.existsSync(cachePath)) {
     return [];
   }

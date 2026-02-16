@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-02-16
+
+### Fixed
+- **Table prefix for pro tier**: `getTableName()` was resolving to `gitmem_*` tables for pro tier, but those tables don't exist yet. All tiers now default to `orchestra_` prefix until schema migration is complete.
+
+### Changed
+- **Dynamic table names**: Replaced all hardcoded `orchestra_*` table name strings across 22 source files with `getTableName()` calls, making table prefixes configurable via `GITMEM_TABLE_PREFIX` env var.
+- **Release status script**: Added `npm run release-status` to check unpublished commits vs npm.
+
 ## [1.0.11] - 2026-02-16
 
 ### Changed

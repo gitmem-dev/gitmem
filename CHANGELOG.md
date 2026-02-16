@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-02-16
+
+### Fixed
+- **Closing payload field name mismatch**: `CLAUDE.md.template` documented wrong field names (`institutional_memory` instead of `institutional_memory_items`, bogus `started_at`/`completed_at` in task_completion) causing agents to write payloads that `session_close` couldn't parse. Fixed template and added `institutional_memory` as normalizer alias.
+- **Missing Q8/Q9 in closing template**: Added `collaborative_dynamic` and `rapport_notes` fields to payload example.
+
 ## [1.0.6] - 2026-02-16
 
 ### Fixed

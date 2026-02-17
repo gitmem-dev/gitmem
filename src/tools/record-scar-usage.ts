@@ -12,6 +12,8 @@ import { wrapDisplay } from "../services/display-protocol.js";
 import * as supabase from "../services/supabase-client.js";
 import { hasSupabase } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
+import { detectAgent } from "../services/agent-detection.js";
+import { getCurrentSession } from "../services/session-state.js";
 import {
   Timer,
   recordMetrics,
@@ -33,13 +35,17 @@ export async function recordScarUsage(
   const metricsId = uuidv4();
   const usageId = uuidv4();
 
+  // Auto-detect agent and session if not provided by caller
+  const resolvedAgent = params.agent || detectAgent().agent || null;
+  const resolvedSessionId = params.session_id || getCurrentSession()?.sessionId || null;
+
   const usageData: Record<string, unknown> = {
     id: usageId,
     scar_id: params.scar_id,
     issue_id: params.issue_id || null,
     issue_identifier: params.issue_identifier || null,
-    session_id: params.session_id || null, // Session tracking
-    agent: params.agent || null, // Agent identity
+    session_id: resolvedSessionId,
+    agent: resolvedAgent,
     surfaced_at: params.surfaced_at,
     acknowledged_at: params.acknowledged_at || null,
     referenced: params.reference_type !== "none",

@@ -6,6 +6,8 @@
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "../services/supabase-client.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
+import { detectAgent } from "../services/agent-detection.js";
+import { getCurrentSession } from "../services/session-state.js";
 import { Timer, recordMetrics, buildPerformanceData } from "../services/metrics.js";
 import type {
   RecordScarUsageBatchParams,
@@ -120,6 +122,10 @@ export async function recordScarUsageBatch(
 
     const resolvedScars = await Promise.all(resolutionPromises);
 
+    // Auto-detect agent and session as fallbacks for entries missing them
+    const fallbackAgent = detectAgent().agent || null;
+    const fallbackSessionId = getCurrentSession()?.sessionId || null;
+
     // Build usage records for all successfully resolved scars
     const usageRecords = resolvedScars
       .filter(({ scarId }) => scarId !== null)
@@ -130,8 +136,8 @@ export async function recordScarUsageBatch(
           scar_id: scarId,
           issue_id: entry.issue_id || null,
           issue_identifier: entry.issue_identifier || null,
-          session_id: entry.session_id || null, // Session tracking
-          agent: entry.agent || null, // Agent identity
+          session_id: entry.session_id || fallbackSessionId,
+          agent: entry.agent || fallbackAgent,
           surfaced_at: entry.surfaced_at,
           acknowledged_at: entry.acknowledged_at || null,
           referenced: entry.reference_type !== "none",

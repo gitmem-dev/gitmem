@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-17
+
+### Added
+- **Cursor IDE support**: `npx gitmem-mcp init` auto-detects Cursor projects (`.cursor/` directory) and generates Cursor-specific config: `.cursor/mcp.json`, `.cursorrules`, `.cursor/hooks.json` with camelCase event names. Also supports `--client cursor` flag for explicit selection.
+- **Cursor uninstall**: `npx gitmem-mcp uninstall` cleanly removes gitmem from Cursor config while preserving user hooks, other MCP servers, and existing `.cursorrules` content.
+- **Cursor clean room testing**: Docker container (`Dockerfile.cursor`) with Cursor CLI v2026.02.13 + gitmem for end-to-end validation. Includes comprehensive test plan (16 tests across 3 phases).
+- **34 new E2E tests**: Cross-tool Cursor integration tests covering init/uninstall for both clients, idempotency, content isolation, and edge cases.
+- **454 new unit tests**: Confirm-scars rejection rate tests, recall threshold tests.
+
+### Fixed
+- **Confirm-scars rejection rate**: Reduced false rejections by improving scar matching tolerance.
+- **Recall relevance threshold**: Added minimum relevance floor to reduce noise in recall results.
+- **Recall nudge**: Improved guidance when recall returns low-relevance results.
+
+### Validated
+- Independent Cursor AI agent scored gitmem **88% (18.5/21)** across 7 test scenarios run 3 times each. Verdict: "GitMem is a must-have." ([OD-695](https://linear.app/nteg-labs/issue/OD-695), [OD-696](https://linear.app/nteg-labs/issue/OD-696), [OD-697](https://linear.app/nteg-labs/issue/OD-697), [OD-698](https://linear.app/nteg-labs/issue/OD-698) filed from findings.)
+
 ## [1.0.15] - 2026-02-16
 
 ### Fixed

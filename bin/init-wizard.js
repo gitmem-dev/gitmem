@@ -6,7 +6,7 @@
  * Interactive setup that detects existing config, prompts, and merges.
  * Supports Claude Code and Cursor IDE.
  *
- * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>] [--client <claude|cursor>]
+ * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>] [--client <claude|cursor|vscode|windsurf|generic>]
  */
 
 import {
@@ -35,11 +35,15 @@ const clientFlag = clientIdx !== -1 ? args[clientIdx + 1]?.toLowerCase() : null;
 
 // ── Client Configuration ──
 
+// Resolve user home directory for clients that use user-level config
+const homeDir = process.env.HOME || process.env.USERPROFILE || "~";
+
 const CLIENT_CONFIGS = {
   claude: {
     name: "Claude Code",
     mcpConfigPath: join(cwd, ".mcp.json"),
     mcpConfigName: ".mcp.json",
+    mcpConfigScope: "project",
     instructionsFile: join(cwd, "CLAUDE.md"),
     instructionsName: "CLAUDE.md",
     templateFile: join(__dirname, "..", "CLAUDE.md.template"),
@@ -50,12 +54,14 @@ const CLIENT_CONFIGS = {
     settingsLocalFile: join(cwd, ".claude", "settings.local.json"),
     hasPermissions: true,
     hooksInSettings: true,
+    hasHooks: true,
     completionMsg: "Setup complete! Start Claude Code \u2014 memory is active.",
   },
   cursor: {
     name: "Cursor",
     mcpConfigPath: join(cwd, ".cursor", "mcp.json"),
     mcpConfigName: ".cursor/mcp.json",
+    mcpConfigScope: "project",
     instructionsFile: join(cwd, ".cursorrules"),
     instructionsName: ".cursorrules",
     templateFile: join(__dirname, "..", "cursorrules.template"),
@@ -66,9 +72,65 @@ const CLIENT_CONFIGS = {
     settingsLocalFile: null,
     hasPermissions: false,
     hooksInSettings: false,
+    hasHooks: true,
     hooksFile: join(cwd, ".cursor", "hooks.json"),
     hooksFileName: ".cursor/hooks.json",
     completionMsg: "Setup complete! Open Cursor (Agent mode) \u2014 memory is active.",
+  },
+  vscode: {
+    name: "VS Code (Copilot)",
+    mcpConfigPath: join(cwd, ".vscode", "mcp.json"),
+    mcpConfigName: ".vscode/mcp.json",
+    mcpConfigScope: "project",
+    instructionsFile: join(cwd, ".github", "copilot-instructions.md"),
+    instructionsName: ".github/copilot-instructions.md",
+    templateFile: join(__dirname, "..", "copilot-instructions.template"),
+    startMarker: "<!-- gitmem:start -->",
+    endMarker: "<!-- gitmem:end -->",
+    configDir: join(cwd, ".vscode"),
+    settingsFile: null,
+    settingsLocalFile: null,
+    hasPermissions: false,
+    hooksInSettings: false,
+    hasHooks: false,
+    completionMsg: "Setup complete! Open VS Code \u2014 memory is active via Copilot.",
+  },
+  windsurf: {
+    name: "Windsurf",
+    mcpConfigPath: join(homeDir, ".codeium", "windsurf", "mcp_config.json"),
+    mcpConfigName: "~/.codeium/windsurf/mcp_config.json",
+    mcpConfigScope: "user",
+    instructionsFile: join(cwd, ".windsurfrules"),
+    instructionsName: ".windsurfrules",
+    templateFile: join(__dirname, "..", "windsurfrules.template"),
+    startMarker: "# --- gitmem:start ---",
+    endMarker: "# --- gitmem:end ---",
+    configDir: null,
+    settingsFile: null,
+    settingsLocalFile: null,
+    hasPermissions: false,
+    hooksInSettings: false,
+    hasHooks: false,
+    completionMsg: "Setup complete! Open Windsurf \u2014 memory is active.",
+  },
+  generic: {
+    name: "Generic MCP Client",
+    mcpConfigPath: join(cwd, ".mcp.json"),
+    mcpConfigName: ".mcp.json",
+    mcpConfigScope: "project",
+    instructionsFile: join(cwd, "CLAUDE.md"),
+    instructionsName: "CLAUDE.md",
+    templateFile: join(__dirname, "..", "CLAUDE.md.template"),
+    startMarker: "<!-- gitmem:start -->",
+    endMarker: "<!-- gitmem:end -->",
+    configDir: null,
+    settingsFile: null,
+    settingsLocalFile: null,
+    hasPermissions: false,
+    hooksInSettings: false,
+    hasHooks: false,
+    completionMsg:
+      "Setup complete! Configure your MCP client to use the gitmem server from .mcp.json.",
   },
 };
 
@@ -84,33 +146,49 @@ let cc; // shorthand for CLIENT_CONFIGS[client]
 
 // ── Client Detection ──
 
+const VALID_CLIENTS = Object.keys(CLIENT_CONFIGS);
+
 function detectClient() {
   // Explicit flag takes priority
   if (clientFlag) {
-    if (clientFlag !== "claude" && clientFlag !== "cursor") {
-      console.error(`  Error: Unknown client "${clientFlag}". Use --client claude or --client cursor.`);
+    if (!VALID_CLIENTS.includes(clientFlag)) {
+      console.error(`  Error: Unknown client "${clientFlag}". Use --client ${VALID_CLIENTS.join("|")}.`);
       process.exit(1);
     }
     return clientFlag;
   }
 
-  // Auto-detect based on directory presence
+  // Auto-detect based on directory/file presence
   const hasCursorDir = existsSync(join(cwd, ".cursor"));
   const hasClaudeDir = existsSync(join(cwd, ".claude"));
   const hasMcpJson = existsSync(join(cwd, ".mcp.json"));
   const hasClaudeMd = existsSync(join(cwd, "CLAUDE.md"));
   const hasCursorRules = existsSync(join(cwd, ".cursorrules"));
   const hasCursorMcp = existsSync(join(cwd, ".cursor", "mcp.json"));
+  const hasVscodeDir = existsSync(join(cwd, ".vscode"));
+  const hasVscodeMcp = existsSync(join(cwd, ".vscode", "mcp.json"));
+  const hasCopilotInstructions = existsSync(join(cwd, ".github", "copilot-instructions.md"));
+  const hasWindsurfRules = existsSync(join(cwd, ".windsurfrules"));
+  const hasWindsurfMcp = existsSync(
+    join(homeDir, ".codeium", "windsurf", "mcp_config.json")
+  );
 
   // Strong Cursor signals
   if (hasCursorDir && !hasClaudeDir && !hasMcpJson && !hasClaudeMd) return "cursor";
-  if (hasCursorRules && !hasClaudeMd) return "cursor";
-  if (hasCursorMcp && !hasMcpJson) return "cursor";
+  if (hasCursorRules && !hasClaudeMd && !hasCopilotInstructions) return "cursor";
+  if (hasCursorMcp && !hasMcpJson && !hasVscodeMcp) return "cursor";
 
   // Strong Claude signals
-  if (hasClaudeDir && !hasCursorDir) return "claude";
-  if (hasMcpJson && !hasCursorMcp) return "claude";
-  if (hasClaudeMd && !hasCursorRules) return "claude";
+  if (hasClaudeDir && !hasCursorDir && !hasVscodeDir) return "claude";
+  if (hasMcpJson && !hasCursorMcp && !hasVscodeMcp) return "claude";
+  if (hasClaudeMd && !hasCursorRules && !hasCopilotInstructions) return "claude";
+
+  // VS Code signals
+  if (hasVscodeMcp && !hasMcpJson && !hasCursorMcp) return "vscode";
+  if (hasCopilotInstructions && !hasClaudeMd && !hasCursorRules) return "vscode";
+
+  // Windsurf signals
+  if (hasWindsurfRules && !hasClaudeMd && !hasCursorRules && !hasCopilotInstructions) return "windsurf";
 
   // Default to Claude Code (most common)
   return "claude";
@@ -439,6 +517,7 @@ async function stepMemoryStore() {
 async function stepMcpServer() {
   const mcpPath = cc.mcpConfigPath;
   const mcpName = cc.mcpConfigName;
+  const isUserLevel = cc.mcpConfigScope === "user";
 
   const existing = readJson(mcpPath);
   const hasGitmem =
@@ -453,9 +532,10 @@ async function stepMcpServer() {
     ? Object.keys(existing.mcpServers).length
     : 0;
   const tierLabel = process.env.SUPABASE_URL ? "pro" : "free";
+  const scopeNote = isUserLevel ? " (user-level config)" : "";
   const prompt = existing
-    ? `Add gitmem to ${mcpName}? (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
-    : `Create ${mcpName} with gitmem server?`;
+    ? `Add gitmem to ${mcpName}?${scopeNote} (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
+    : `Create ${mcpName} with gitmem server?${scopeNote}`;
 
   if (!(await confirm(prompt))) {
     console.log("  Skipped.");
@@ -463,11 +543,11 @@ async function stepMcpServer() {
   }
 
   if (dryRun) {
-    console.log(`  [dry-run] Would add gitmem entry to ${mcpName} (${tierLabel} tier)`);
+    console.log(`  [dry-run] Would add gitmem entry to ${mcpName} (${tierLabel} tier${scopeNote})`);
     return;
   }
 
-  // Ensure parent directory exists (for .cursor/mcp.json)
+  // Ensure parent directory exists (for .cursor/mcp.json, .vscode/mcp.json, ~/.codeium/windsurf/)
   const parentDir = dirname(mcpPath);
   if (!existsSync(parentDir)) {
     mkdirSync(parentDir, { recursive: true });
@@ -481,7 +561,8 @@ async function stepMcpServer() {
   console.log(
     `  Added gitmem entry to ${mcpName} (${tierLabel} tier` +
       (process.env.SUPABASE_URL ? " \u2014 Supabase detected" : " \u2014 local storage") +
-      ")"
+      ")" +
+      (isUserLevel ? " [user-level]" : "")
   );
 }
 
@@ -523,6 +604,12 @@ async function stepInstructions() {
   let block = template;
   if (!block.includes(cc.startMarker)) {
     block = `${cc.startMarker}\n${block}\n${cc.endMarker}`;
+  }
+
+  // Ensure parent directory exists (for .github/copilot-instructions.md)
+  const instrParentDir = dirname(instrPath);
+  if (!existsSync(instrParentDir)) {
+    mkdirSync(instrParentDir, { recursive: true });
   }
 
   if (exists) {
@@ -598,6 +685,11 @@ function copyHookScripts() {
 }
 
 async function stepHooks() {
+  if (!cc.hasHooks) {
+    console.log(`  ${cc.name} does not support lifecycle hooks. Skipping.`);
+    console.log("  Enforcement relies on system prompt instructions instead.");
+    return;
+  }
   if (cc.hooksInSettings) {
     return stepHooksClaude();
   }
@@ -821,7 +913,7 @@ async function main() {
     );
   }
 
-  if (!cc.hooksInSettings && cc.hooksFile && existsSync(cc.hooksFile)) {
+  if (!cc.hooksInSettings && cc.hasHooks && cc.hooksFile && existsSync(cc.hooksFile)) {
     const hooks = readJson(cc.hooksFile);
     const hookCount = hooks?.hooks
       ? Object.values(hooks.hooks).flat().length
@@ -850,8 +942,10 @@ async function main() {
   );
   console.log("");
 
-  // Run steps — step count depends on client
-  const stepCount = cc.hasPermissions ? 6 : 5;
+  // Run steps — step count depends on client capabilities
+  let stepCount = 4; // memory store + mcp server + instructions + gitignore
+  if (cc.hasPermissions) stepCount++;
+  if (cc.hasHooks) stepCount++;
   let step = 1;
 
   console.log(`  Step ${step}/${stepCount} \u2014 Memory Store`);
@@ -876,10 +970,12 @@ async function main() {
     step++;
   }
 
-  console.log(`  Step ${step}/${stepCount} \u2014 Lifecycle Hooks`);
-  await stepHooks();
-  console.log("");
-  step++;
+  if (cc.hasHooks) {
+    console.log(`  Step ${step}/${stepCount} \u2014 Lifecycle Hooks`);
+    await stepHooks();
+    console.log("");
+    step++;
+  }
 
   console.log(`  Step ${step}/${stepCount} \u2014 Gitignore`);
   await stepGitignore();

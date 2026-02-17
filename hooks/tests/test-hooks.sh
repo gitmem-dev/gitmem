@@ -361,8 +361,8 @@ else
          "exit=$EXIT_CODE, output='$OUTPUT'"
 fi
 
-# Test 3.2: Non-consequential Bash command → passes silently
-setup_state 10 60
+# Test 3.2: Non-consequential Bash with few tool calls → passes silently
+setup_state 3 60  # Only 3 calls — below the 10-call nag threshold
 create_session_registry "test-session"
 create_session_data "test-session" "[]" "[]"
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | \
@@ -370,47 +370,110 @@ OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' | \
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ] && [ -z "$OUTPUT" ]; then
-    pass "Non-consequential Bash (ls) → passes silently"
+    pass "Non-consequential Bash (ls) + few calls → passes silently"
 else
-    fail "Non-consequential Bash → passes silently" \
+    fail "Non-consequential Bash + few calls → passes silently" \
          "exit 0, empty output" \
          "exit=$EXIT_CODE, output='$OUTPUT'"
 fi
 
-# Test 3.3: Consequential Bash (git push) with no recall → nags after >3 calls
-setup_state 0 0
+# Test 3.3: Non-consequential Bash with many tool calls + no recall → nags
+# (Key fix: nag now fires for ALL Bash/Write/Edit, not just consequential)
+setup_state 12 0
 create_session_registry "test-session"
 create_session_data "test-session" "[]" "[]"
-
-# Run 4 git push calls to exceed the 3-call threshold
-for i in 1 2 3; do
-    echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
-        bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null > /dev/null
-done
-# 4th call should trigger nag
-OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"npm test"}}' | \
     bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 
 if echo "$OUTPUT" | grep -q "RECALL REMINDER"; then
-    pass "Consequential action + no recall + >3 calls → nags"
+    pass "Non-consequential Bash + no recall + >10 calls → nags (UX audit fix)"
 else
-    fail "Consequential action + >3 calls → nags" \
+    fail "Non-consequential Bash + >10 calls → nags" \
          "Contains 'RECALL REMINDER'" \
          "$OUTPUT"
 fi
 
-# Test 3.4: Write to .sql file → consequential
-setup_state 5 0
+# Test 3.4: Write to .ts file + many calls + no recall → nags
+# (Previously only .sql/.env files triggered nag; now all Write actions count)
+setup_state 15 0
 create_session_registry "test-session"
 create_session_data "test-session" "[]" "[]"
-OUTPUT=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/path/to/migration.sql"}}' | \
+OUTPUT=$(echo '{"tool_name":"Write","tool_input":{"file_path":"/path/to/component.ts"}}' | \
     bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 
 if echo "$OUTPUT" | grep -q "RECALL REMINDER"; then
-    pass "Write .sql file + no recall → nags"
+    pass "Write .ts file + no recall + >10 calls → nags (UX audit fix)"
 else
-    fail "Write .sql file → nags" \
+    fail "Write .ts file + >10 calls → nags" \
          "Contains 'RECALL REMINDER'" \
+         "$OUTPUT"
+fi
+
+# Test 3.5: Confirmation gate still only blocks on consequential actions
+setup_state 0 0
+create_session_registry "test-session"
+SCARS='[{"scar_id":"s1","scar_title":"Test scar","scar_severity":"high","surfaced_at":"2026-01-01T00:00:00Z","source":"recall"}]'
+create_session_data "test-session" "$SCARS" "[]"
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"npm test"}}' | \
+    bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+
+if echo "$OUTPUT" | grep -q "block"; then
+    fail "Non-consequential + unconfirmed scars → does NOT block" \
+         "No block decision" \
+         "$OUTPUT"
+else
+    pass "Non-consequential + unconfirmed scars → does NOT block (gate is consequential-only)"
+fi
+
+# Test 3.6: Confirmation gate DOES block consequential actions with unconfirmed scars
+setup_state 0 0
+create_session_registry "test-session"
+SCARS='[{"scar_id":"s1","scar_title":"Test scar","scar_severity":"high","surfaced_at":"2026-01-01T00:00:00Z","source":"recall"}]'
+create_session_data "test-session" "$SCARS" "[]"
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | \
+    bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+
+if echo "$OUTPUT" | grep -q "block"; then
+    pass "Consequential + unconfirmed scars → blocks"
+else
+    fail "Consequential + unconfirmed scars → blocks" \
+         "Contains 'block'" \
+         "$OUTPUT"
+fi
+
+# Test 3.7: Nag cooldown — second nag within 90s is suppressed
+setup_state 15 0
+create_session_registry "test-session"
+create_session_data "test-session" "[]" "[]"
+# First call triggers nag
+echo '{"tool_name":"Bash","tool_input":{"command":"npm test"}}' | \
+    bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null > /dev/null
+# Second call within 90s — should be suppressed
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"npm run build"}}' | \
+    bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+
+if [ -z "$OUTPUT" ]; then
+    pass "Nag cooldown → second nag within 90s suppressed"
+else
+    fail "Nag cooldown → suppressed" \
+         "Empty output (cooldown active)" \
+         "$OUTPUT"
+fi
+
+# Test 3.8: Agent that already recalled → no nag even with many tool calls
+setup_state 20 0
+create_session_registry "test-session"
+SCARS='[{"scar_id":"s1","scar_title":"Test scar","scar_severity":"high","surfaced_at":"2026-01-01T00:00:00Z","source":"recall"}]'
+CONFS='[{"scar_id":"s1","decision":"APPLYING","evidence":"test"}]'
+create_session_data "test-session" "$SCARS" "$CONFS"
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"npm test"}}' | \
+    bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+
+if [ -z "$OUTPUT" ]; then
+    pass "Agent already recalled + confirmed → no nag"
+else
+    fail "Already recalled → no nag" \
+         "Empty output" \
          "$OUTPUT"
 fi
 

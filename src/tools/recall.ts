@@ -296,7 +296,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   const issueId = params.issue_id; // For variant assignment
 
   // Similarity threshold — suppress weak matches
-  const defaultThreshold = hasSupabase() ? 0.35 : 0.4;
+  // Pro tier: 0.45 calibrated from UX audit (66% N_A rate at 0.35, APPLYING avg 0.55, N_A avg 0.51)
+  // Free tier: 0.4 (BM25 scores are relative — top result always 1.0)
+  const defaultThreshold = hasSupabase() ? 0.45 : 0.4;
   const similarityThreshold = params.similarity_threshold ?? defaultThreshold;
 
   // Free tier: use local keyword search

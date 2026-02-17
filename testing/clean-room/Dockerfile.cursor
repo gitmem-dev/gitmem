@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install gitmem from local tarball (not published npm — contains Cursor changes)
 COPY gitmem-mcp-*.tgz /tmp/gitmem-mcp.tgz
-RUN npm install -g /tmp/gitmem-mcp.tgz && rm /tmp/gitmem-mcp.tgz
+RUN npm install -g --loglevel=error /tmp/gitmem-mcp.tgz && rm /tmp/gitmem-mcp.tgz
 
 # No Claude Code installed — this is a Cursor-only environment
 

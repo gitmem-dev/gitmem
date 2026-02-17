@@ -20,6 +20,7 @@ import {
   getCurrentSession,
   getSurfacedScars,
   addConfirmations,
+  getConfirmations,
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getSessionPath } from "../services/gitmem-dir.js";
@@ -39,7 +40,8 @@ import * as path from "path";
 const MIN_EVIDENCE_LENGTH = 50;
 
 // Future-tense patterns — APPLYING must use past tense
-const FUTURE_PATTERNS = /\b(will|going to|plan to|intend to|I'll|we'll|shall|about to|aim to|expect to)\b/i;
+// Only catch first-person forward-looking language, not third-person "will"
+const FUTURE_PATTERNS = /\b(I will|I'll|we will|we'll|I'm going to|we're going to|I plan to|I intend to|I shall|I aim to|I expect to)\b/i;
 
 /**
  * Validate a single confirmation against its surfaced scar.
@@ -235,9 +237,11 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
   }
 
   // Check for missing scars (all recall scars must be addressed)
+  // Credit scars already confirmed in a previous call this session
+  const previouslyConfirmedIds = new Set(getConfirmations().map(c => c.scar_id));
   const missingScars: string[] = [];
   for (const scar of recallScars) {
-    if (!confirmedIds.has(scar.scar_id)) {
+    if (!confirmedIds.has(scar.scar_id) && !previouslyConfirmedIds.has(scar.scar_id)) {
       missingScars.push(scar.scar_title);
     }
   }

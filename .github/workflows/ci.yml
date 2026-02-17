@@ -39,6 +39,9 @@ jobs:
       - name: Smoke test (free tier)
         run: npm run test:smoke:free
 
+      - name: Dependency audit (no unused deps)
+        run: npx depcheck --ignores="@types/*" --json | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); const unused=d.dependencies||[]; if(unused.length){console.error('Unused dependencies:',unused);process.exit(1)}"
+
   publish:
     needs: build
     runs-on: ubuntu-latest

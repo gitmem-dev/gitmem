@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-02-17
+
+### Removed
+- **Dead dependency `@huggingface/transformers`**: Massive package (ONNX runtime + model files) was declared as a runtime dependency but never imported anywhere. Embedding service uses raw `fetch()` to external APIs. Shipped unused since initial release, bloating every `npx gitmem-mcp` install.
+
+### Added
+- **CI dependency audit**: `depcheck` now runs in CI pipeline. Unused runtime dependencies will fail the build. This gap allowed the dead dependency to ship through 15+ versions undetected.
+
 ## [1.1.0] - 2026-02-17
 
 ### Added

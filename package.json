@@ -1,6 +1,6 @@
 {
   "name": "gitmem-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Institutional memory for AI coding agents. Memory that compounds.",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,6 @@
     "release-status": "bash scripts/release-status.sh"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "uuid": "^9.0.0",
     "zod": "^3.22.0"

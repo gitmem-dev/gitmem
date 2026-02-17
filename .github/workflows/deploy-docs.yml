@@ -39,7 +39,7 @@ jobs:
       - name: Checkout landing page repo
         uses: actions/checkout@v4
         with:
-          repository: nTEG-dev/GitMem.ai-Landing
+          repository: gitmem-dev/GitMem.ai-Landing
           token: ${{ secrets.LANDING_DEPLOY_TOKEN }}
           path: _landing
 

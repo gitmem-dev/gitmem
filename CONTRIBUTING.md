@@ -12,7 +12,7 @@ Thanks for your interest in contributing to GitMem! This guide covers developmen
 ### Getting Started
 
 ```bash
-git clone https://github.com/nTEG-dev/gitmem.git
+git clone https://github.com/gitmem-dev/gitmem.git
 cd gitmem
 npm install
 npm run build

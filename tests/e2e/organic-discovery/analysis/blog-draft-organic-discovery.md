@@ -8,7 +8,7 @@ The answer turns out to depend on something more interesting than we anticipated
 
 ## The Setup
 
-We built a test harness for [GitMem](https://github.com/nTEG-dev/gitmem), our open-source persistent memory system for AI coding agents. GitMem gives agents institutional memory — the ability to record what they've learned, recall relevant lessons before acting, and carry context across sessions.
+We built a test harness for [GitMem](https://github.com/gitmem-dev/gitmem), our open-source persistent memory system for AI coding agents. GitMem gives agents institutional memory — the ability to record what they've learned, recall relevant lessons before acting, and carry context across sessions.
 
 The experiment measured four adoption behaviors:
 - **Discovery**: Did the agent find and invoke gitmem tools?
@@ -91,6 +91,6 @@ We're continuing to explore what drives this transition. The v4 nudge's emphasis
 
 ## The Data
 
-All results are from the [GitMem organic discovery test harness](https://github.com/nTEG-dev/gitmem), which uses the Claude Agent SDK to run controlled multi-session experiments. The full dataset — 62 result files with per-session tool call logs, MEMORY.md diffs, and aggregate metrics — is available in the repository.
+All results are from the [GitMem organic discovery test harness](https://github.com/gitmem-dev/gitmem), which uses the Claude Agent SDK to run controlled multi-session experiments. The full dataset — 62 result files with per-session tool call logs, MEMORY.md diffs, and aggregate metrics — is available in the repository.
 
 The test harness itself is open source. If you're building tools for AI agents and want to measure organic adoption rather than just integration tests, the framework might be useful.

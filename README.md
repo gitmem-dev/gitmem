@@ -5,8 +5,8 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/v/gitmem-mcp?style=flat-square&color=ed1e25&label=npm" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/gitmem-mcp"><img src="https://img.shields.io/npm/dm/gitmem-mcp?style=flat-square&color=333333&label=downloads" alt="npm downloads" /></a>
-  <a href="https://github.com/nTEG-dev/gitmem/blob/main/LICENSE"><img src="https://img.shields.io/github/license/nTEG-dev/gitmem?style=flat-square&color=ed1e25" alt="MIT License" /></a>
-  <a href="https://github.com/nTEG-dev/gitmem/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nTEG-dev/gitmem/ci.yml?style=flat-square&color=333333&label=build" alt="Build" /></a>
+  <a href="https://github.com/gitmem-dev/gitmem/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gitmem-dev/gitmem?style=flat-square&color=ed1e25" alt="MIT License" /></a>
+  <a href="https://github.com/gitmem-dev/gitmem/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/gitmem-dev/gitmem/ci.yml?style=flat-square&color=333333&label=build" alt="Build" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D22-ed1e25?style=flat-square" alt="Node.js >= 22" />
 </p>
 
@@ -149,7 +149,7 @@ Your AI agent likely has its own memory file (MEMORY.md, .cursorrules, etc.). He
 ## Development
 
 ```bash
-git clone https://github.com/nTEG-dev/gitmem.git
+git clone https://github.com/gitmem-dev/gitmem.git
 cd gitmem
 npm install
 npm run build

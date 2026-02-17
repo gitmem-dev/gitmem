@@ -1,16 +1,17 @@
 # GitMem Clean Room — Cursor IDE New User Experience
 #
 # Simulates a brand new Cursor user with nothing installed.
-# No gitmem, no pre-config — just node + git + .cursor/ directory.
-# Mirrors Dockerfile.npm but with Cursor signals instead of Claude Code.
+# No gitmem, no pre-config — just node + git + cursor CLI.
+# Mirrors Dockerfile.npm but with Cursor instead of Claude Code.
 #
 # Build (from gitmem/ root — needs the tarball):
 #   npm pack  # creates gitmem-mcp-*.tgz
 #   docker build -t gitmem-cursor -f testing/clean-room/Dockerfile.cursor .
-#   docker run -it --rm gitmem-cursor
+#   docker run -it --rm -e CURSOR_API_KEY=$CURSOR_API_KEY gitmem-cursor
 #
 # Then test exactly what the website says:
 #   npx gitmem-mcp init
+#   cursor
 #
 # Expected: auto-detects Cursor, creates .cursor/mcp.json, .cursorrules, .cursor/hooks.json
 
@@ -21,18 +22,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     jq \
+    ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+# Install Cursor CLI (as root, before user switch)
+RUN curl https://cursor.com/install -fsS | bash
 
 # Install gitmem from local tarball (not published npm — contains Cursor changes)
 COPY gitmem-mcp-*.tgz /tmp/gitmem-mcp.tgz
 RUN npm install -g --loglevel=error /tmp/gitmem-mcp.tgz && rm /tmp/gitmem-mcp.tgz
 
-# No Claude Code installed — this is a Cursor-only environment
-
 # Create non-root developer user with project dir
 RUN useradd -m -s /bin/bash developer \
  && mkdir -p /home/developer/my-project \
  && chown developer:developer /home/developer/my-project
+
+# Make Cursor CLI available to developer user.
+# The installer puts a full package (bundled Node 24, index.js, chunks) under
+# /root/.local/share/cursor-agent/versions/<ver>/. Copy the whole thing to a
+# shared location so the non-root user can run it.
+RUN CURSOR_DIR=$(readlink -f /root/.local/bin/agent | xargs dirname) \
+ && cp -r "$CURSOR_DIR" /opt/cursor-agent \
+ && chmod -R a+rX /opt/cursor-agent \
+ && ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/cursor
+
 USER developer
 WORKDIR /home/developer/my-project
 

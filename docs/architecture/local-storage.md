@@ -124,13 +124,13 @@ docker run -v gitmem-data:/app/.gitmem ...
 | **Pro/Dev** | **Works perfectly** | Local files are caches; Supabase is SOT |
 | **Free** | **Works** | Local files ARE the SOT; volume mount preserves them |
 
-### Scenario: Shared container (long-running, like our Docker setup)
+### Scenario: Shared container (long-running)
 
 ```
 Container stays alive across multiple `claude` invocations
 ```
 
-Both tiers work. This is our current setup. `.gitmem/` persists because the container persists.
+Both tiers work. `.gitmem/` persists because the container persists.
 
 ## Recommendations for Container Deployments
 
@@ -160,7 +160,7 @@ volumes:
 
 ### What about Claude Code transcripts?
 
-The `~/.claude/projects/` directory accumulates conversation transcripts (~2MB each, 167 files = 356MB in our container). These are:
+The `~/.claude/projects/` directory accumulates conversation transcripts (~2MB each). In long-running containers, these can grow to hundreds of megabytes. These are:
 - Created by Claude Code, not GitMem
 - Read by GitMem during transcript capture (pro/dev `session_close`)
 - Never cleaned up automatically

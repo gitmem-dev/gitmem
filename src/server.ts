@@ -55,6 +55,7 @@ import {
 } from "./services/startup.js";
 import { getEffectTracker } from "./services/effect-tracker.js";
 import { getProject } from "./services/session-state.js";
+import { checkEnforcement } from "./services/enforcement.js";
 import {
   getTier,
   hasSupabase,
@@ -136,6 +137,9 @@ export function createServer(): Server {
         isError: true,
       };
     }
+
+    // Server-side enforcement: advisory warnings for protocol violations
+    const enforcement = checkEnforcement(name);
 
     try {
       let result: unknown;
@@ -383,6 +387,11 @@ export function createServer(): Server {
         responseText = (result as { text: string }).text;
       } else {
         responseText = JSON.stringify(result, null, 2);
+      }
+
+      // Prepend enforcement warning if present (advisory, non-blocking)
+      if (enforcement.warning) {
+        responseText = enforcement.warning + "\n\n" + responseText;
       }
 
       return {

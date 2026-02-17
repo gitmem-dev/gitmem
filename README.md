@@ -21,7 +21,7 @@
 
 GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent **persistent memory across sessions**. It remembers mistakes (scars), successes (wins), and decisions — so your agent learns from experience instead of starting from scratch every time.
 
-Works with **Claude Code**, **Claude Desktop**, **Cursor**, and any MCP-compatible client.
+Works with **Claude Code**, **Cursor**, **VS Code (Copilot)**, **Windsurf**, and any MCP-compatible client.
 
 ## Quick Start
 
@@ -29,19 +29,19 @@ Works with **Claude Code**, **Claude Desktop**, **Cursor**, and any MCP-compatib
 npx gitmem-mcp init
 ```
 
-One command. The wizard sets up everything:
-- `.gitmem/` directory with 3 starter scars
-- `.mcp.json` with gitmem server entry
-- `CLAUDE.md` with memory protocol instructions
-- `.claude/settings.json` with tool permissions
-- Lifecycle hooks for automatic session management
+One command. The wizard auto-detects your IDE and sets up everything:
+- `.gitmem/` directory with starter scars
+- MCP server config (`.mcp.json`, `.vscode/mcp.json`, `.cursor/mcp.json`, etc.)
+- Instructions file (`CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md`)
+- Lifecycle hooks (where supported)
 - `.gitignore` updated
 
 Already have existing config? The wizard merges without destroying anything. Re-running is safe.
 
 ```bash
-npx gitmem-mcp init --yes       # Non-interactive
-npx gitmem-mcp init --dry-run   # Preview changes
+npx gitmem-mcp init --yes                # Non-interactive
+npx gitmem-mcp init --dry-run            # Preview changes
+npx gitmem-mcp init --client vscode      # Force specific client
 ```
 
 ## How It Works
@@ -78,15 +78,21 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 
 ## Supported Clients
 
-| Client | Setup |
-|--------|-------|
-| **Claude Code** | `npx gitmem-mcp init` (auto-detected) |
-| **Claude Desktop** | `npx gitmem-mcp init` or add to `claude_desktop_config.json` |
-| **Cursor** | `npx gitmem-mcp init` or add to `.cursor/mcp.json` |
-| **Any MCP client** | Add `npx -y gitmem-mcp` as an MCP server |
+| Client | Setup | Hooks |
+|--------|-------|-------|
+| **Claude Code** | `npx gitmem-mcp init` | Full (session, recall, credential guard) |
+| **Cursor** | `npx gitmem-mcp init --client cursor` | Partial (session, recall) |
+| **VS Code (Copilot)** | `npx gitmem-mcp init --client vscode` | Instructions-based |
+| **Windsurf** | `npx gitmem-mcp init --client windsurf` | Instructions-based |
+| **Claude Desktop** | Add to `claude_desktop_config.json` | Manual |
+| **Any MCP client** | `npx gitmem-mcp init --client generic` | Instructions-based |
+
+The wizard auto-detects your IDE. Use `--client` to override.
 
 <details>
 <summary><strong>Manual MCP configuration</strong></summary>
+
+Add this to your MCP client's config file:
 
 ```json
 {
@@ -99,13 +105,21 @@ Every scar includes **counter-arguments** — reasons why someone might reasonab
 }
 ```
 
+| Client | Config file |
+|--------|-------------|
+| Claude Code | `.mcp.json` |
+| Cursor | `.cursor/mcp.json` |
+| VS Code | `.vscode/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+
 </details>
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `npx gitmem-mcp init` | Interactive setup wizard |
+| `npx gitmem-mcp init` | Interactive setup wizard (auto-detects IDE) |
+| `npx gitmem-mcp init --client <name>` | Setup for specific client (`claude`, `cursor`, `vscode`, `windsurf`, `generic`) |
 | `npx gitmem-mcp init --yes` | Non-interactive setup |
 | `npx gitmem-mcp init --dry-run` | Preview changes |
 | `npx gitmem-mcp uninstall` | Clean removal (preserves `.gitmem/` data) |

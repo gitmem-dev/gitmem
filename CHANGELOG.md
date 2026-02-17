@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-02-17
+
+### Changed
+- **Repository migration**: Moved from `nTEG-dev/gitmem` to `gitmem-dev/gitmem`. All references updated.
+
+### Added
+- **OpenClaw distribution**: SKILL.md and listing materials for OpenClaw skill directory.
+
 ## [1.1.1] - 2026-02-17
 
 ### Removed

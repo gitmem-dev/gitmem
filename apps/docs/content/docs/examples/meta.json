@@ -1,4 +1,4 @@
 {
   "title": "Examples",
-  "pages": ["index", "silent-migration-wrong-directory"]
+  "pages": ["silent-migration-wrong-directory", "credential-exposure-near-miss", "committed-never-pushed"]
 }

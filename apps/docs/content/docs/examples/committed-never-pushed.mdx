@@ -1,0 +1,106 @@
+---
+title: "The Phantom Deploy"
+description: Code is committed locally but never pushed. The agent marks the task done. Production silently diverges.
+---
+
+# The Phantom Deploy
+
+An agent commits code, runs `git status`, sees a clean working tree, and marks the task as done. But `git status` only shows local state. The commit never reached the remote. Production is running old code, and nobody knows — until something breaks days later.
+
+## The Situation
+
+An agent was implementing a new service file for a backend API. After writing the code and running tests locally, it committed:
+
+```bash
+git add backend/services/payment_handler.py
+git commit -m "feat: add payment handler service"
+```
+
+The agent checked its work:
+
+```bash
+$ git status
+On branch feature/payment-handler
+nothing to commit, working tree clean
+```
+
+Clean working tree. Tests pass. The agent updated the task status to "Done" and moved on.
+
+Two days later, the team deployed from the remote repository. The deployment failed — `payment_handler.py` didn't exist. The file was committed locally but never pushed to the remote. The `feature/payment-handler` branch existed on the agent's machine but nowhere else.
+
+The fix was simple:
+
+```bash
+git push origin feature/payment-handler
+```
+
+But the damage was already done — two days of "done" work that wasn't actually deployed, blocking downstream tasks that depended on the payment handler being available.
+
+## The Scar
+
+The incident produced this scar:
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Files can be committed but never pushed — verify deployment end-to-end",
+  "description": "Done does not equal Deployed does not equal Verified Working. After any significant commit: 1) git push and verify on remote, 2) Pull on target environment, 3) Verify file exists on target, 4) Test functionality end-to-end.",
+  "severity": "critical",
+  "scar_type": "process",
+  "applies_when": [
+    "any new file creation",
+    "service or infrastructure changes",
+    "before marking any issue as Done"
+  ]
+}
+```
+
+This scar is notable for two reasons:
+
+1. **It's a process scar** — it never decays. The gap between "committed" and "deployed" is a permanent property of distributed version control, not a temporary situation.
+
+2. **The `applies_when` field is broad** — "before marking any issue as Done" means this scar surfaces on almost every task completion. That's intentional. The cost of checking `git push` status is seconds; the cost of a phantom deploy is days.
+
+## The Save
+
+Weeks later, an agent finished implementing a database migration and was about to mark the task complete. It called `recall`:
+
+```
+recall({ plan: "mark migration task as done" })
+```
+
+GitMem surfaced the scar:
+
+```
+🧠 INSTITUTIONAL MEMORY ACTIVATED
+
+Found 3 relevant scars for your plan:
+
+🔴 Files can be committed but never pushed — verify
+   deployment end-to-end (critical, score: 0.79)
+   Done does not equal Deployed does not equal Verified
+   Working. After any significant commit...
+```
+
+The agent confirmed:
+
+```
+confirm_scars([{
+  scar_id: "...",
+  decision: "APPLYING",
+  evidence: "Ran git push origin feature/user-migration and verified commit appears on remote with git log origin/feature/user-migration --oneline -1. Branch is ahead by 0 commits after push.",
+  relevance: "high"
+}])
+```
+
+Before marking the task done, the agent pushed, verified the commit on the remote, and confirmed zero divergence. The phantom deploy pattern was broken.
+
+## The Takeaway
+
+This example demonstrates three properties of effective institutional memory:
+
+**The most dangerous bugs are state mismatches, not crashes.** The agent's local environment was perfectly correct — tests passed, files existed, `git status` was clean. The bug was the gap between local state and remote state. Scars are particularly valuable for state-mismatch bugs because they can't be caught by local testing alone.
+
+**Process scars earn their keep through frequency.** This scar fires on nearly every task completion. That sounds noisy, but the confirmation takes seconds ("Verified push to remote"), and the downside of missing it is days of wasted work. High-frequency, low-cost scars are the backbone of institutional memory.
+
+**"Done" is a loaded word.** In solo development, "committed" might mean "done." In distributed systems with multiple agents, "done" requires proof that the work is accessible to others. This scar redefines "done" from a local assertion to a distributed verification — and the `confirm_scars` protocol makes that redefinition actionable, not just philosophical.

@@ -732,13 +732,25 @@ function writeSessionFiles(
   let merged: ThreadObject[];
 
   if (supabaseAuthoritative) {
-    // Supabase is source of truth — use its threads, but preserve any local-only threads
-    // (threads in the file that don't exist in the Supabase set, e.g. created via create_thread
-    // mid-session but not yet synced to Supabase by session_close).
+    // Supabase is source of truth — use its threads, but preserve local-only threads
+    // that were created recently (within 24h) and have a valid ID. These are likely
+    // mid-session threads not yet synced by session_close. Older local-only threads
+    // are stale — they were resolved/archived in Supabase but linger in the file
+    // because the NOT-IN query excludes them, making them look "local-only".
     const supabaseIds = new Set(threads.map(t => t.id));
-    const localOnlyThreads = existingFileThreads.filter(t => !supabaseIds.has(t.id));
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const localOnlyThreads = existingFileThreads.filter(t => {
+      if (supabaseIds.has(t.id)) return false; // exists in Supabase active set
+      if (!t.id) return false; // no ID = malformed, drop
+      const created = t.created_at ? new Date(t.created_at).getTime() : 0;
+      return created > cutoff; // only keep if created within last 24h
+    });
+    const dropped = existingFileThreads.filter(t => !supabaseIds.has(t.id)).length - localOnlyThreads.length;
     if (localOnlyThreads.length > 0) {
-      console.error(`[session_start] Preserving ${localOnlyThreads.length} local-only threads not yet in Supabase`);
+      console.error(`[session_start] Preserving ${localOnlyThreads.length} recent local-only threads not yet in Supabase`);
+    }
+    if (dropped > 0) {
+      console.error(`[session_start] Dropped ${dropped} stale local-only threads (resolved/archived in Supabase)`);
     }
     merged = deduplicateThreadList([...threads, ...localOnlyThreads]);
   } else {

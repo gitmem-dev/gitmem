@@ -99,8 +99,14 @@ Before marking the task done, the agent pushed, verified the commit on the remot
 
 This example demonstrates three properties of effective institutional memory:
 
-**The most dangerous bugs are state mismatches, not crashes.** The agent's local environment was perfectly correct — tests passed, files existed, `git status` was clean. The bug was the gap between local state and remote state. Scars are particularly valuable for state-mismatch bugs because they can't be caught by local testing alone.
+### The most dangerous bugs are state mismatches, not crashes
 
-**Process scars earn their keep through frequency.** This scar fires on nearly every task completion. That sounds noisy, but the confirmation takes seconds ("Verified push to remote"), and the downside of missing it is days of wasted work. High-frequency, low-cost scars are the backbone of institutional memory.
+The agent's local environment was perfectly correct — tests passed, files existed, `git status` was clean. The bug was the gap between local state and remote state. Scars are particularly valuable for state-mismatch bugs because they can't be caught by local testing alone.
 
-**"Done" is a loaded word.** In solo development, "committed" might mean "done." In distributed systems with multiple agents, "done" requires proof that the work is accessible to others. This scar redefines "done" from a local assertion to a distributed verification — and the `confirm_scars` protocol makes that redefinition actionable, not just philosophical.
+### Process scars earn their keep through frequency
+
+This scar fires on nearly every task completion. That sounds noisy, but the confirmation takes seconds ("Verified push to remote"), and the downside of missing it is days of wasted work. High-frequency, low-cost scars are the backbone of institutional memory.
+
+### "Done" is a loaded word
+
+In solo development, "committed" might mean "done." In distributed systems with multiple agents, "done" requires proof that the work is accessible to others. This scar redefines "done" from a local assertion to a distributed verification — and the `confirm_scars` protocol makes that redefinition actionable, not just philosophical.

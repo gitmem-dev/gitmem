@@ -107,8 +107,14 @@ The agent explicitly checked its working directory, confirmed the right migratio
 
 This example shows three properties of effective institutional memory:
 
-**Silent failures are the most valuable scars.** The migration CLI didn't crash — it ran successfully against the wrong data. These bugs don't leave stack traces. They leave corrupted databases. A scar is the only thing standing between "it worked" and "it worked on the wrong thing."
+### Silent failures are the most valuable scars
 
-**Counter-arguments encode the debugging dead ends.** The two counter-arguments in this scar document the exact wrong mental models that led to the 20-minute investigation. Future agents skip those dead ends entirely because the scar says "you might think X — but actually Y."
+The migration CLI didn't crash — it ran successfully against the wrong data. These bugs don't leave stack traces. They leave corrupted databases. A scar is the only thing standing between "it worked" and "it worked on the wrong thing."
 
-**The confirm protocol forces verification.** The agent didn't just see the scar and move on. The `APPLYING` decision required past-tense evidence: "Verified CWD is `/workspace/my-project/backend`." This turns a warning into a checklist item with proof of compliance.
+### Counter-arguments encode the debugging dead ends
+
+The two counter-arguments in this scar document the exact wrong mental models that led to the 20-minute investigation. Future agents skip those dead ends entirely because the scar says "you might think X — but actually Y."
+
+### The confirm protocol forces verification
+
+The agent didn't just see the scar and move on. The `APPLYING` decision required past-tense evidence: "Verified CWD is `/workspace/my-project/backend`." This turns a warning into a checklist item with proof of compliance.

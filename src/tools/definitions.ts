@@ -170,7 +170,7 @@ export const TOOLS = [
   },
   {
     name: "create_learning",
-    description: "Create scar, win, or pattern entry in institutional memory",
+    description: "Create scar, win, or pattern entry in institutional memory. Frame as 'what we now know' — lead with the factual/architectural discovery, not what went wrong. Good: 'Fine-grained PATs are scoped to one resource owner'. Bad: 'Should have checked PAT type first'.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -181,11 +181,11 @@ export const TOOLS = [
         },
         title: {
           type: "string",
-          description: "Learning title",
+          description: "Frame as a knowledge discovery — what we now know. Lead with the factual insight, not self-criticism.",
         },
         description: {
           type: "string",
-          description: "Detailed description",
+          description: "Detailed description. Include the architectural/behavioral fact that makes this retrievable by domain.",
         },
         severity: {
           type: "string",
@@ -895,7 +895,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-cl",
-    description: "gitmem-cl (create_learning) - Create scar/win/pattern in institutional memory",
+    description: "gitmem-cl (create_learning) - Create scar/win/pattern. Frame as 'what we now know' — factual discovery, not self-criticism.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1553,7 +1553,7 @@ export const TOOLS = [
   },
   {
     name: "gm-scar",
-    description: "gm-scar (create_learning) - Create a scar/win/pattern in institutional memory",
+    description: "gm-scar (create_learning) - Create a scar/win/pattern. Frame as 'what we now know' — factual discovery, not self-criticism.",
     inputSchema: {
       type: "object" as const,
       properties: {

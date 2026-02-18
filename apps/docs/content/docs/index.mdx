@@ -3,23 +3,61 @@ title: GitMem
 description: Institutional memory for AI coding agents. Memory that compounds.
 ---
 
+import { Cards, Card } from 'fumadocs-ui/components/card'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+<div className="gitmem-hero">
+
 # GitMem
 
-**Institutional memory for AI coding agents.** GitMem is an MCP server that gives AI agents the ability to learn from past mistakes, remember what worked, and share knowledge across sessions.
+Institutional memory for AI coding agents.
+Every mistake learned from. Every win remembered.
+
+<div className="memory-loop">
+  <span className="step">recall</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">work</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">learn</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">close</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">recall</span>
+</div>
+
+<div className="hero-cta">
+  <a href="/docs/getting-started/installation" className="primary">Get Started</a>
+  <a href="https://github.com/gitmem-dev/gitmem" className="secondary">GitHub</a>
+  <a href="/docs/tools" className="secondary">Tool Reference</a>
+</div>
+
+</div>
+
+---
 
 ## What is GitMem?
 
-Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons as **scars** (mistakes to avoid), **wins** (approaches that worked), and **patterns** (reusable strategies) — then surfaces them automatically before the agent takes similar actions.
+Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons and surfaces them automatically before the agent takes similar actions.
 
-## Key Features
-
-- **Automatic Recall** — Before taking action, agents check institutional memory for relevant lessons
-- **Session Continuity** — Context carries across sessions via threads and session history
-- **Multi-Agent** — Teams of agents share the same institutional memory
-- **MCP Native** — Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, etc.)
-- **Free Tier** — Local `.gitmem/` storage with no external dependencies
+<Cards>
+  <Card title="Scars" href="/docs/concepts/scars">
+    Mistakes captured as institutional memory. Surfaced automatically via recall before the agent repeats them.
+  </Card>
+  <Card title="Wins" href="/docs/concepts/learning-types">
+    Approaches that worked well. Document what succeeded so it can be replicated.
+  </Card>
+  <Card title="Sessions" href="/docs/concepts/sessions">
+    Bounded work periods with context loading, reflection, and clean closure.
+  </Card>
+  <Card title="Threads" href="/docs/concepts/threads">
+    Unresolved work that carries across sessions. Never lose track of open items.
+  </Card>
+</Cards>
 
 ## Quick Start
+
+<div className="install-block">
 
 ```bash
 npx gitmem init
@@ -27,4 +65,89 @@ npx gitmem init
 
 One command sets up everything: `.gitmem/` directory, `.mcp.json`, `CLAUDE.md`, hooks, and permissions. Already have existing config? The wizard merges without destroying anything.
 
-[Get Started](/docs/getting-started) | [Concepts](/docs/concepts) | [Tool Reference](/docs/tools)
+</div>
+
+## How It Works
+
+<Steps>
+<Step>
+### Recall before acting
+
+Before consequential actions, the agent checks institutional memory. Relevant scars surface automatically with severity and counter-arguments.
+
+```
+recall({ plan: "deploy to production" })
+// → "Done ≠ Deployed ≠ Verified Working" (high severity)
+// → "Database migrations must run before code deploy" (critical)
+```
+
+</Step>
+<Step>
+### Confirm and apply
+
+Each scar must be acknowledged — **APPLYING** (with evidence), **N_A** (with reasoning), or **REFUTED** (acknowledging risk). No passive dismissal.
+
+</Step>
+<Step>
+### Learn from outcomes
+
+When something breaks or works well, capture it. Scars require counter-arguments to prevent knowledge bloat.
+
+```
+create_learning({
+  learning_type: "scar",
+  title: "OAuth redirect URI must match exactly",
+  severity: "medium",
+  counter_arguments: [
+    "In development, localhost variations are usually fine",
+    "Some providers support wildcard redirects"
+  ]
+})
+```
+
+</Step>
+<Step>
+### Close and persist
+
+Session close captures reflections, records scar usage, and persists open threads for the next session.
+
+</Step>
+</Steps>
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Automatic Recall** | Before taking action, agents check institutional memory for relevant lessons |
+| **Confirm Protocol** | Scars require active acknowledgment — APPLYING, N_A, or REFUTED |
+| **Session Continuity** | Context carries across sessions via threads, decisions, and rapport notes |
+| **Multi-Agent** | Teams of agents share the same institutional memory via `prepare_context` |
+| **MCP Native** | Works with Claude Code, Claude Desktop, Cursor, and any MCP client |
+| **Free Tier** | Local `.gitmem/` storage with 23 tools, no external dependencies |
+
+<Callout type="info" title="23 tools, zero cost">
+The free tier includes session management, scar recall, learning creation, threads, and analytics — all stored locally in `.gitmem/`. No account, no API key, no cloud dependency.
+</Callout>
+
+## Explore
+
+<Cards>
+  <Card title="Getting Started" href="/docs/getting-started">
+    Install GitMem and run your first session in under 5 minutes.
+  </Card>
+  <Card title="Concepts" href="/docs/concepts">
+    Scars, sessions, threads, learning types, and tiers explained.
+  </Card>
+  <Card title="Tool Reference" href="/docs/tools">
+    Complete documentation for all 29 GitMem tools.
+  </Card>
+  <Card title="Guides" href="/docs/guides">
+    Closing ceremony, multi-agent workflows, and error handling.
+  </Card>
+  <Card title="Contributing" href="/docs/contributing">
+    Development setup, testing tiers, and code style.
+  </Card>
+  <Card title="Changelog" href="/docs/changelog">
+    Release history and what's new.
+  </Card>
+</Cards>

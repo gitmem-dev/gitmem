@@ -7,15 +7,15 @@ description: "Create scar, win, or pattern entry in institutional memory."
 
 **Tier:** Free · **Aliases:** `gitmem-cl`, `gm-scar`
 
-Create scar, win, or pattern entry in institutional memory
+Create scar, win, or pattern entry in institutional memory. Frame as 'what we now know' — lead with the factual/architectural discovery, not what went wrong. Good: 'Fine-grained PATs are scoped to one resource owner'. Bad: 'Should have checked PAT type first'.
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | Yes | Type of learning |
-| `title` | string | Yes | Learning title |
-| `description` | string | Yes | Detailed description |
+| `title` | string | Yes | Frame as a knowledge discovery — what we now know. Lead with the factual insight, not self-criticism. |
+| `description` | string | Yes | Detailed description. Include the architectural/behavioral fact that makes this retrievable by domain. |
 | `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Severity level (required for scars) |
 | `scar_type` | `"process"` \| `"incident"` \| `"context"` | No | Scar type (process, incident, or context). Defaults to 'process'. |
 | `counter_arguments` | string[] | No | Counter-arguments for scars (min 2 required) |

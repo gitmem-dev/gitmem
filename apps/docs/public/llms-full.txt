@@ -1,7 +1,7 @@
 # GitMem — Complete Documentation
 
 > GitMem is an MCP server that gives AI coding agents persistent institutional memory.
-> Install: `npx gitmem init` or add MCP server `npx -y gitmem-mcp`
+> Install: `npx gitmem-mcp init` or add MCP server `npx -y gitmem-mcp`
 > Source: https://gitmem.ai
 > Index: https://gitmem.ai/llms.txt
 
@@ -25,17 +25,17 @@ Description: GitMem release history.
 
 ### Docs
 
-- Updated README to feature one-command setup, added gitmem.dev link
+- Updated README to feature one-command setup, added gitmem.ai link
 - Updated docs site installation and getting-started pages
 
 ## v1.0.1 (2026-02-14)
 
 ### Bug Fixes
 
-- **OD-590:** Fixed stdout corruption — 22 `console.log` calls replaced with `console.error` in check.ts
-- **OD-554:** Error messages now surface in `create_learning` and `record_scar_usage` responses via `errors[]` array
-- **OD-548:** Session ID validation added to `session_close` — returns clear error with UUID format example instead of confusing DB lookup failure
-- **OD-640:** Removed hardcoded project enum — project names are now free-form strings
+- Fixed stdout corruption — 22 `console.log` calls replaced with `console.error` in check.ts
+- Error messages now surface in `create_learning` and `record_scar_usage` responses via `errors[]` array
+- Session ID validation added to `session_close` — returns clear error with UUID format example instead of confusing DB lookup failure
+- Removed hardcoded project enum — project names are now free-form strings
 
 ### Tests
 
@@ -394,7 +394,7 @@ Set via: `GITMEM_TIER=free` (default)
 - **Tools:** 29 tools (adds batch, transcripts, cache management)
 - **Best for:** Teams, multi-machine workflows, production use
 
-Pro is currently in development. [Join the mailing list](https://gitmem.dev) to get notified when it launches.
+Pro is currently in development. [Join the mailing list](https://gitmem.ai) to get notified when it launches.
 
 ## Additional Tools (Pro)
 
@@ -608,7 +608,7 @@ Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
 
 ### Pro Tier (Coming Soon)
 
-Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.dev) to get notified.
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.ai) to get notified.
 
 ## Project Namespaces
 
@@ -746,7 +746,7 @@ Pro adds cloud-powered features for teams and power users:
 - You need session transcript storage
 - You're running multi-agent workflows across environments
 
-[Join the mailing list](https://gitmem.dev) to get notified when Pro launches.
+[Join the mailing list](https://gitmem.ai) to get notified when Pro launches.
 
 ========================================================================
 # Overview
@@ -760,7 +760,7 @@ GitMem gives your AI coding agents institutional memory — the ability to learn
 
 ## Prerequisites
 
-- **Node.js 22+** (required by Fumadocs MDX)
+- **Node.js 18+** (for `npx gitmem init`)
 - An MCP-compatible client: [Claude Code](https://claude.com/claude-code), [Claude Desktop](https://claude.ai/download), or [Cursor](https://cursor.sh)
 
 ## Quick Start (30 seconds)
@@ -796,26 +796,55 @@ Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destr
 ========================================================================
 # Installation
 URL: https://gitmem.ai/docs/getting-started/installation
-Description: Install GitMem via npx, global install, or MCP configuration.
+Description: Install GitMem via the init wizard, manual MCP config, or global install.
 ========================================================================
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Files, File, Folder } from 'fumadocs-ui/components/files'
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion'
 
 # Installation
 
-## Option 1: Init Wizard (Recommended)
+<Tabs items={["Init Wizard (Recommended)", "Manual MCP Config", "Global Install"]}>
+<Tab value="Init Wizard (Recommended)">
+
+## Init Wizard
+
+The recommended way to install GitMem. One command, interactive setup, safe to re-run.
 
 ```bash
 cd your-project
 npx gitmem init
 ```
 
-The interactive wizard walks you through 6 steps:
-
-1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
-2. **MCP Server** — Adds gitmem to `.mcp.json`
-3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
-4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
-5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
-6. **Gitignore** — Adds `.gitmem/` to `.gitignore`
+<Steps>
+<Step>
+### Memory Store
+Creates `.gitmem/` directory with 12 starter scars covering common mistakes.
+</Step>
+<Step>
+### MCP Server
+Adds gitmem to `.mcp.json` so your AI client can discover it.
+</Step>
+<Step>
+### Project Instructions
+Appends memory protocols to `CLAUDE.md` (or your client's instruction file).
+</Step>
+<Step>
+### Tool Permissions
+Adds `mcp__gitmem__*` to `.claude/settings.json` so tools work without manual approval.
+</Step>
+<Step>
+### Lifecycle Hooks
+Merges session start and recall hooks. Preserves your existing hooks.
+</Step>
+<Step>
+### Gitignore
+Adds `.gitmem/` to `.gitignore` — memory data stays local.
+</Step>
+</Steps>
 
 ### Flags
 
@@ -830,9 +859,28 @@ npx gitmem init --dry-run
 npx gitmem init --project my-app
 ```
 
-### Idempotent
-
+<Callout type="info" title="Idempotent">
 Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+</Callout>
+
+### What Gets Created
+
+<Files>
+  <Folder name="your-project" defaultOpen>
+    <Folder name=".gitmem" defaultOpen>
+      <Folder name="scars">
+        <File name="starter-scars.json" />
+      </Folder>
+      <File name="active-sessions.json" />
+    </Folder>
+    <Folder name=".claude">
+      <File name="settings.json" />
+    </Folder>
+    <File name=".mcp.json" />
+    <File name="CLAUDE.md" />
+    <File name=".gitignore" />
+  </Folder>
+</Files>
 
 ### Uninstall
 
@@ -847,17 +895,22 @@ Cleanly reverses everything init did. Your `.gitmem/` data is preserved by defau
 npx gitmem uninstall --all
 ```
 
-## Option 2: MCP Server Only
+</Tab>
+<Tab value="Manual MCP Config">
 
-If you want to configure the MCP server manually without the init wizard:
+## Manual MCP Configuration
 
-### Claude Code
+If you want to configure the MCP server without the init wizard.
+
+<Tabs items={["Claude Code", "Claude Desktop", "Cursor"]}>
+<Tab value="Claude Code">
 
 ```bash
 claude mcp add gitmem -- npx -y gitmem-mcp
 ```
 
-### Claude Desktop
+</Tab>
+<Tab value="Claude Desktop">
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -872,9 +925,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop after saving.
+<Callout type="warn">
+Restart Claude Desktop after saving the config file.
+</Callout>
 
-### Cursor
+</Tab>
+<Tab value="Cursor">
 
 Add to `.cursor/mcp.json` in your project:
 
@@ -889,7 +945,13 @@ Add to `.cursor/mcp.json` in your project:
 }
 ```
 
-## Option 3: Global Install
+</Tab>
+</Tabs>
+
+</Tab>
+<Tab value="Global Install">
+
+## Global Install
 
 ```bash
 npm install -g gitmem-mcp
@@ -907,6 +969,15 @@ Then reference the global binary in your MCP config:
 }
 ```
 
+<Callout type="info">
+Global install avoids the `npx` startup delay on each session. Useful for heavy users.
+</Callout>
+
+</Tab>
+</Tabs>
+
+---
+
 ## Verify Installation
 
 After setup, ask your AI agent:
@@ -914,6 +985,10 @@ After setup, ask your AI agent:
 > "Run gitmem-help"
 
 You should see a list of available commands with your current tier and tool count.
+
+<Callout type="success" title="Working correctly?">
+If `gitmem-help` returns a command list showing **23 tools (free tier)** or **29 tools (pro tier)**, you're good to go. Head to [Your First Session](/docs/getting-started/first-session) next.
+</Callout>
 
 ## Environment Variables
 
@@ -923,6 +998,23 @@ You should see a list of available commands with your current tier and tool coun
 | `GITMEM_DEFAULT_PROJECT` | `default` | Project namespace for scoping |
 
 See [Configuration](/docs/getting-started/configuration) for full details.
+
+## Troubleshooting
+
+<Accordions type="single">
+<Accordion title="npx gitmem init hangs or fails">
+Ensure Node.js 18+ is installed (`node --version`). If behind a corporate proxy, try `npm install -g gitmem-mcp` first, then use `gitmem init` without npx.
+</Accordion>
+<Accordion title="Agent can't find gitmem tools">
+Check that `.mcp.json` exists in your project root and contains the gitmem server entry. For Claude Desktop, verify the config path matches your OS. Restart the client after config changes.
+</Accordion>
+<Accordion title="Permission errors on tool calls">
+Run `npx gitmem init` to add tool permissions to `.claude/settings.json`, or manually add `mcp__gitmem__*` to the `allow` array.
+</Accordion>
+<Accordion title="Starter scars show wrong age">
+Starter scars use fixed creation dates. This is cosmetic — the scars function correctly regardless of displayed age.
+</Accordion>
+</Accordions>
 
 ========================================================================
 # Closing Ceremony
@@ -1135,23 +1227,61 @@ URL: https://gitmem.ai/docs
 Description: Institutional memory for AI coding agents. Memory that compounds.
 ========================================================================
 
+import { Cards, Card } from 'fumadocs-ui/components/card'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+<div className="gitmem-hero">
+
 # GitMem
 
-**Institutional memory for AI coding agents.** GitMem is an MCP server that gives AI agents the ability to learn from past mistakes, remember what worked, and share knowledge across sessions.
+Institutional memory for AI coding agents.
+Every mistake learned from. Every win remembered.
+
+<div className="memory-loop">
+  <span className="step">recall</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">work</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">learn</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">close</span>
+  <span className="arrow">&rarr;</span>
+  <span className="step">recall</span>
+</div>
+
+<div className="hero-cta">
+  <a href="/docs/getting-started/installation" className="primary">Get Started</a>
+  <a href="https://github.com/gitmem-dev/gitmem" className="secondary">GitHub</a>
+  <a href="/docs/tools" className="secondary">Tool Reference</a>
+</div>
+
+</div>
+
+---
 
 ## What is GitMem?
 
-Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons as **scars** (mistakes to avoid), **wins** (approaches that worked), and **patterns** (reusable strategies) — then surfaces them automatically before the agent takes similar actions.
+Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons and surfaces them automatically before the agent takes similar actions.
 
-## Key Features
-
-- **Automatic Recall** — Before taking action, agents check institutional memory for relevant lessons
-- **Session Continuity** — Context carries across sessions via threads and session history
-- **Multi-Agent** — Teams of agents share the same institutional memory
-- **MCP Native** — Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, etc.)
-- **Free Tier** — Local `.gitmem/` storage with no external dependencies
+<Cards>
+  <Card title="Scars" href="/docs/concepts/scars">
+    Mistakes captured as institutional memory. Surfaced automatically via recall before the agent repeats them.
+  </Card>
+  <Card title="Wins" href="/docs/concepts/learning-types">
+    Approaches that worked well. Document what succeeded so it can be replicated.
+  </Card>
+  <Card title="Sessions" href="/docs/concepts/sessions">
+    Bounded work periods with context loading, reflection, and clean closure.
+  </Card>
+  <Card title="Threads" href="/docs/concepts/threads">
+    Unresolved work that carries across sessions. Never lose track of open items.
+  </Card>
+</Cards>
 
 ## Quick Start
+
+<div className="install-block">
 
 ```bash
 npx gitmem init
@@ -1159,7 +1289,92 @@ npx gitmem init
 
 One command sets up everything: `.gitmem/` directory, `.mcp.json`, `CLAUDE.md`, hooks, and permissions. Already have existing config? The wizard merges without destroying anything.
 
-[Get Started](/docs/getting-started) | [Concepts](/docs/concepts) | [Tool Reference](/docs/tools)
+</div>
+
+## How It Works
+
+<Steps>
+<Step>
+### Recall before acting
+
+Before consequential actions, the agent checks institutional memory. Relevant scars surface automatically with severity and counter-arguments.
+
+```
+recall({ plan: "deploy to production" })
+// → "Done ≠ Deployed ≠ Verified Working" (high severity)
+// → "Database migrations must run before code deploy" (critical)
+```
+
+</Step>
+<Step>
+### Confirm and apply
+
+Each scar must be acknowledged — **APPLYING** (with evidence), **N_A** (with reasoning), or **REFUTED** (acknowledging risk). No passive dismissal.
+
+</Step>
+<Step>
+### Learn from outcomes
+
+When something breaks or works well, capture it. Scars require counter-arguments to prevent knowledge bloat.
+
+```
+create_learning({
+  learning_type: "scar",
+  title: "OAuth redirect URI must match exactly",
+  severity: "medium",
+  counter_arguments: [
+    "In development, localhost variations are usually fine",
+    "Some providers support wildcard redirects"
+  ]
+})
+```
+
+</Step>
+<Step>
+### Close and persist
+
+Session close captures reflections, records scar usage, and persists open threads for the next session.
+
+</Step>
+</Steps>
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Automatic Recall** | Before taking action, agents check institutional memory for relevant lessons |
+| **Confirm Protocol** | Scars require active acknowledgment — APPLYING, N_A, or REFUTED |
+| **Session Continuity** | Context carries across sessions via threads, decisions, and rapport notes |
+| **Multi-Agent** | Teams of agents share the same institutional memory via `prepare_context` |
+| **MCP Native** | Works with Claude Code, Claude Desktop, Cursor, and any MCP client |
+| **Free Tier** | Local `.gitmem/` storage with 23 tools, no external dependencies |
+
+<Callout type="info" title="23 tools, zero cost">
+The free tier includes session management, scar recall, learning creation, threads, and analytics — all stored locally in `.gitmem/`. No account, no API key, no cloud dependency.
+</Callout>
+
+## Explore
+
+<Cards>
+  <Card title="Getting Started" href="/docs/getting-started">
+    Install GitMem and run your first session in under 5 minutes.
+  </Card>
+  <Card title="Concepts" href="/docs/concepts">
+    Scars, sessions, threads, learning types, and tiers explained.
+  </Card>
+  <Card title="Tool Reference" href="/docs/tools">
+    Complete documentation for all 29 GitMem tools.
+  </Card>
+  <Card title="Guides" href="/docs/guides">
+    Closing ceremony, multi-agent workflows, and error handling.
+  </Card>
+  <Card title="Contributing" href="/docs/contributing">
+    Development setup, testing tiers, and code style.
+  </Card>
+  <Card title="Changelog" href="/docs/changelog">
+    Release history and what's new.
+  </Card>
+</Cards>
 
 ========================================================================
 # absorb_observations
@@ -1208,7 +1423,7 @@ Session analytics and insights engine. Returns formatted markdown by default. Us
 | `lens` | `"summary"` \| `"reflections"` \| `"blindspots"` | No | Analysis lens to apply (default: summary) |
 | `days` | number | No | Number of days to analyze (default: 30) |
 | `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
-| `agent` | string | No | Filter by agent identity (e.g., CLI, DAC, CODA-1) |
+| `agent` | string | No | Filter by agent identity (e.g., cli, desktop, autonomous) |
 | `format` | `"text"` \| `"json"` | No | Output format: text (default, compact markdown) or json (raw data) |
 
 ========================================================================
@@ -1228,7 +1443,7 @@ Archives a learning (scar/win/pattern) by setting is_active=false and recording 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `id` | string | Yes | UUID of the learning to archive |
-| `reason` | string | No | Optional reason for archiving (e.g., 'superseded by OD-XXX', 'no longer relevant') |
+| `reason` | string | No | Optional reason for archiving (e.g., 'superseded by PROJ-123', 'no longer relevant') |
 
 ========================================================================
 # gitmem-cache-flush
@@ -1328,6 +1543,7 @@ Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence. REQUIRE
 | `scar_id` | string | Yes | UUID of the surfaced scar (from recall result) |
 | `decision` | `"APPLYING"` \| `"N_A"` \| `"REFUTED"` | Yes | APPLYING: scar is relevant, evidence of compliance. N_A: scar doesn't apply, explain why. REFUTED: overriding scar, acknowledge risk. |
 | `evidence` | string | Yes | Past-tense evidence (APPLYING), scenario comparison (N_A), or risk acknowledgment (REFUTED). Minimum 50 characters. |
+| `relevance` | `"high"` \| `"low"` \| `"noise"` | No | How relevant was this scar to your plan? high=directly applicable, low=tangentially related, noise=not relevant to this context. Helps improve future recall quality. |
 
 ========================================================================
 # create_decision
@@ -1365,15 +1581,15 @@ Description: Create scar, win, or pattern entry in institutional memory.
 
 **Tier:** Free · **Aliases:** `gitmem-cl`, `gm-scar`
 
-Create scar, win, or pattern entry in institutional memory
+Create scar, win, or pattern entry in institutional memory. Frame as 'what we now know' — lead with the factual/architectural discovery, not what went wrong. Good: 'Fine-grained PATs are scoped to one resource owner'. Bad: 'Should have checked PAT type first'.
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | Yes | Type of learning |
-| `title` | string | Yes | Learning title |
-| `description` | string | Yes | Detailed description |
+| `title` | string | Yes | Frame as a knowledge discovery — what we now know. Lead with the factual insight, not self-criticism. |
+| `description` | string | Yes | Detailed description. Include the architectural/behavioral fact that makes this retrievable by domain. |
 | `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Severity level (required for scars) |
 | `scar_type` | `"process"` \| `"incident"` \| `"context"` | No | Scar type (process, incident, or context). Defaults to 'process'. |
 | `counter_arguments` | string[] | No | Counter-arguments for scars (min 2 required) |
@@ -1402,7 +1618,7 @@ Create an open thread to track unresolved work across sessions. Includes semanti
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `text` | string | Yes | Thread description — what needs to be tracked or resolved |
-| `linear_issue` | string | No | Associated Linear issue (e.g., OD-XXX) |
+| `linear_issue` | string | No | Associated Linear issue (e.g., PROJ-123) |
 
 ========================================================================
 # dismiss_suggestion
@@ -1425,14 +1641,14 @@ Dismiss a suggested thread. Incremented dismiss count — suggestions dismissed 
 ========================================================================
 # get_transcript
 URL: https://gitmem.ai/docs/tools/get-transcript
-Description: Retrieve a session transcript from storage (OD-467).
+Description: Retrieve a session transcript from storage.
 ========================================================================
 
 # get_transcript
 
 **Tier:** Dev · **Aliases:** `gitmem-gt`
 
-Retrieve a session transcript from storage (OD-467)
+Retrieve a session transcript from storage
 
 ## Parameters
 
@@ -1450,14 +1666,14 @@ Description: Traverse the knowledge graph over institutional memory triples.
 
 **Tier:** Pro · **Aliases:** `gitmem-graph`, `gm-graph`
 
-Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to OD-466', 'what did CLI produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.
+Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to this issue', 'what did this agent produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `lens` | `"connected_to"` \| `"produced_by"` \| `"provenance"` \| `"stats"` | Yes | Traversal mode: connected_to (all connections to a node), produced_by (what an agent/persona produced), provenance (trace origin chain), stats (aggregate counts) |
-| `node` | string | No | Starting node. Examples: 'OD-466', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
+| `node` | string | No | Starting node. Examples: 'PROJ-123', 'cli', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
 | `predicate` | `"created_in"` \| `"influenced_by"` \| `"supersedes"` \| `"demonstrates"` | No | Filter by predicate (optional) |
 | `depth` | number | No | Max chain depth for provenance lens (default: 3) |
 | `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
@@ -1665,7 +1881,7 @@ Description: Check institutional memory for relevant scars before taking action.
 
 **Tier:** Free · **Aliases:** `gitmem-r`
 
-Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons.
+Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons. Integrates variant assignment when issue_id provided.
 
 ## Parameters
 
@@ -1674,7 +1890,8 @@ Check institutional memory for relevant scars before taking action. Returns matc
 | `plan` | string | Yes | What you're about to do (e.g., 'implement auth layer', 'deploy to production') |
 | `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `match_count` | number | No | Number of scars to return (default: 3) |
-| `issue_id` | string | No | Linear issue identifier for variant assignment (e.g., 'OD-525'). When provided, scars with variants will be randomly assigned and formatted accordingly. |
+| `issue_id` | string | No | Linear issue identifier for variant assignment (e.g., 'PROJ-123'). When provided, scars with variants will be randomly assigned and formatted accordingly. |
+| `similarity_threshold` | number | No | Minimum similarity score (0-1) to include results. Weak matches below threshold are suppressed. Default: 0.4 (free tier BM25), 0.35 (pro tier embeddings). |
 
 ========================================================================
 # record_scar_usage_batch
@@ -1701,14 +1918,14 @@ Track multiple scar applications in a single batch operation (reduces session cl
 |-------|------|----------|-------------|
 | `scar_identifier` | string | Yes | UUID or title/description of scar (tool resolves to UUID) |
 | `issue_id` | string | No | Linear issue UUID |
-| `issue_identifier` | string | No | Linear issue identifier (e.g., OD-XXX) |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., PROJ-123) |
 | `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
 | `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
 | `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
 | `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
 | `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
 | `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
-| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+| `agent` | string | No | Agent identity (e.g., cli, desktop, autonomous) |
 
 ========================================================================
 # record_scar_usage
@@ -1726,16 +1943,16 @@ Track scar application for effectiveness measurement
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `scar_id` | string | Yes | UUID of the scar from orchestra_learnings |
+| `scar_id` | string | Yes | UUID of the scar |
 | `issue_id` | string | No | Linear issue UUID |
-| `issue_identifier` | string | No | Linear issue identifier (e.g., OD-XXX) |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., PROJ-123) |
 | `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
 | `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
 | `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
 | `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
 | `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
 | `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
-| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+| `agent` | string | No | Agent identity (e.g., cli, desktop, autonomous) |
 | `variant_id` | string | No | UUID of the assigned variant from scar_enforcement_variants (for A/B testing) |
 
 ========================================================================
@@ -1761,14 +1978,14 @@ Mark an open thread as resolved. Use thread_id for exact match or text_match for
 ========================================================================
 # save_transcript
 URL: https://gitmem.ai/docs/tools/save-transcript
-Description: Save full session transcript to storage for training data and post-mortems (OD-467).
+Description: Save full session transcript to storage for training data and post-mortems.
 ========================================================================
 
 # save_transcript
 
 **Tier:** Dev · **Aliases:** `gitmem-st`
 
-Save full session transcript to storage for training data and post-mortems (OD-467)
+Save full session transcript to storage for training data and post-mortems
 
 ## Parameters
 
@@ -1798,7 +2015,7 @@ Semantic search over session transcript chunks. Generates embedding for query an
 | `query` | string | Yes | Natural language search query (e.g., 'deployment verification discussion', 'what was decided about caching') |
 | `match_count` | number | No | Maximum number of chunks to return (default: 10, max: 50) |
 | `similarity_threshold` | number | No | Minimum similarity score 0-1 (default: 0.3). Higher values return more relevant results. |
-| `project` | string | No | Project namespace to filter by (e.g.) |
+| `project` | string | No | Project namespace to filter by (e.g., 'my-project') |
 
 ========================================================================
 # search
@@ -1877,11 +2094,11 @@ Initialize session, detect agent, load institutional context (last session, rece
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `agent_identity` | `"CLI"` \| `"DAC"` \| `"CODA-1"` \| `"Brain_Local"` \| `"Brain_Cloud"` | No | Override agent identity (auto-detects if not provided) |
-| `linear_issue` | string | No | Current Linear issue identifier (e.g., OD-XXX) |
+| `agent_identity` | `"cli"` \| `"desktop"` \| `"autonomous"` \| `"local"` \| `"cloud"` | No | Override agent identity (auto-detects if not provided) |
+| `linear_issue` | string | No | Current Linear issue identifier (e.g., PROJ-123) |
 | `issue_title` | string | No | Issue title for scar context |
 | `issue_description` | string | No | Issue description for scar context |
 | `issue_labels` | string[] | No | Issue labels for scar context |
 | `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
-| `force` | boolean | No | Force create new session even if one already exists (OD-558) |
+| `force` | boolean | No | Force create new session even if one already exists |
 

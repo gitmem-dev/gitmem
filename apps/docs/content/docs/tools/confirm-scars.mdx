@@ -22,4 +22,5 @@ Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence. REQUIRE
 | `scar_id` | string | Yes | UUID of the surfaced scar (from recall result) |
 | `decision` | `"APPLYING"` \| `"N_A"` \| `"REFUTED"` | Yes | APPLYING: scar is relevant, evidence of compliance. N_A: scar doesn't apply, explain why. REFUTED: overriding scar, acknowledge risk. |
 | `evidence` | string | Yes | Past-tense evidence (APPLYING), scenario comparison (N_A), or risk acknowledgment (REFUTED). Minimum 50 characters. |
+| `relevance` | `"high"` \| `"low"` \| `"noise"` | No | How relevant was this scar to your plan? high=directly applicable, low=tangentially related, noise=not relevant to this context. Helps improve future recall quality. |
 

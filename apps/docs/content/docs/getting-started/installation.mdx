@@ -1,25 +1,54 @@
 ---
 title: Installation
-description: Install GitMem via npx, global install, or MCP configuration.
+description: Install GitMem via the init wizard, manual MCP config, or global install.
 ---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Files, File, Folder } from 'fumadocs-ui/components/files'
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion'
 
 # Installation
 
-## Option 1: Init Wizard (Recommended)
+<Tabs items={["Init Wizard (Recommended)", "Manual MCP Config", "Global Install"]}>
+<Tab value="Init Wizard (Recommended)">
+
+## Init Wizard
+
+The recommended way to install GitMem. One command, interactive setup, safe to re-run.
 
 ```bash
 cd your-project
 npx gitmem init
 ```
 
-The interactive wizard walks you through 6 steps:
-
-1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
-2. **MCP Server** — Adds gitmem to `.mcp.json`
-3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
-4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
-5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
-6. **Gitignore** — Adds `.gitmem/` to `.gitignore`
+<Steps>
+<Step>
+### Memory Store
+Creates `.gitmem/` directory with 12 starter scars covering common mistakes.
+</Step>
+<Step>
+### MCP Server
+Adds gitmem to `.mcp.json` so your AI client can discover it.
+</Step>
+<Step>
+### Project Instructions
+Appends memory protocols to `CLAUDE.md` (or your client's instruction file).
+</Step>
+<Step>
+### Tool Permissions
+Adds `mcp__gitmem__*` to `.claude/settings.json` so tools work without manual approval.
+</Step>
+<Step>
+### Lifecycle Hooks
+Merges session start and recall hooks. Preserves your existing hooks.
+</Step>
+<Step>
+### Gitignore
+Adds `.gitmem/` to `.gitignore` — memory data stays local.
+</Step>
+</Steps>
 
 ### Flags
 
@@ -34,9 +63,28 @@ npx gitmem init --dry-run
 npx gitmem init --project my-app
 ```
 
-### Idempotent
-
+<Callout type="info" title="Idempotent">
 Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+</Callout>
+
+### What Gets Created
+
+<Files>
+  <Folder name="your-project" defaultOpen>
+    <Folder name=".gitmem" defaultOpen>
+      <Folder name="scars">
+        <File name="starter-scars.json" />
+      </Folder>
+      <File name="active-sessions.json" />
+    </Folder>
+    <Folder name=".claude">
+      <File name="settings.json" />
+    </Folder>
+    <File name=".mcp.json" />
+    <File name="CLAUDE.md" />
+    <File name=".gitignore" />
+  </Folder>
+</Files>
 
 ### Uninstall
 
@@ -51,17 +99,22 @@ Cleanly reverses everything init did. Your `.gitmem/` data is preserved by defau
 npx gitmem uninstall --all
 ```
 
-## Option 2: MCP Server Only
+</Tab>
+<Tab value="Manual MCP Config">
 
-If you want to configure the MCP server manually without the init wizard:
+## Manual MCP Configuration
 
-### Claude Code
+If you want to configure the MCP server without the init wizard.
+
+<Tabs items={["Claude Code", "Claude Desktop", "Cursor"]}>
+<Tab value="Claude Code">
 
 ```bash
 claude mcp add gitmem -- npx -y gitmem-mcp
 ```
 
-### Claude Desktop
+</Tab>
+<Tab value="Claude Desktop">
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -76,9 +129,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop after saving.
+<Callout type="warn">
+Restart Claude Desktop after saving the config file.
+</Callout>
 
-### Cursor
+</Tab>
+<Tab value="Cursor">
 
 Add to `.cursor/mcp.json` in your project:
 
@@ -93,7 +149,13 @@ Add to `.cursor/mcp.json` in your project:
 }
 ```
 
-## Option 3: Global Install
+</Tab>
+</Tabs>
+
+</Tab>
+<Tab value="Global Install">
+
+## Global Install
 
 ```bash
 npm install -g gitmem-mcp
@@ -111,6 +173,15 @@ Then reference the global binary in your MCP config:
 }
 ```
 
+<Callout type="info">
+Global install avoids the `npx` startup delay on each session. Useful for heavy users.
+</Callout>
+
+</Tab>
+</Tabs>
+
+---
+
 ## Verify Installation
 
 After setup, ask your AI agent:
@@ -118,6 +189,10 @@ After setup, ask your AI agent:
 > "Run gitmem-help"
 
 You should see a list of available commands with your current tier and tool count.
+
+<Callout type="success" title="Working correctly?">
+If `gitmem-help` returns a command list showing **23 tools (free tier)** or **29 tools (pro tier)**, you're good to go. Head to [Your First Session](/docs/getting-started/first-session) next.
+</Callout>
 
 ## Environment Variables
 
@@ -127,3 +202,20 @@ You should see a list of available commands with your current tier and tool coun
 | `GITMEM_DEFAULT_PROJECT` | `default` | Project namespace for scoping |
 
 See [Configuration](/docs/getting-started/configuration) for full details.
+
+## Troubleshooting
+
+<Accordions type="single">
+<Accordion title="npx gitmem init hangs or fails">
+Ensure Node.js 18+ is installed (`node --version`). If behind a corporate proxy, try `npm install -g gitmem-mcp` first, then use `gitmem init` without npx.
+</Accordion>
+<Accordion title="Agent can't find gitmem tools">
+Check that `.mcp.json` exists in your project root and contains the gitmem server entry. For Claude Desktop, verify the config path matches your OS. Restart the client after config changes.
+</Accordion>
+<Accordion title="Permission errors on tool calls">
+Run `npx gitmem init` to add tool permissions to `.claude/settings.json`, or manually add `mcp__gitmem__*` to the `allow` array.
+</Accordion>
+<Accordion title="Starter scars show wrong age">
+Starter scars use fixed creation dates. This is cosmetic — the scars function correctly regardless of displayed age.
+</Accordion>
+</Accordions>

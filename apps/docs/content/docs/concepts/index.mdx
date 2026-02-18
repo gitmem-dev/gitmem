@@ -1,0 +1,27 @@
+---
+title: Core Concepts
+description: Understand the building blocks of GitMem's institutional memory system.
+---
+
+# Core Concepts
+
+GitMem is built around a few key ideas that work together to give AI agents persistent, actionable memory.
+
+## The Memory Loop
+
+```
+recall → work → learn → close → recall → ...
+```
+
+1. **Recall** — Before acting, check what you've learned before
+2. **Work** — Do the task, applying past lessons
+3. **Learn** — Capture new scars, wins, and patterns
+4. **Close** — Persist session context for next time
+
+## Key Concepts
+
+- [Scars](/docs/concepts/scars) — Mistakes captured as institutional memory, surfaced before you repeat them
+- [Sessions](/docs/concepts/sessions) — Bounded work periods with context loading and closing ceremonies
+- [Threads](/docs/concepts/threads) — Unresolved work that carries across sessions
+- [Learning Types](/docs/concepts/learning-types) — Scars, wins, patterns, and anti-patterns
+- [Tiers](/docs/concepts/tiers) — Free (local) vs Pro (Supabase) capabilities

@@ -1,0 +1,43 @@
+---
+title: Overview
+description: Get GitMem running in under 5 minutes.
+---
+
+# Getting Started
+
+GitMem gives your AI coding agents institutional memory — the ability to learn from mistakes and remember what works across sessions.
+
+## Prerequisites
+
+- **Node.js 18+** (for `npx gitmem init`)
+- An MCP-compatible client: [Claude Code](https://claude.com/claude-code), [Claude Desktop](https://claude.ai/download), or [Cursor](https://cursor.sh)
+
+## Quick Start (30 seconds)
+
+```bash
+# In any project directory
+npx gitmem init
+```
+
+The interactive wizard detects your existing config and sets up everything:
+- `.gitmem/` directory with 12 starter scars
+- `.mcp.json` with gitmem server entry
+- `CLAUDE.md` with memory protocol instructions
+- `.claude/settings.json` with lifecycle hooks and tool permissions
+- `.gitignore` updated to exclude `.gitmem/`
+
+Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destroying your existing config. Re-running is safe — completed steps are skipped.
+
+## What Happens Next
+
+1. **Start a session** — Your agent calls `session_start` to load context
+2. **Recall before acting** — Before consequential actions, `recall` surfaces relevant scars
+3. **Learn from outcomes** — Create scars, wins, and patterns as you discover them
+4. **Close cleanly** — `session_close` persists what happened for future sessions
+
+## Next Steps
+
+- [Installation](/docs/getting-started/installation) — Detailed setup for all environments
+- [Configuration](/docs/getting-started/configuration) — Environment variables and config files
+- [Your First Session](/docs/getting-started/first-session) — Step-by-step walkthrough
+- [Free vs Pro](/docs/getting-started/free-vs-pro) — Tier comparison

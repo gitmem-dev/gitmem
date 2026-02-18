@@ -1,0 +1,22 @@
+---
+title: "graph_traverse"
+description: "Traverse the knowledge graph over institutional memory triples."
+---
+
+# graph_traverse
+
+**Tier:** Pro · **Aliases:** `gitmem-graph`, `gm-graph`
+
+Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to PROJ-123', 'what did CLI produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `lens` | `"connected_to"` \| `"produced_by"` \| `"provenance"` \| `"stats"` | Yes | Traversal mode: connected_to (all connections to a node), produced_by (what an agent/persona produced), provenance (trace origin chain), stats (aggregate counts) |
+| `node` | string | No | Starting node. Examples: 'PROJ-123', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
+| `predicate` | `"created_in"` \| `"influenced_by"` \| `"supersedes"` \| `"demonstrates"` | No | Filter by predicate (optional) |
+| `depth` | number | No | Max chain depth for provenance lens (default: 3) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `limit` | number | No | Max triples to return (default: 50) |
+

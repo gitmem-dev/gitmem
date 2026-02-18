@@ -1,0 +1,72 @@
+---
+title: Sessions
+description: How GitMem tracks bounded work periods with context loading and closing ceremonies.
+---
+
+# Sessions
+
+A **session** is a bounded work period. It starts when an agent calls `session_start` and ends with `session_close`. Sessions provide continuity between conversations.
+
+## Session Lifecycle
+
+### 1. Start
+
+`session_start` initializes a session and loads context:
+
+- Creates a unique session ID
+- Loads the last session's context (threads, decisions, rapport notes)
+- Identifies the agent type (CLI, Desktop, etc.)
+- Returns a formatted session banner
+
+### 2. Work
+
+During the session, the agent:
+- Calls `recall` before consequential actions
+- Creates learnings (scars, wins, patterns)
+- Logs decisions
+- Tracks threads for unfinished work
+
+### 3. Close
+
+`session_close` persists the session:
+
+- **Quick close** — Minimal, for short exploratory sessions
+- **Standard close** — Full reflection with 9 questions covering what broke, what worked, and what to remember
+
+## Session State
+
+Session state is stored in `.gitmem/`:
+
+```
+.gitmem/
+├── active-sessions.json         # Registry of active sessions
+└── sessions/
+    └── <session-id>/
+        └── session.json         # Session data, scars surfaced, etc.
+```
+
+## Context Loading
+
+When a new session starts, GitMem loads:
+
+| Context | Source | Purpose |
+|---------|--------|---------|
+| Open threads | `threads.json` | Unfinished work to continue |
+| Recent decisions | Last session | Architectural context |
+| Rapport notes | Last session | How the human prefers to work |
+
+## The Closing Ceremony
+
+Standard close asks 9 questions:
+
+1. What broke that you didn't expect?
+2. What took longer than it should have?
+3. What would you do differently next time?
+4. What pattern or approach worked well?
+5. What assumption was wrong?
+6. Which scars did you apply?
+7. What should be captured as institutional memory?
+8. How did the human prefer to work? *(rapport)*
+9. What collaborative dynamic worked? *(rapport)*
+
+These reflections become context for the next session.

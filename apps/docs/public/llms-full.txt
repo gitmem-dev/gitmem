@@ -1,0 +1,1887 @@
+# GitMem — Complete Documentation
+
+> GitMem is an MCP server that gives AI coding agents persistent institutional memory.
+> Install: `npx gitmem init` or add MCP server `npx -y gitmem-mcp`
+> Source: https://gitmem.ai
+> Index: https://gitmem.ai/llms.txt
+
+========================================================================
+# Changelog
+URL: https://gitmem.ai/docs/changelog
+Description: GitMem release history.
+========================================================================
+
+# Changelog
+
+## v1.0.2 (2026-02-15)
+
+### Features
+
+- **`npx gitmem init`** — Interactive setup wizard that detects existing config, prompts, and merges without destroying anything. Replaces the multi-step manual setup.
+  - 6 steps: memory store, MCP server, CLAUDE.md, permissions, hooks, gitignore
+  - Flags: `--yes` (non-interactive), `--dry-run` (preview), `--project <name>`
+  - Idempotent — re-running safely skips completed steps
+- **`npx gitmem uninstall`** — Clean reversal of everything init did. Memory data (`.gitmem/`) preserved by default, `--all` to also delete.
+
+### Docs
+
+- Updated README to feature one-command setup, added gitmem.dev link
+- Updated docs site installation and getting-started pages
+
+## v1.0.1 (2026-02-14)
+
+### Bug Fixes
+
+- **OD-590:** Fixed stdout corruption — 22 `console.log` calls replaced with `console.error` in check.ts
+- **OD-554:** Error messages now surface in `create_learning` and `record_scar_usage` responses via `errors[]` array
+- **OD-548:** Session ID validation added to `session_close` — returns clear error with UUID format example instead of confusing DB lookup failure
+- **OD-640:** Removed hardcoded project enum — project names are now free-form strings
+
+### Tests
+
+- +2 regression tests for stdout purity
+- +8 tests for error message surfacing
+- +10 tests for session ID validation
+
+## v1.0.0 (2026-02-15)
+
+### Initial Release
+
+- 23 core tools (free tier) / 29 tools (pro tier)
+- Session management with closing ceremony
+- Scar recall with semantic search
+- Thread tracking across sessions
+- Multi-agent context injection
+- Knowledge graph traversal
+- Local `.gitmem/` storage (free) or Supabase (pro)
+- Claude Code hooks for automatic session management
+- 660+ automated tests across 6 tiers
+
+========================================================================
+# Core Concepts
+URL: https://gitmem.ai/docs/concepts
+Description: Understand the building blocks of GitMem's institutional memory system.
+========================================================================
+
+# Core Concepts
+
+GitMem is built around a few key ideas that work together to give AI agents persistent, actionable memory.
+
+## The Memory Loop
+
+```
+recall → work → learn → close → recall → ...
+```
+
+1. **Recall** — Before acting, check what you've learned before
+2. **Work** — Do the task, applying past lessons
+3. **Learn** — Capture new scars, wins, and patterns
+4. **Close** — Persist session context for next time
+
+## Key Concepts
+
+- [Scars](/docs/concepts/scars) — Mistakes captured as institutional memory, surfaced before you repeat them
+- [Sessions](/docs/concepts/sessions) — Bounded work periods with context loading and closing ceremonies
+- [Threads](/docs/concepts/threads) — Unresolved work that carries across sessions
+- [Learning Types](/docs/concepts/learning-types) — Scars, wins, patterns, and anti-patterns
+- [Tiers](/docs/concepts/tiers) — Free (local) vs Pro (Supabase) capabilities
+
+========================================================================
+# Learning Types
+URL: https://gitmem.ai/docs/concepts/learning-types
+Description: The four types of institutional memory in GitMem.
+========================================================================
+
+# Learning Types
+
+GitMem supports four types of institutional memory, each serving a different purpose.
+
+## Scars
+
+**Mistakes to avoid.** The most common learning type. Scars are surfaced automatically via `recall` when an agent plans a similar action.
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Always validate UUID format before DB lookup",
+  "severity": "medium",
+  "counter_arguments": ["Internal-only tools may trust input", "UUIDs from trusted sources are pre-validated"]
+}
+```
+
+**Required fields:** title, description, severity, counter_arguments (2+)
+
+See [Scars](/docs/concepts/scars) for details.
+
+## Wins
+
+**Approaches that worked well.** Capture what succeeded so you can replicate it.
+
+```json
+{
+  "learning_type": "win",
+  "title": "Parallel agent spawning cut review time by 60%",
+  "problem_context": "Code review of 500-line PR was taking too long with sequential analysis",
+  "solution_approach": "Spawned 3 agents in parallel: one for logic, one for tests, one for security"
+}
+```
+
+**Required fields:** title, description
+
+## Patterns
+
+**Reusable strategies.** Document approaches that work in specific contexts.
+
+```json
+{
+  "learning_type": "pattern",
+  "title": "5-Tier Test Pyramid for MCP Servers",
+  "applies_when": ["shipping MCP servers to npm", "pre-release verification"]
+}
+```
+
+**Required fields:** title, description
+
+## Anti-Patterns
+
+**Approaches that seem good but aren't.** Document why a seemingly reasonable approach fails.
+
+```json
+{
+  "learning_type": "anti_pattern",
+  "title": "Don't use console.log in MCP servers",
+  "description": "MCP uses stdio for JSON-RPC. Any console.log corrupts the transport. Use console.error for diagnostics."
+}
+```
+
+**Required fields:** title, description
+
+## Severity Levels
+
+Severity applies to scars and determines surfacing priority:
+
+| Level | Meaning | Example |
+|-------|---------|---------|
+| `critical` | Data loss or security risk | "Never store API keys in git" |
+| `high` | Significant time waste or user impact | "Done != Deployed != Verified" |
+| `medium` | Moderate friction or repeated issue | "Always validate UUIDs before DB lookup" |
+| `low` | Minor optimization or preference | "Use descriptive branch names" |
+
+========================================================================
+# Scars
+URL: https://gitmem.ai/docs/concepts/scars
+Description: How GitMem captures and surfaces mistakes as institutional memory.
+========================================================================
+
+# Scars
+
+A **scar** is a mistake captured as institutional memory. When an AI agent encounters a problem, the lesson is recorded as a scar so that future agents (or future sessions of the same agent) don't repeat it.
+
+## How Scars Work
+
+1. **Something goes wrong** — A deployment fails, a bug slips through, a wrong assumption costs time
+2. **The scar is created** — The lesson is captured with title, description, severity, and counter-arguments
+3. **Future recall surfaces it** — When an agent plans a similar action, the scar appears automatically
+
+## Scar Anatomy
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Done != Deployed != Verified Working",
+  "description": "Marking a task as done after committing code is not enough. The full loop is: commit → push → deploy → verify the service is running and accessible.",
+  "severity": "high",
+  "scar_type": "process",
+  "counter_arguments": [
+    "For local-only changes, deployment verification is unnecessary",
+    "In CI/CD pipelines, deployment may be automatic"
+  ]
+}
+```
+
+### Required Fields
+
+| Field | Purpose |
+|-------|---------|
+| `title` | Short, memorable name for the lesson |
+| `description` | Detailed explanation of what went wrong and how to avoid it |
+| `severity` | `critical`, `high`, `medium`, or `low` |
+| `counter_arguments` | At least 2 reasons why someone might reasonably ignore this scar |
+
+### Scar Types
+
+| Type | Decay | Use When |
+|------|-------|----------|
+| `process` | Never | The lesson is about how to work (e.g., "always run tests before pushing") |
+| `incident` | 180 days | A specific incident that may become less relevant over time |
+| `context` | 30 days | Temporary context (e.g., "API X is down, use fallback") |
+
+## Counter-Arguments
+
+Every scar **requires** at least 2 counter-arguments. This prevents scar accumulation from becoming a burden. Counter-arguments document when it's reasonable to ignore the scar.
+
+Good counter-arguments:
+- Describe specific scenarios where the scar doesn't apply
+- Acknowledge trade-offs (speed vs safety)
+- Note when the underlying cause has been fixed
+
+## The Confirm Protocol
+
+When scars are surfaced via `recall`, the agent must **confirm** each one before proceeding:
+
+- **APPLYING** — "I've accounted for this lesson" (with evidence)
+- **N_A** — "This scar doesn't apply to my current situation" (with reasoning)
+- **REFUTED** — "I'm deliberately overriding this scar" (acknowledging risk)
+
+This ensures scars are actively considered, not just passively displayed.
+
+========================================================================
+# Sessions
+URL: https://gitmem.ai/docs/concepts/sessions
+Description: How GitMem tracks bounded work periods with context loading and closing ceremonies.
+========================================================================
+
+# Sessions
+
+A **session** is a bounded work period. It starts when an agent calls `session_start` and ends with `session_close`. Sessions provide continuity between conversations.
+
+## Session Lifecycle
+
+### 1. Start
+
+`session_start` initializes a session and loads context:
+
+- Creates a unique session ID
+- Loads the last session's context (threads, decisions, rapport notes)
+- Identifies the agent type (CLI, Desktop, etc.)
+- Returns a formatted session banner
+
+### 2. Work
+
+During the session, the agent:
+- Calls `recall` before consequential actions
+- Creates learnings (scars, wins, patterns)
+- Logs decisions
+- Tracks threads for unfinished work
+
+### 3. Close
+
+`session_close` persists the session:
+
+- **Quick close** — Minimal, for short exploratory sessions
+- **Standard close** — Full reflection with 9 questions covering what broke, what worked, and what to remember
+
+## Session State
+
+Session state is stored in `.gitmem/`:
+
+```
+.gitmem/
+├── active-sessions.json         # Registry of active sessions
+└── sessions/
+    └── <session-id>/
+        └── session.json         # Session data, scars surfaced, etc.
+```
+
+## Context Loading
+
+When a new session starts, GitMem loads:
+
+| Context | Source | Purpose |
+|---------|--------|---------|
+| Open threads | `threads.json` | Unfinished work to continue |
+| Recent decisions | Last session | Architectural context |
+| Rapport notes | Last session | How the human prefers to work |
+
+## The Closing Ceremony
+
+Standard close asks 9 questions:
+
+1. What broke that you didn't expect?
+2. What took longer than it should have?
+3. What would you do differently next time?
+4. What pattern or approach worked well?
+5. What assumption was wrong?
+6. Which scars did you apply?
+7. What should be captured as institutional memory?
+8. How did the human prefer to work? *(rapport)*
+9. What collaborative dynamic worked? *(rapport)*
+
+These reflections become context for the next session.
+
+========================================================================
+# Threads
+URL: https://gitmem.ai/docs/concepts/threads
+Description: Track unresolved work across sessions with GitMem threads.
+========================================================================
+
+# Threads
+
+**Threads** track unresolved work that carries across sessions. When you can't finish something in the current session, create a thread so the next session picks it up.
+
+## Creating Threads
+
+```
+create_thread({ text: "Auth middleware needs rate limiting before production deploy" })
+```
+
+Threads include:
+- A unique thread ID (e.g., `t-a1b2c3d4`)
+- Description text
+- Creation timestamp
+- Optional Linear issue link
+
+## Semantic Deduplication
+
+GitMem uses cosine similarity (threshold > 0.85) to prevent duplicate threads. If you try to create a thread that's semantically identical to an existing one, GitMem returns the existing thread instead.
+
+## Thread Lifecycle
+
+```
+create → surface at session_start → resolve
+```
+
+1. **Create** — `create_thread` during a session
+2. **Surface** — Open threads appear in the next `session_start` banner
+3. **Resolve** — `resolve_thread` with a resolution note when complete
+
+## Managing Threads
+
+| Tool | Purpose |
+|------|---------|
+| `list_threads` | See all open threads |
+| `resolve_thread` | Mark a thread as done |
+| `cleanup_threads` | Triage by health (active/cooling/dormant) |
+
+### Thread Health
+
+`cleanup_threads` categorizes threads by vitality:
+
+- **Active** — Recently created or referenced
+- **Cooling** — Not referenced in a while
+- **Dormant** — Untouched for 30+ days (auto-archivable)
+
+### Suggested Threads
+
+`session_start` may suggest threads based on session context. You can:
+- **Promote** — `promote_suggestion` converts it to a real thread
+- **Dismiss** — `dismiss_suggestion` suppresses it (3 dismissals = permanent suppression)
+
+========================================================================
+# Tiers
+URL: https://gitmem.ai/docs/concepts/tiers
+Description: GitMem's tier system and how it affects available features.
+========================================================================
+
+# Tiers
+
+GitMem has three tiers that control which tools and storage backends are available.
+
+## Free
+
+- **Storage:** Local `.gitmem/` directory
+- **Search:** Local vector cache
+- **Tools:** 23 core tools
+- **Cost:** $0
+- **Best for:** Solo developers, single-machine workflows
+
+Set via: `GITMEM_TIER=free` (default)
+
+## Pro (Coming Soon)
+
+- **Storage:** Supabase PostgreSQL with pgvector
+- **Search:** Semantic search via embeddings
+- **Tools:** 29 tools (adds batch, transcripts, cache management)
+- **Best for:** Teams, multi-machine workflows, production use
+
+Pro is currently in development. [Join the mailing list](https://gitmem.dev) to get notified when it launches.
+
+## Additional Tools (Pro)
+
+These tools will be available when Pro launches:
+
+| Tool | Purpose |
+|------|---------|
+| `record_scar_usage_batch` | Record multiple scar applications at once |
+| `save_transcript` | Save session transcript to storage |
+| `get_transcript` | Retrieve a saved transcript |
+| `search_transcripts` | Semantic search over transcript chunks |
+| `cache_status` | Show local cache status |
+| `cache_health` | Compare local cache vs remote |
+| `cache_flush` | Force reload from Supabase |
+
+========================================================================
+# Contributing
+URL: https://gitmem.ai/docs/contributing
+Description: How to contribute to GitMem.
+========================================================================
+
+# Contributing
+
+GitMem is open source. Contributions are welcome.
+
+## Development Setup
+
+```bash
+git clone https://github.com/nTEG-dev/gitmem
+cd gitmem
+npm install
+npm run build
+```
+
+## Running Tests
+
+```bash
+# Unit tests (fast, no deps)
+npm run test:unit
+
+# Smoke tests (MCP server boot)
+npx vitest run --config vitest.smoke.config.ts
+
+# All tests
+npm test
+```
+
+See [Testing](/docs/contributing/testing) for the full test pyramid.
+
+## Project Structure
+
+```
+gitmem/
+├── src/
+│   ├── server.ts           # MCP server entry
+│   ├── tools/              # Tool implementations
+│   │   ├── definitions.ts  # Tool schemas (source of truth)
+│   │   ├── recall.ts       # Scar surfacing
+│   │   ├── session-start.ts
+│   │   └── ...
+│   ├── services/           # Business logic
+│   │   ├── tier.ts         # Tier gating
+│   │   ├── startup.ts      # Cache initialization
+│   │   └── ...
+│   └── types/              # TypeScript types
+├── tests/
+│   ├── unit/               # Unit tests
+│   ├── smoke/              # Smoke tests
+│   ├── integration/        # Integration tests (Docker)
+│   └── e2e/                # End-to-end tests
+├── apps/
+│   └── docs/               # This documentation site
+└── docs/                   # Internal development docs
+```
+
+## Submitting Changes
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-change`
+3. Make your changes with tests
+4. Run the test suite: `npm test`
+5. Submit a pull request
+
+## Code Style
+
+- TypeScript strict mode
+- ESM-only (no CommonJS)
+- `console.error` for diagnostics (never `console.log` — it corrupts MCP stdio)
+
+========================================================================
+# Testing
+URL: https://gitmem.ai/docs/contributing/testing
+Description: GitMem's test pyramid and how to run each tier.
+========================================================================
+
+# Testing
+
+GitMem uses a 6-tier test pyramid. All runnable tests must pass before shipping.
+
+## Test Tiers
+
+### Tier 1: Unit Tests
+
+```bash
+npm run test:unit
+```
+
+- **Count:** 660+ tests
+- **Speed:** ~3 seconds
+- **Dependencies:** None
+- **Coverage:** Schema validation, pure functions, golden regressions
+
+### Tier 2: Smoke Tests
+
+```bash
+npx vitest run --config vitest.smoke.config.ts
+```
+
+- **Count:** 9 tests (4 free + 5 pro)
+- **Speed:** ~5 seconds
+- **Dependencies:** None (free) / Supabase (pro)
+- **Coverage:** MCP server boot, tool registration, basic stdio calls
+
+### Tier 3: Integration Tests
+
+```bash
+npx vitest run --config vitest.integration.config.ts
+```
+
+- **Count:** 63 tests
+- **Speed:** ~30 seconds
+- **Dependencies:** Docker (Supabase PostgreSQL)
+- **Coverage:** Database operations, session lifecycle, cache, query plans
+
+### Tier 4: E2E Tests
+
+```bash
+npx vitest run --config vitest.e2e.config.ts
+```
+
+- **Count:** 60 tests
+- **Speed:** ~75 seconds
+- **Dependencies:** Varies by suite
+- **Coverage:** Full install flow, hooks, MCP via stdio
+
+### Tier 5: User Journey
+
+```bash
+npx vitest run tests/e2e/user-journey.test.ts --config vitest.e2e.config.ts
+```
+
+- **Count:** 6 tests
+- **Speed:** ~60 seconds
+- **Dependencies:** Claude API key
+- **Coverage:** Real Claude session verifying hooks, tools, and ceremony
+
+### Tier 6: Performance
+
+```bash
+npx vitest bench --config vitest.perf.config.ts
+```
+
+- **Count:** 4 benchmark files
+- **Speed:** ~30 seconds
+- **Coverage:** Cold start latency, recall speed, cache performance
+
+## Quick Run (No Docker)
+
+For development, run the tests that don't need Docker:
+
+```bash
+npm run test:unit && npx vitest run --config vitest.smoke.config.ts
+```
+
+This covers 670+ tests in under 10 seconds.
+
+========================================================================
+# Configuration
+URL: https://gitmem.ai/docs/getting-started/configuration
+Description: Configure GitMem with environment variables and config files.
+========================================================================
+
+# Configuration
+
+GitMem works out of the box with zero configuration on the free tier. For Pro tier features (Supabase storage, semantic search), you'll need environment variables.
+
+## Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Override the storage directory location |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Default project namespace for scoping |
+
+## Storage
+
+### Free Tier (Local)
+
+All data stored in `.gitmem/` relative to your project root:
+
+```
+.gitmem/
+├── active-sessions.json    # Current session registry
+├── sessions/               # Session data per session ID
+├── learnings/              # Scars, wins, patterns (JSON)
+├── decisions/              # Decision log
+├── threads/                # Open threads tracking
+└── cache/                  # Local vector search cache
+```
+
+Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
+
+### Pro Tier (Coming Soon)
+
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.dev) to get notified.
+
+## Project Namespaces
+
+GitMem supports arbitrary project names to scope sessions and searches:
+
+```
+session_start({ project: "my-api" })
+recall({ plan: "add auth", project: "my-api" })
+```
+
+Projects are free-form strings. Use them to separate concerns when working across multiple codebases or domains.
+
+========================================================================
+# Your First Session
+URL: https://gitmem.ai/docs/getting-started/first-session
+Description: Walk through a complete GitMem session from start to close.
+========================================================================
+
+# Your First Session
+
+This walkthrough shows you what a GitMem-powered session looks like from your AI agent's perspective.
+
+## 1. Open a Session
+
+```
+> "Start a GitMem session"
+```
+
+The agent calls `session_start`, which:
+- Creates a session with a unique ID
+- Loads context from the last session (threads, decisions, rapport)
+- Displays a session banner with status
+
+## 2. Recall Before Acting
+
+Before making changes, the agent checks institutional memory:
+
+```
+> "Add authentication to the API"
+```
+
+The agent calls `recall` with the plan "add authentication":
+
+```
+recall({ plan: "add authentication to the API" })
+```
+
+GitMem returns relevant scars:
+- "JWT token expiry must be validated server-side, not just client-side"
+- "Always hash passwords with bcrypt, not SHA-256"
+
+The agent acknowledges these lessons and applies them.
+
+## 3. Create Learnings
+
+When the agent discovers something useful:
+
+```
+create_learning({
+  learning_type: "scar",
+  title: "OAuth redirect URI must match exactly",
+  description: "Google OAuth rejects requests where the redirect URI doesn't match character-for-character...",
+  severity: "medium",
+  counter_arguments: [
+    "In development, localhost variations are usually fine",
+    "Some providers support wildcard redirects"
+  ]
+})
+```
+
+## 4. Close the Session
+
+```
+> "Let's wrap up"
+```
+
+The agent calls `session_close`, which persists:
+- What was accomplished
+- What scars were applied
+- Open threads for next session
+- A brief reflection
+
+## What You Get
+
+After a few sessions, GitMem builds a knowledge base of:
+- **Scars** — Mistakes to avoid (surfaced automatically via recall)
+- **Wins** — Approaches that worked well
+- **Patterns** — Reusable strategies
+- **Decisions** — Architectural choices with rationale
+- **Threads** — Unfinished work that carries across sessions
+
+========================================================================
+# Free vs Pro
+URL: https://gitmem.ai/docs/getting-started/free-vs-pro
+Description: What you get today with the free tier and what's coming with Pro.
+========================================================================
+
+# Free vs Pro
+
+GitMem ships with a fully functional free tier — everything you need to give your AI agents institutional memory. Pro will add cloud storage and team features.
+
+## What's Included (Free Tier)
+
+| Feature | How It Works |
+|---------|-------------|
+| **Session Management** | Local `.gitmem/` directory |
+| **Recall (scar surfacing)** | BM25 text search over local scars |
+| **Create scars/wins/patterns** | Local JSON files |
+| **Threads** | Local tracking across sessions |
+| **Session history** | Last session context loaded on start |
+| **Semantic search** | Local search over learnings |
+| **Multi-agent** | Context injection for agents on the same machine |
+| **Analytics** | Basic session analytics |
+| **Tools** | 23 core tools |
+
+## Pro Tier — Coming Soon
+
+Pro adds cloud-powered features for teams and power users:
+
+| Feature | What Pro Adds |
+|---------|--------------|
+| **Storage** | Supabase PostgreSQL (persistent, cross-machine) |
+| **Search** | pgvector semantic search with embeddings |
+| **Multi-agent** | Shared cloud memory across machines |
+| **Session history** | Full history with search |
+| **Transcripts** | Save and search session transcripts |
+| **Batch operations** | Batch scar recording |
+| **Knowledge graph** | Triple-based graph traversal |
+| **Cache management** | Status, health, and flush tools |
+| **Tools** | 29 tools (6 additional) |
+
+**Pro will be for you if:**
+- You need shared memory across machines or teams
+- You want full semantic search with embeddings
+- You need session transcript storage
+- You're running multi-agent workflows across environments
+
+[Join the mailing list](https://gitmem.dev) to get notified when Pro launches.
+
+========================================================================
+# Overview
+URL: https://gitmem.ai/docs/getting-started
+Description: Get GitMem running in under 5 minutes.
+========================================================================
+
+# Getting Started
+
+GitMem gives your AI coding agents institutional memory — the ability to learn from mistakes and remember what works across sessions.
+
+## Prerequisites
+
+- **Node.js 22+** (required by Fumadocs MDX)
+- An MCP-compatible client: [Claude Code](https://claude.com/claude-code), [Claude Desktop](https://claude.ai/download), or [Cursor](https://cursor.sh)
+
+## Quick Start (30 seconds)
+
+```bash
+# In any project directory
+npx gitmem init
+```
+
+The interactive wizard detects your existing config and sets up everything:
+- `.gitmem/` directory with 12 starter scars
+- `.mcp.json` with gitmem server entry
+- `CLAUDE.md` with memory protocol instructions
+- `.claude/settings.json` with lifecycle hooks and tool permissions
+- `.gitignore` updated to exclude `.gitmem/`
+
+Already have `.mcp.json`, `CLAUDE.md`, or hooks? The wizard merges without destroying your existing config. Re-running is safe — completed steps are skipped.
+
+## What Happens Next
+
+1. **Start a session** — Your agent calls `session_start` to load context
+2. **Recall before acting** — Before consequential actions, `recall` surfaces relevant scars
+3. **Learn from outcomes** — Create scars, wins, and patterns as you discover them
+4. **Close cleanly** — `session_close` persists what happened for future sessions
+
+## Next Steps
+
+- [Installation](/docs/getting-started/installation) — Detailed setup for all environments
+- [Configuration](/docs/getting-started/configuration) — Environment variables and config files
+- [Your First Session](/docs/getting-started/first-session) — Step-by-step walkthrough
+- [Free vs Pro](/docs/getting-started/free-vs-pro) — Tier comparison
+
+========================================================================
+# Installation
+URL: https://gitmem.ai/docs/getting-started/installation
+Description: Install GitMem via npx, global install, or MCP configuration.
+========================================================================
+
+# Installation
+
+## Option 1: Init Wizard (Recommended)
+
+```bash
+cd your-project
+npx gitmem init
+```
+
+The interactive wizard walks you through 6 steps:
+
+1. **Memory Store** — Creates `.gitmem/` with 12 starter scars
+2. **MCP Server** — Adds gitmem to `.mcp.json`
+3. **Project Instructions** — Appends memory protocols to `CLAUDE.md`
+4. **Tool Permissions** — Adds `mcp__gitmem__*` to `.claude/settings.json`
+5. **Lifecycle Hooks** — Merges session/recall hooks (preserves your existing hooks)
+6. **Gitignore** — Adds `.gitmem/` to `.gitignore`
+
+### Flags
+
+```bash
+# Accept all defaults (non-interactive)
+npx gitmem init --yes
+
+# Preview what would change (no files written)
+npx gitmem init --dry-run
+
+# Set a project namespace
+npx gitmem init --project my-app
+```
+
+### Idempotent
+
+Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+
+### Uninstall
+
+```bash
+npx gitmem uninstall
+```
+
+Cleanly reverses everything init did. Your `.gitmem/` data is preserved by default.
+
+```bash
+# Also delete .gitmem/ memory data
+npx gitmem uninstall --all
+```
+
+## Option 2: MCP Server Only
+
+If you want to configure the MCP server manually without the init wizard:
+
+### Claude Code
+
+```bash
+claude mcp add gitmem -- npx -y gitmem-mcp
+```
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "npx",
+      "args": ["-y", "gitmem-mcp"]
+    }
+  }
+}
+```
+
+## Option 3: Global Install
+
+```bash
+npm install -g gitmem-mcp
+```
+
+Then reference the global binary in your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "gitmem": {
+      "command": "gitmem-mcp"
+    }
+  }
+}
+```
+
+## Verify Installation
+
+After setup, ask your AI agent:
+
+> "Run gitmem-help"
+
+You should see a list of available commands with your current tier and tool count.
+
+## Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Storage directory |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Project namespace for scoping |
+
+See [Configuration](/docs/getting-started/configuration) for full details.
+
+========================================================================
+# Closing Ceremony
+URL: https://gitmem.ai/docs/guides/closing-ceremony
+Description: How to properly close a GitMem session with reflection and persistence.
+========================================================================
+
+# Closing Ceremony
+
+The closing ceremony is GitMem's session persistence ritual. It captures what happened, what was learned, and what carries forward.
+
+## Quick Close vs Standard Close
+
+| Type | When to Use | What Happens |
+|------|-------------|--------------|
+| **Quick** | Short sessions (< 30 min), purely exploratory | Minimal persistence, no reflection |
+| **Standard** | All substantive work sessions | Full 9-question reflection |
+
+## Standard Close Flow
+
+### Step 1: Read Session State
+
+The agent reads `.gitmem/active-sessions.json` to recover the session ID and any surfaced scars.
+
+### Step 2: Answer 9 Questions
+
+The agent reflects on:
+
+1. **What broke** that you didn't expect?
+2. **What took longer** than it should have?
+3. **What would you do differently** next time?
+4. **What pattern worked** well?
+5. **What assumption was wrong?**
+6. **Which scars** did you apply?
+7. **What should be captured** as institutional memory?
+8. **How did the human prefer to work?** (rapport)
+9. **What collaborative dynamic** worked or didn't? (rapport)
+
+### Step 3: Human Review
+
+The agent asks: "Any corrections or additions?"
+
+This human checkpoint prevents false learnings from being persisted.
+
+### Step 4: Create Learnings
+
+Any new scars, wins, or patterns identified in Q7 are created **before** session close.
+
+### Step 5: Persist
+
+`session_close` writes the full session record with:
+- Close compliance metadata
+- Scar usage records
+- Open threads
+- Rapport notes for the next session
+
+## Writing the Payload
+
+For standard closes, write heavy data to `.gitmem/closing-payload.json` before calling `session_close`. The tool reads this file automatically.
+
+```json
+{
+  "closing_reflection": "Session focused on auth migration...",
+  "task_completion": "partial",
+  "scars_to_record": [],
+  "open_threads": ["Rate limiting still needs implementation"],
+  "decisions": ["Chose JWT over session cookies for stateless auth"]
+}
+```
+
+========================================================================
+# Error Handling
+URL: https://gitmem.ai/docs/guides/error-handling
+Description: Understanding and debugging GitMem errors.
+========================================================================
+
+# Error Handling
+
+GitMem surfaces errors clearly so you can diagnose and fix issues quickly.
+
+## Error Response Format
+
+All tools return errors in a consistent format:
+
+```json
+{
+  "success": false,
+  "errors": ["Missing required field: severity"],
+  "message": "Validation failed"
+}
+```
+
+The `errors` array contains specific, actionable error messages.
+
+## Common Errors
+
+### Invalid Session ID
+
+```
+Error: Invalid session_id format. Expected UUID (e.g., '393adb34-xxxx-xxxx-xxxx-xxxxxxxxxxxx') or short ID (e.g., '393adb34'). Did you forget to run session_start first?
+```
+
+**Cause:** Passing a placeholder like `SESSION_AUTO` instead of a real session ID.
+**Fix:** Call `session_start` first, then use the returned session ID.
+
+### Missing Severity for Scars
+
+```
+Error: Missing required field: severity (must be critical, high, medium, or low)
+```
+
+**Cause:** Creating a scar without specifying severity.
+**Fix:** Add `severity: "medium"` (or appropriate level) to your `create_learning` call.
+
+### Missing Counter-Arguments
+
+```
+Error: Scars require at least 2 counter_arguments
+```
+
+**Cause:** Creating a scar with fewer than 2 counter-arguments.
+**Fix:** Add at least 2 reasons why someone might reasonably ignore this scar.
+
+## Silent Failure Prevention
+
+GitMem tracks all fire-and-forget operations (metrics, cache writes, embeddings) via the Effect Tracker. Use `health` to see success/failure rates:
+
+```
+health({ failure_limit: 10 })
+```
+
+This surfaces any background operations that failed silently.
+
+## MCP Transport Errors
+
+If you see garbled JSON or "invalid JSON" errors in your MCP client:
+
+1. GitMem uses `console.error` (stderr) for all diagnostics
+2. `console.log` (stdout) is reserved for MCP JSON-RPC
+3. If a plugin or extension writes to stdout, it corrupts the transport
+
+Check that no other tools are writing to stdout in the same process.
+
+========================================================================
+# Multi-Agent Workflows
+URL: https://gitmem.ai/docs/guides/multi-agent
+Description: Inject institutional memory into sub-agents and capture their findings.
+========================================================================
+
+# Multi-Agent Workflows
+
+GitMem helps coordinate teams of agents on a single machine. The lead agent can inject context into sub-agents and absorb their findings back into institutional memory.
+
+> **Note:** Cross-machine shared memory requires the Pro tier (coming soon). The workflows below work on the free tier for agents running on the same machine.
+
+## Context Injection
+
+Before spawning a sub-agent, use `prepare_context` to generate a memory payload:
+
+```
+prepare_context({
+  plan: "review authentication middleware",
+  format: "compact"  // ~500 tokens
+})
+```
+
+Formats:
+- **`full`** — Rich markdown, unlimited tokens
+- **`compact`** — ~500 tokens, one line per scar
+- **`gate`** — ~100 tokens, blocking scars only
+
+Include the payload in the sub-agent's prompt so it starts with institutional awareness.
+
+## Absorbing Observations
+
+When a sub-agent returns, capture its findings:
+
+```
+absorb_observations({
+  observations: [
+    {
+      source: "Sub-Agent: code review",
+      text: "Auth middleware doesn't validate token expiry",
+      severity: "scar_candidate"
+    },
+    {
+      source: "Sub-Agent: code review",
+      text: "Good use of middleware pattern for request validation",
+      severity: "info"
+    }
+  ]
+})
+```
+
+Severity levels:
+- **`info`** — Noteworthy but not actionable
+- **`warning`** — Potential issue worth tracking
+- **`scar_candidate`** — Should be promoted to a scar
+
+## Best Practices
+
+1. **Always `prepare_context` before spawning** — The 2-3 second cost prevents agents from repeating known mistakes
+2. **Always `absorb_observations` after return** — Don't lose sub-agent findings
+3. **Use `compact` format for most agents** — `gate` for simple tasks, `full` for complex reviews
+4. **Scope by project** — Use project namespaces to keep memories relevant
+
+========================================================================
+# GitMem
+URL: https://gitmem.ai/docs
+Description: Institutional memory for AI coding agents. Memory that compounds.
+========================================================================
+
+# GitMem
+
+**Institutional memory for AI coding agents.** GitMem is an MCP server that gives AI agents the ability to learn from past mistakes, remember what worked, and share knowledge across sessions.
+
+## What is GitMem?
+
+Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons as **scars** (mistakes to avoid), **wins** (approaches that worked), and **patterns** (reusable strategies) — then surfaces them automatically before the agent takes similar actions.
+
+## Key Features
+
+- **Automatic Recall** — Before taking action, agents check institutional memory for relevant lessons
+- **Session Continuity** — Context carries across sessions via threads and session history
+- **Multi-Agent** — Teams of agents share the same institutional memory
+- **MCP Native** — Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, etc.)
+- **Free Tier** — Local `.gitmem/` storage with no external dependencies
+
+## Quick Start
+
+```bash
+npx gitmem init
+```
+
+One command sets up everything: `.gitmem/` directory, `.mcp.json`, `CLAUDE.md`, hooks, and permissions. Already have existing config? The wizard merges without destroying anything.
+
+[Get Started](/docs/getting-started) | [Concepts](/docs/concepts) | [Tool Reference](/docs/tools)
+
+========================================================================
+# absorb_observations
+URL: https://gitmem.ai/docs/tools/absorb-observations
+Description: Capture observations from sub-agents and teammates.
+========================================================================
+
+# absorb_observations
+
+**Tier:** Free · **Aliases:** `gitmem-ao`, `gm-absorb`
+
+Capture observations from sub-agents and teammates. The lead agent parses findings from sub-agent responses, then calls this to persist and analyze them. Identifies scar candidates.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | string | No | Linear issue or task identifier (optional) |
+| `observations` | object[] | Yes | Array of observations from sub-agents/teammates |
+
+### observations items
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `source` | string | Yes | Who made this observation (e.g., "Sub-Agent: code review") |
+| `text` | string | Yes | What was observed |
+| `severity` | `"info"` \| `"warning"` \| `"scar_candidate"` | Yes | Observation severity |
+| `context` | string | No | File, function, or area (optional) |
+
+========================================================================
+# analyze
+URL: https://gitmem.ai/docs/tools/analyze
+Description: Session analytics and insights engine.
+========================================================================
+
+# analyze
+
+**Tier:** Pro · **Aliases:** `gitmem-analyze`, `gm-analyze`
+
+Session analytics and insights engine. Returns formatted markdown by default. Use format=json for raw data.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `lens` | `"summary"` \| `"reflections"` \| `"blindspots"` | No | Analysis lens to apply (default: summary) |
+| `days` | number | No | Number of days to analyze (default: 30) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `agent` | string | No | Filter by agent identity (e.g., CLI, DAC, CODA-1) |
+| `format` | `"text"` \| `"json"` | No | Output format: text (default, compact markdown) or json (raw data) |
+
+========================================================================
+# archive_learning
+URL: https://gitmem.ai/docs/tools/archive-learning
+Description: Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp.
+========================================================================
+
+# archive_learning
+
+**Tier:** Pro · **Aliases:** `gitmem-al`, `gm-archive`
+
+Archives a learning (scar/win/pattern) by setting is_active=false and recording archived_at timestamp. Archived learnings are excluded from recall and search results but preserved for audit trail.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | UUID of the learning to archive |
+| `reason` | string | No | Optional reason for archiving (e.g., 'superseded by OD-XXX', 'no longer relevant') |
+
+========================================================================
+# gitmem-cache-flush
+URL: https://gitmem.ai/docs/tools/cache-flush
+Description: gitmem-cache-flush - Force reload cache from Supabase (use when out of sync).
+========================================================================
+
+# gitmem-cache-flush
+
+**Tier:** Pro · **Aliases:** `gm-cache-f`
+
+gitmem-cache-flush - Force reload cache from Supabase (use when out of sync)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# gitmem-cache-health
+URL: https://gitmem.ai/docs/tools/cache-health
+Description: gitmem-cache-health - Compare local cache against remote Supabase (detect out-of-sync).
+========================================================================
+
+# gitmem-cache-health
+
+**Tier:** Pro · **Aliases:** `gm-cache-h`
+
+gitmem-cache-health - Compare local cache against remote Supabase (detect out-of-sync)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# gitmem-cache-status
+URL: https://gitmem.ai/docs/tools/cache-status
+Description: gitmem-cache-status - Show local search cache status (scar count, age, staleness).
+========================================================================
+
+# gitmem-cache-status
+
+**Tier:** Pro · **Aliases:** `gm-cache-s`
+
+gitmem-cache-status - Show local search cache status (scar count, age, staleness)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# cleanup_threads
+URL: https://gitmem.ai/docs/tools/cleanup-threads
+Description: Triage open threads by lifecycle health.
+========================================================================
+
+# cleanup_threads
+
+**Tier:** Free · **Aliases:** `gitmem-cleanup`, `gm-cleanup`
+
+Triage open threads by lifecycle health. Groups threads as active/cooling/dormant with vitality scores. Use auto_archive=true to archive threads dormant 30+ days. Review and resolve stale threads to keep your thread list healthy.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `auto_archive` | boolean | No | If true, auto-archive threads that have been dormant for 30+ days |
+
+========================================================================
+# confirm_scars
+URL: https://gitmem.ai/docs/tools/confirm-scars
+Description: Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence.
+========================================================================
+
+# confirm_scars
+
+**Tier:** Free · **Aliases:** `gitmem-cs`, `gm-confirm`
+
+Confirm surfaced scars with APPLYING/N_A/REFUTED decisions and evidence. REQUIRED after recall() before consequential actions. Each recalled scar must be addressed. APPLYING: past-tense evidence of compliance. N_A: explain why scar doesn't apply. REFUTED: acknowledge risk of overriding.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `confirmations` | object[] | Yes | One confirmation per recalled scar. All recalled scars must be addressed. |
+
+### confirmations items
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scar_id` | string | Yes | UUID of the surfaced scar (from recall result) |
+| `decision` | `"APPLYING"` \| `"N_A"` \| `"REFUTED"` | Yes | APPLYING: scar is relevant, evidence of compliance. N_A: scar doesn't apply, explain why. REFUTED: overriding scar, acknowledge risk. |
+| `evidence` | string | Yes | Past-tense evidence (APPLYING), scenario comparison (N_A), or risk acknowledgment (REFUTED). Minimum 50 characters. |
+
+========================================================================
+# create_decision
+URL: https://gitmem.ai/docs/tools/create-decision
+Description: Log architectural/operational decision to institutional memory.
+========================================================================
+
+# create_decision
+
+**Tier:** Free · **Aliases:** `gitmem-cd`
+
+Log architectural/operational decision to institutional memory
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `title` | string | Yes | Decision title |
+| `decision` | string | Yes | What was decided |
+| `rationale` | string | Yes | Why this decision was made |
+| `alternatives_considered` | string[] | No | Alternatives that were rejected |
+| `personas_involved` | string[] | No | Personas involved in decision |
+| `docs_affected` | string[] | No | Docs/files affected by this decision (relative paths from repo root) |
+| `linear_issue` | string | No | Associated Linear issue |
+| `session_id` | string | No | Current session ID |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# create_learning
+URL: https://gitmem.ai/docs/tools/create-learning
+Description: Create scar, win, or pattern entry in institutional memory.
+========================================================================
+
+# create_learning
+
+**Tier:** Free · **Aliases:** `gitmem-cl`, `gm-scar`
+
+Create scar, win, or pattern entry in institutional memory
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | Yes | Type of learning |
+| `title` | string | Yes | Learning title |
+| `description` | string | Yes | Detailed description |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Severity level (required for scars) |
+| `scar_type` | `"process"` \| `"incident"` \| `"context"` | No | Scar type (process, incident, or context). Defaults to 'process'. |
+| `counter_arguments` | string[] | No | Counter-arguments for scars (min 2 required) |
+| `problem_context` | string | No | Problem context (for wins) |
+| `solution_approach` | string | No | Solution approach (for wins) |
+| `applies_when` | string[] | No | When this pattern applies |
+| `domain` | string[] | No | Domain tags |
+| `keywords` | string[] | No | Search keywords |
+| `source_linear_issue` | string | No | Source Linear issue |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# create_thread
+URL: https://gitmem.ai/docs/tools/create-thread
+Description: Create an open thread to track unresolved work across sessions.
+========================================================================
+
+# create_thread
+
+**Tier:** Free · **Aliases:** `gitmem-ct`, `gm-thread-new`
+
+Create an open thread to track unresolved work across sessions. Includes semantic dedup: if a similar open thread exists (cosine similarity > 0.85), returns the existing thread instead. Check the 'deduplicated' field in the response.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `text` | string | Yes | Thread description — what needs to be tracked or resolved |
+| `linear_issue` | string | No | Associated Linear issue (e.g., OD-XXX) |
+
+========================================================================
+# dismiss_suggestion
+URL: https://gitmem.ai/docs/tools/dismiss-suggestion
+Description: Dismiss a suggested thread.
+========================================================================
+
+# dismiss_suggestion
+
+**Tier:** Free · **Aliases:** `gitmem-ds`, `gm-dismiss`
+
+Dismiss a suggested thread. Incremented dismiss count — suggestions dismissed 3+ times are permanently suppressed.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `suggestion_id` | string | Yes | Suggestion ID (e.g., "ts-a1b2c3d4") from suggested_threads list |
+
+========================================================================
+# get_transcript
+URL: https://gitmem.ai/docs/tools/get-transcript
+Description: Retrieve a session transcript from storage (OD-467).
+========================================================================
+
+# get_transcript
+
+**Tier:** Dev · **Aliases:** `gitmem-gt`
+
+Retrieve a session transcript from storage (OD-467)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | Yes | Session ID to retrieve transcript for |
+
+========================================================================
+# graph_traverse
+URL: https://gitmem.ai/docs/tools/graph-traverse
+Description: Traverse the knowledge graph over institutional memory triples.
+========================================================================
+
+# graph_traverse
+
+**Tier:** Pro · **Aliases:** `gitmem-graph`, `gm-graph`
+
+Traverse the knowledge graph over institutional memory triples. Answers: 'show me everything connected to OD-466', 'what did CLI produce', 'trace this decision back', 'which issues produced the most learnings'. Four lenses: connected_to, produced_by, provenance, stats.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `lens` | `"connected_to"` \| `"produced_by"` \| `"provenance"` \| `"stats"` | Yes | Traversal mode: connected_to (all connections to a node), produced_by (what an agent/persona produced), provenance (trace origin chain), stats (aggregate counts) |
+| `node` | string | No | Starting node. Examples: 'OD-466', 'CLI', 'Scar: Done ≠ Deployed'. Required for all lenses except stats. |
+| `predicate` | `"created_in"` \| `"influenced_by"` \| `"supersedes"` \| `"demonstrates"` | No | Filter by predicate (optional) |
+| `depth` | number | No | Max chain depth for provenance lens (default: 3) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `limit` | number | No | Max triples to return (default: 50) |
+
+========================================================================
+# health
+URL: https://gitmem.ai/docs/tools/health
+Description: Show write health for the current session.
+========================================================================
+
+# health
+
+**Tier:** Free · **Aliases:** `gitmem-health`, `gm-health`
+
+Show write health for the current session. Reports success/failure rates for all tracked fire-and-forget operations (metrics, cache, triple writes, embeddings, scar usage). Use this to diagnose silent failures.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `failure_limit` | number | No | Max number of recent failures to return (default: 10) |
+
+========================================================================
+# gitmem-help
+URL: https://gitmem.ai/docs/tools/help
+Description: gitmem-help - Show available commands with ASCII art header.
+========================================================================
+
+# gitmem-help
+
+**Tier:** Free
+
+gitmem-help - Show available commands with ASCII art header
+
+========================================================================
+# Tool Reference
+URL: https://gitmem.ai/docs/tools
+Description: Complete reference for all GitMem MCP tools.
+========================================================================
+
+# Tool Reference
+
+GitMem exposes tools via the [Model Context Protocol](https://modelcontextprotocol.io). Each tool has a canonical name and short aliases for convenience.
+
+## Core Tools (All Tiers)
+
+### Session Management
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [session_start](/docs/tools/session-start) | `gitmem-ss`, `gm-open` | Initialize session with context |
+| [session_refresh](/docs/tools/session-refresh) | `gitmem-sr`, `gm-refresh` | Reload context mid-session |
+| [session_close](/docs/tools/session-close) | `gitmem-sc`, `gm-close` | Close session with reflection |
+
+### Memory Operations
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [recall](/docs/tools/recall) | `gitmem-r` | Surface relevant scars before acting |
+| [confirm_scars](/docs/tools/confirm-scars) | `gitmem-cs`, `gm-confirm` | Confirm recalled scars (APPLYING/N_A/REFUTED) |
+| [create_learning](/docs/tools/create-learning) | `gitmem-cl`, `gm-scar` | Create scar/win/pattern |
+| [create_decision](/docs/tools/create-decision) | `gitmem-cd` | Log architectural decision |
+| [record_scar_usage](/docs/tools/record-scar-usage) | `gitmem-rs` | Track scar application |
+
+### Search and Discovery
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [search](/docs/tools/search) | `gitmem-search`, `gm-search` | Explore institutional memory |
+| [log](/docs/tools/log) | `gitmem-log`, `gm-log` | List recent learnings |
+| [analyze](/docs/tools/analyze) | `gitmem-analyze`, `gm-analyze` | Session analytics |
+
+### Thread Management
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [list_threads](/docs/tools/list-threads) | `gitmem-lt`, `gm-threads` | List open threads |
+| [create_thread](/docs/tools/create-thread) | `gitmem-ct`, `gm-thread-new` | Create thread with dedup |
+| [resolve_thread](/docs/tools/resolve-thread) | `gitmem-rt`, `gm-resolve` | Mark thread resolved |
+| [promote_suggestion](/docs/tools/promote-suggestion) | `gitmem-ps`, `gm-promote` | Promote suggested thread |
+| [dismiss_suggestion](/docs/tools/dismiss-suggestion) | `gitmem-ds`, `gm-dismiss` | Dismiss suggested thread |
+| [cleanup_threads](/docs/tools/cleanup-threads) | `gitmem-cleanup`, `gm-cleanup` | Triage by health |
+
+### Multi-Agent
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [prepare_context](/docs/tools/prepare-context) | `gitmem-pc`, `gm-pc` | Memory payload for sub-agents |
+| [absorb_observations](/docs/tools/absorb-observations) | `gitmem-ao`, `gm-absorb` | Capture sub-agent findings |
+
+### Utility
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [graph_traverse](/docs/tools/graph-traverse) | `gitmem-graph`, `gm-graph` | Knowledge graph traversal |
+| [archive_learning](/docs/tools/archive-learning) | `gitmem-al`, `gm-archive` | Archive a learning |
+| [health](/docs/tools/health) | `gitmem-health`, `gm-health` | Write health report |
+| `gitmem-help` | — | Show available commands |
+
+## Pro-Only Tools (Coming Soon)
+
+These tools will be available when the Pro tier launches:
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| record_scar_usage_batch | `gitmem-rsb` | Batch scar recording |
+| save_transcript | `gitmem-st` | Save session transcript |
+| get_transcript | `gitmem-gt` | Retrieve transcript |
+| search_transcripts | `gitmem-stx`, `gm-stx` | Search transcripts |
+| cache_status | `gitmem-cache-status`, `gm-cache-s` | Cache status |
+| cache_health | `gitmem-cache-health`, `gm-cache-h` | Cache vs remote comparison |
+| cache_flush | `gitmem-cache-flush`, `gm-cache-f` | Force cache reload |
+
+========================================================================
+# list_threads
+URL: https://gitmem.ai/docs/tools/list-threads
+Description: List open threads across recent sessions.
+========================================================================
+
+# list_threads
+
+**Tier:** Free · **Aliases:** `gitmem-lt`, `gm-threads`
+
+List open threads across recent sessions. Shows unresolved work items that carry over between sessions, with IDs for resolution. Use resolve_thread to mark threads as done.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | `"open"` \| `"resolved"` | No | Filter by status (default: open) |
+| `include_resolved` | boolean | No | Include recently resolved threads (default: false) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# log
+URL: https://gitmem.ai/docs/tools/log
+Description: List recent learnings chronologically (like git log).
+========================================================================
+
+# log
+
+**Tier:** Free · **Aliases:** `gitmem-log`, `gm-log`
+
+List recent learnings chronologically (like git log). Shows scars, wins, and patterns ordered by creation date.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | number | No | Number of entries to return (default: 10) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
+| `since` | number | No | Days to look back (e.g., 7 = last week) |
+
+========================================================================
+# prepare_context
+URL: https://gitmem.ai/docs/tools/prepare-context
+Description: Generate portable memory payload for sub-agent injection.
+========================================================================
+
+# prepare_context
+
+**Tier:** Free · **Aliases:** `gitmem-pc`, `gm-pc`
+
+Generate portable memory payload for sub-agent injection. Formats institutional memory into compact or gate payloads that fit in Task tool prompts.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `plan` | string | Yes | What the team is about to do (e.g., 'review auth middleware', 'deploy edge function') |
+| `format` | `"full"` \| `"compact"` \| `"gate"` | Yes | Output format: full (rich markdown), compact (~500 tokens, one-line per scar), gate (~100 tokens, blocking scars only) |
+| `max_tokens` | number | No | Token budget for payload (default: 500 for compact, 100 for gate, unlimited for full) |
+| `agent_role` | string | No | Sub-agent role for relevance filtering (e.g., 'reviewer', 'deployer') — reserved for Phase 3 |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# promote_suggestion
+URL: https://gitmem.ai/docs/tools/promote-suggestion
+Description: Promote a suggested thread to an open thread.
+========================================================================
+
+# promote_suggestion
+
+**Tier:** Free · **Aliases:** `gitmem-ps`, `gm-promote`
+
+Promote a suggested thread to an open thread. Takes a suggestion_id from session_start's suggested_threads list and creates a real thread from it.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `suggestion_id` | string | Yes | Suggestion ID (e.g., "ts-a1b2c3d4") from suggested_threads list |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# recall
+URL: https://gitmem.ai/docs/tools/recall
+Description: Check institutional memory for relevant scars before taking action.
+========================================================================
+
+# recall
+
+**Tier:** Free · **Aliases:** `gitmem-r`
+
+Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `plan` | string | Yes | What you're about to do (e.g., 'implement auth layer', 'deploy to production') |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `match_count` | number | No | Number of scars to return (default: 3) |
+| `issue_id` | string | No | Linear issue identifier for variant assignment (e.g., 'OD-525'). When provided, scars with variants will be randomly assigned and formatted accordingly. |
+
+========================================================================
+# record_scar_usage_batch
+URL: https://gitmem.ai/docs/tools/record-scar-usage-batch
+Description: Track multiple scar applications in a single batch operation (reduces session close latency).
+========================================================================
+
+# record_scar_usage_batch
+
+**Tier:** Dev · **Aliases:** `gitmem-rsb`
+
+Track multiple scar applications in a single batch operation (reduces session close latency)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scars` | object[] | Yes | Array of scar usage entries to record |
+| `project` | string | No | Project scope for scar resolution |
+
+### scars items
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scar_identifier` | string | Yes | UUID or title/description of scar (tool resolves to UUID) |
+| `issue_id` | string | No | Linear issue UUID |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., OD-XXX) |
+| `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
+| `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
+| `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
+| `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
+| `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
+| `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
+| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+
+========================================================================
+# record_scar_usage
+URL: https://gitmem.ai/docs/tools/record-scar-usage
+Description: Track scar application for effectiveness measurement.
+========================================================================
+
+# record_scar_usage
+
+**Tier:** Free · **Aliases:** `gitmem-rs`
+
+Track scar application for effectiveness measurement
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scar_id` | string | Yes | UUID of the scar from orchestra_learnings |
+| `issue_id` | string | No | Linear issue UUID |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., OD-XXX) |
+| `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
+| `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
+| `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
+| `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
+| `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
+| `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
+| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+| `variant_id` | string | No | UUID of the assigned variant from scar_enforcement_variants (for A/B testing) |
+
+========================================================================
+# resolve_thread
+URL: https://gitmem.ai/docs/tools/resolve-thread
+Description: Mark an open thread as resolved.
+========================================================================
+
+# resolve_thread
+
+**Tier:** Free · **Aliases:** `gitmem-rt`, `gm-resolve`
+
+Mark an open thread as resolved. Use thread_id for exact match or text_match for fuzzy matching. Updates session state and .gitmem/threads.json.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `thread_id` | string | No | Thread ID (e.g., "t-a1b2c3d4") for exact resolution |
+| `text_match` | string | No | Fuzzy text match against thread descriptions (fallback if no thread_id) |
+| `resolution_note` | string | No | Brief note explaining how/why thread was resolved |
+
+========================================================================
+# save_transcript
+URL: https://gitmem.ai/docs/tools/save-transcript
+Description: Save full session transcript to storage for training data and post-mortems (OD-467).
+========================================================================
+
+# save_transcript
+
+**Tier:** Dev · **Aliases:** `gitmem-st`
+
+Save full session transcript to storage for training data and post-mortems (OD-467)
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | Yes | Session ID to associate transcript with |
+| `transcript` | string | Yes | Full conversation transcript content |
+| `format` | `"json"` \| `"markdown"` | No | Transcript format (default: json) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+
+========================================================================
+# search_transcripts
+URL: https://gitmem.ai/docs/tools/search-transcripts
+Description: Semantic search over session transcript chunks.
+========================================================================
+
+# search_transcripts
+
+**Tier:** Dev · **Aliases:** `gitmem-stx`, `gm-stx`
+
+Semantic search over session transcript chunks. Generates embedding for query and calls match_transcript_chunks RPC to find relevant conversation fragments across all indexed sessions.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Natural language search query (e.g., 'deployment verification discussion', 'what was decided about caching') |
+| `match_count` | number | No | Maximum number of chunks to return (default: 10, max: 50) |
+| `similarity_threshold` | number | No | Minimum similarity score 0-1 (default: 0.3). Higher values return more relevant results. |
+| `project` | string | No | Project namespace to filter by (e.g.) |
+
+========================================================================
+# search
+URL: https://gitmem.ai/docs/tools/search
+Description: Search institutional memory by query.
+========================================================================
+
+# search
+
+**Tier:** Free · **Aliases:** `gitmem-search`, `gm-search`
+
+Search institutional memory by query. Unlike recall (which is action-oriented), search is exploration-oriented — returns matching scars/wins/patterns without side effects.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Natural language search query (e.g., 'deployment failures', 'Supabase RLS') |
+| `match_count` | number | No | Number of results to return (default: 5) |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `severity` | `"critical"` \| `"high"` \| `"medium"` \| `"low"` | No | Filter by severity level |
+| `learning_type` | `"scar"` \| `"win"` \| `"pattern"` \| `"anti_pattern"` | No | Filter by learning type |
+
+========================================================================
+# session_close
+URL: https://gitmem.ai/docs/tools/session-close
+Description: Persist session with compliance validation.
+========================================================================
+
+# session_close
+
+**Tier:** Free · **Aliases:** `gitmem-sc`, `gm-close`
+
+Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to `gitmem_dir`/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. Output the display field verbatim as your response — tool results are collapsed in the CLI.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | string | Yes | Session ID from session_start |
+| `close_type` | `"standard"` \| `"quick"` \| `"autonomous"` | Yes | Type of close (standard requires full reflection) |
+| `linear_issue` | string | No | Associated Linear issue |
+| `ceremony_duration_ms` | number | No | End-to-end ceremony duration from agent perspective (in milliseconds) |
+
+========================================================================
+# session_refresh
+URL: https://gitmem.ai/docs/tools/session-refresh
+Description: Re-surface institutional context (threads, decisions) for the current active session without creating a new session.
+========================================================================
+
+# session_refresh
+
+**Tier:** Free · **Aliases:** `gitmem-sr`, `gm-refresh`
+
+Re-surface institutional context (threads, decisions) for the current active session without creating a new session. Use mid-session when you need to remember where you left off, after context compaction, or after a long gap. Output the display field verbatim as your response — tool results are collapsed in the CLI.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project` | string | No | Project namespace (default: from active session). Free-form string (e.g., 'my-project'). |
+
+========================================================================
+# session_start
+URL: https://gitmem.ai/docs/tools/session-start
+Description: Initialize session, detect agent, load institutional context (last session, recent decisions, open threads).
+========================================================================
+
+# session_start
+
+**Tier:** Free · **Aliases:** `gitmem-ss`, `gm-open`
+
+Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). Output the display field verbatim as your response — tool results are collapsed in the CLI.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_identity` | `"CLI"` \| `"DAC"` \| `"CODA-1"` \| `"Brain_Local"` \| `"Brain_Cloud"` | No | Override agent identity (auto-detects if not provided) |
+| `linear_issue` | string | No | Current Linear issue identifier (e.g., OD-XXX) |
+| `issue_title` | string | No | Issue title for scar context |
+| `issue_description` | string | No | Issue description for scar context |
+| `issue_labels` | string[] | No | Issue labels for scar context |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+| `force` | boolean | No | Force create new session even if one already exists (OD-558) |
+

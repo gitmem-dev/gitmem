@@ -50,6 +50,8 @@ jobs:
           cp -r apps/docs/out/_next _landing/_next
           cp apps/docs/out/llms.txt _landing/llms.txt
           cp apps/docs/out/llms-full.txt _landing/llms-full.txt
+          # Copy static assets that live at site root in the Next.js build
+          [ -f apps/docs/out/banner.svg ] && cp apps/docs/out/banner.svg _landing/docs/banner.svg
 
       - name: Push to landing repo
         run: |

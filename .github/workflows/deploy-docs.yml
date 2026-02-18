@@ -24,7 +24,7 @@ jobs:
           cache: npm
 
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Build MCP server (needed for tool doc generation)
         run: npm run build

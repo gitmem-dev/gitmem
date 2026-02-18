@@ -1,0 +1,118 @@
+---
+title: MCP Protocol Compliance
+description: Full MCP protocol compliance report — 36/36 tests passing.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# MCP Protocol Compliance
+
+<Callout type="success" title="36/36 PASS">
+GitMem passes all MCP protocol compliance tests as of v1.0.3.
+</Callout>
+
+## Running the Suite
+
+```bash
+GITMEM_TIER=free node tests/compliance/mcp-protocol-compliance.mjs
+```
+
+The compliance test script spawns the MCP server as a child process via STDIO, performs the full JSON-RPC 2.0 handshake, validates tool schemas, executes tool calls, and tests error handling.
+
+## Results Summary
+
+| Category | Tests | Result |
+|----------|-------|--------|
+| Protocol Handshake | 9 | 9/9 |
+| Tool Listing | 4 | 4/4 |
+| Schema Validation | 3 | 3/3 |
+| Tool Execution | 10 | 10/10 |
+| Error Handling | 4 | 4/4 |
+| Response Format | 6 | 6/6 |
+| **Total** | **36** | **36/36** |
+
+## Category Details
+
+### 1. Protocol Handshake (9/9)
+
+Tests JSON-RPC 2.0 `initialize` method and `notifications/initialized` lifecycle.
+
+| Test | Result |
+|------|--------|
+| initialize returns result | PASS |
+| has protocolVersion | PASS |
+| protocolVersion is string | PASS |
+| has serverInfo | PASS |
+| serverInfo.name exists | PASS |
+| serverInfo.version exists | PASS |
+| has capabilities | PASS |
+| capabilities.tools exists | PASS |
+| initialized notification accepted | PASS |
+
+### 2. Tool Listing (4/4)
+
+| Test | Result |
+|------|--------|
+| tools/list returns result | PASS |
+| result has tools array | PASS |
+| at least 1 tool registered | PASS |
+| tool count (21) is reasonable (5-100) | PASS |
+
+21 tools in free tier. Pro tier exposes 67, dev tier 73.
+
+### 3. Tool Schema Validation (3/3)
+
+Every tool's `inputSchema` validated against JSON Schema and MCP spec requirements.
+
+| Test | Result |
+|------|--------|
+| all tool schemas valid (type, required, property types, descriptions) | PASS |
+| all descriptions >= 30 chars | PASS |
+| no duplicate tool names | PASS |
+
+### 4. Tool Execution (10/10)
+
+Live tool calls via MCP STDIO transport.
+
+| Test | Result |
+|------|--------|
+| gitmem-help returns result | PASS |
+| result has content array | PASS |
+| content[0].type === "text" | PASS |
+| content[0].text is non-empty | PASS |
+| search returns result | PASS |
+| search result has content | PASS |
+| search content is text type | PASS |
+| recall returns result | PASS |
+| recall has content array | PASS |
+| log returns result | PASS |
+
+### 5. Error Handling (4/4)
+
+| Test | Result |
+|------|--------|
+| unknown tool returns error | PASS |
+| unknown method returns JSON-RPC error | PASS |
+| error has numeric code | PASS |
+| error code is -32601 (Method not found) | PASS |
+
+### 6. Response Format Compliance (6/6)
+
+| Test | Result |
+|------|--------|
+| all responses include jsonrpc: "2.0" | PASS |
+| all responses include matching id | PASS |
+| content block has type field | PASS |
+| text block has text field | PASS |
+| successful calls have isError=false or undefined | PASS |
+| resources/list returns -32601 (not implemented) | PASS |
+
+## Optional Features Not Implemented
+
+These are valid omissions — the MCP spec does not require servers to implement all capabilities:
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| `resources/list` | Not implemented (-32601) | No resources exposed; tools-only server |
+| `prompts/list` | Not implemented (-32601) | No prompt templates; tool-driven UX |
+| `resources/templates/list` | Not implemented | No dynamic resources |

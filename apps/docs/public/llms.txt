@@ -46,12 +46,14 @@ Full docs: https://gitmem.ai/llms-full.txt
 - [Changelog](https://gitmem.ai/docs/changelog): GitMem release history.
 - [Core Concepts](https://gitmem.ai/docs/concepts): Understand the building blocks of GitMem's institutional memory system.
 - [Learning Types](https://gitmem.ai/docs/concepts/learning-types): The four types of institutional memory in GitMem.
+- [Local Storage](https://gitmem.ai/docs/concepts/local-storage): How GitMem uses the local filesystem, what persists across sessions, and container deployment considerations.
 - [Scars](https://gitmem.ai/docs/concepts/scars): How GitMem captures and surfaces mistakes as institutional memory.
 - [Sessions](https://gitmem.ai/docs/concepts/sessions): How GitMem tracks bounded work periods with context loading and closing ceremonies.
-- [Threads](https://gitmem.ai/docs/concepts/threads): Track unresolved work across sessions with GitMem threads.
+- [Threads](https://gitmem.ai/docs/concepts/threads): Track unresolved work across sessions with lifecycle management, vitality scoring, and semantic deduplication.
 - [Tiers](https://gitmem.ai/docs/concepts/tiers): GitMem's tier system and how it affects available features.
+- [MCP Protocol Compliance](https://gitmem.ai/docs/contributing/compliance): Full MCP protocol compliance report — 36/36 tests passing.
 - [Contributing](https://gitmem.ai/docs/contributing): How to contribute to GitMem.
-- [Testing](https://gitmem.ai/docs/contributing/testing): GitMem's test pyramid and how to run each tier.
+- [Testing](https://gitmem.ai/docs/contributing/testing): GitMem's 6-tier test pyramid, CI pipeline, and how to run each tier.
 - [Configuration](https://gitmem.ai/docs/getting-started/configuration): Configure GitMem with environment variables and config files.
 - [Your First Session](https://gitmem.ai/docs/getting-started/first-session): Walk through a complete GitMem session from start to close.
 - [Free vs Pro](https://gitmem.ai/docs/getting-started/free-vs-pro): What you get today with the free tier and what's coming with Pro.

@@ -1,0 +1,270 @@
+---
+title: FAQ
+description: Common questions about GitMem — what it is, how it works, and how to get started.
+---
+
+### What exactly is a SCAR, and how is it different from regular notes or logs?
+
+A SCAR is a structured lesson learned from a mistake, captured in a format that AI agents can act on. Unlike notes or logs, SCARs are:
+
+- **Searchable by intent** — When your agent calls `recall("deploy to production")`, GitMem surfaces SCARs about deployment failures, not just text matching the word "deploy"
+- **Self-moderating** — Every SCAR requires at least two counter-arguments: reasons someone might reasonably ignore it. This prevents memory from becoming a rigid rule book
+- **Severity-ranked** — `critical`, `high`, `medium`, or `low` determines surfacing priority
+- **Actionable** — The agent must explicitly respond with `APPLYING`, `N_A`, or `REFUTED` before proceeding
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Done != Deployed != Verified Working",
+  "description": "Marking a task done after committing is not enough. Full loop: commit → push → deploy → verify running.",
+  "severity": "high",
+  "counter_arguments": [
+    "For local-only changes, deployment verification is unnecessary",
+    "In CI/CD pipelines, deployment may be automatic"
+  ]
+}
+```
+
+SCARs are one of four learning types. **Wins** capture what worked well, **patterns** capture reusable strategies, and **decisions** record architectural choices with rationale. All four surface through the same `recall` mechanism.
+
+> *Deep dive: [SCARs](/docs/concepts/scars) · [Learning Types](/docs/concepts/learning-types)*
+
+---
+
+### How does GitMem integrate with my existing tools like Claude Code or Cursor?
+
+One command:
+
+```bash
+npx gitmem-mcp init
+```
+
+The interactive wizard detects your environment and configures everything:
+
+| Environment | What `init` does |
+|-------------|------------------|
+| **Claude Code** | Adds gitmem to `.mcp.json`, creates `CLAUDE.md` with memory protocol, sets up lifecycle hooks in `.claude/settings.json` |
+| **Cursor** | Adds gitmem to `.cursor/mcp.json`, creates `.cursorrules` with memory protocol |
+| **Claude Desktop** | Adds gitmem to `claude_desktop_config.json` |
+| **Windsurf** | Adds gitmem to `mcp_config.json`, creates `.windsurfrules` |
+
+GitMem runs as an [MCP server](https://modelcontextprotocol.io) — a standard protocol that all these tools already support. No plugins, no extensions, no custom integrations. If your tool speaks MCP, GitMem works with it.
+
+Already have existing config files? The wizard merges without overwriting. Re-running is safe — completed steps are skipped.
+
+> *Deep dive: [Installation](/docs/getting-started/installation) · [Configuration](/docs/getting-started/configuration)*
+
+---
+
+### Does GitMem work across different LLMs, or is it locked to one provider?
+
+GitMem is model-agnostic. It works with any LLM that connects through an MCP-compatible client.
+
+The memory is stored as structured data (JSON files in `.gitmem/`), not as model-specific embeddings or prompts. Switch from Claude to GPT to Gemini to a local model — your SCARs, wins, and patterns carry over unchanged.
+
+What matters is the **client**, not the model:
+- Claude Code, Cursor, Windsurf, Claude Desktop → all supported via MCP
+- Any custom client that implements the [MCP specification](https://modelcontextprotocol.io) → works
+
+You can even switch models between sessions. The institutional memory is the same; the model consuming it is irrelevant.
+
+---
+
+### How does GitMem prevent memory from becoming cluttered over time?
+
+Three mechanisms:
+
+**Counter-arguments:** Every SCAR requires reasons it might not apply. This isn't decoration — it forces the creator to think about when the lesson is irrelevant, and gives future agents legitimate grounds to mark it `N_A`.
+
+**Manual archiving:** The `archive_learning` tool removes a SCAR from recall results while preserving it for audit:
+
+```
+archive_learning(id: "abc-123", reason: "superseded by new deploy pipeline")
+```
+
+**Behavioral decay:** SCARs that keep getting dismissed naturally fade in recall ranking. GitMem tracks how agents respond to each SCAR — if a SCAR is consistently marked `N_A` or `REFUTED`, its relevance score decreases over time. No manual cleanup needed; unused lessons organically lose priority.
+
+The combination means memory stays relevant without active curation. High-value SCARs that agents keep applying rise to the top. Stale or overly-specific SCARs sink.
+
+> *Deep dive: [SCARs](/docs/concepts/scars) · [Sessions](/docs/concepts/sessions)*
+
+---
+
+### How do I add my first SCAR, and what does the process look like?
+
+**Option A: Let `init` seed starter SCARs (fastest)**
+
+```bash
+npx gitmem-mcp init
+```
+
+This creates 3 starter SCARs based on common AI agent failure patterns. You'll see them surface on your very first `recall`.
+
+**Option B: Create one manually during a session**
+
+After something goes wrong (or right), tell your agent to capture it:
+
+> "That deployment failure should be a SCAR — capture it."
+
+Your agent calls `create_learning`:
+
+```
+create_learning(
+  learning_type: "scar",
+  title: "Database migrations require --dry-run first",
+  description: "Running db push without --dry-run applied a destructive migration to production. Always preview changes before applying.",
+  severity: "high",
+  counter_arguments: [
+    "In development environments, dry-run adds unnecessary friction",
+    "Idempotent migrations (ADD COLUMN IF NOT EXISTS) are safe without preview"
+  ]
+)
+```
+
+**Option C: Session closing ceremony (most common in practice)**
+
+Most SCARs are born during the closing ceremony. When you say "closing" or "done for now", GitMem prompts reflection questions: *What broke? What took longer than it should? What would you do differently?* The answers become SCARs and wins.
+
+> *Deep dive: [Your First Session](/docs/getting-started/first-session) · [Closing Ceremony](/docs/guides/closing-ceremony)*
+
+---
+
+### What happens if my agent skips the recall step?
+
+GitMem includes a server-side enforcement layer that catches protocol violations with advisory warnings.
+
+**If your agent tries to create a SCAR, log a decision, or close a session without calling `recall` first:**
+
+```
+--- gitmem enforcement ---
+No recall() was run this session before this action.
+Consider calling recall() first to check for relevant institutional memory.
+Past mistakes and patterns may prevent repeating known issues.
+---
+```
+
+**If your agent called `recall` but didn't confirm the surfaced SCARs:**
+
+```
+--- gitmem enforcement ---
+3 recalled scar(s) await confirmation.
+Call confirm_scars() with APPLYING/N_A/REFUTED for each before proceeding.
+---
+```
+
+These warnings are **advisory, not blocking**. The tool still executes — GitMem never prevents your agent from working. But the warnings are visible in the response, which nudges the agent back on track.
+
+For Claude Code users, the optional lifecycle hooks provide additional nudges: a `PreToolUse` hook reminds the agent to recall if it hasn't yet, and a `Stop` hook triggers the closing ceremony before the session ends.
+
+> *Deep dive: [Closing Ceremony](/docs/guides/closing-ceremony)*
+
+---
+
+### Can I use GitMem offline or on-prem for security reasons?
+
+Yes. GitMem is **completely local** — no network calls, no accounts, no telemetry, no data leaving your machine.
+
+```
+.gitmem/
+├── learnings.json    # Your SCARs, wins, patterns
+├── sessions.json     # Session history
+├── threads.json      # Open work items
+└── decisions.json    # Architectural decisions
+```
+
+Everything is plain JSON in a `.gitmem/` directory inside your project. You can read it, version-control it, back it up, or delete it. There is no phone-home, no analytics collection, and no external dependency.
+
+**For air-gapped or on-prem environments:**
+- Install from a local npm registry or tarball: `npm install ./gitmem-mcp-x.y.z.tgz`
+- All search runs locally (keyword matching, no external API)
+- No internet connection needed after install
+
+> *Deep dive: [Local Storage](/docs/concepts/local-storage)*
+
+---
+
+### What happens if I switch projects or teams — does my memory persist?
+
+Memory is **per-project by default**. Each project has its own `.gitmem/` directory with its own SCARs, threads, and session history.
+
+```
+~/project-a/.gitmem/    # Project A's memory
+~/project-b/.gitmem/    # Project B's memory (separate)
+```
+
+This is intentional — a SCAR about "always run migrations with --dry-run" in your backend project shouldn't surface when you're writing CSS in a frontend project.
+
+**Switching machines:** Memory lives in `.gitmem/` on the machine where you created it. To move memory between machines, copy the `.gitmem/` directory or commit it to version control alongside your project.
+
+> *Deep dive: [Local Storage](/docs/concepts/local-storage)*
+
+---
+
+### How do I export my data if I decide to stop using GitMem?
+
+All your data is already in plain JSON files you own.
+
+Copy `.gitmem/` — that's everything. The files are human-readable:
+
+```bash
+# See all your SCARs
+cat .gitmem/learnings.json | jq '.[] | {title, severity, learning_type}'
+
+# See session history
+cat .gitmem/sessions.json | jq '.[0] | {started_at, decisions, reflection}'
+```
+
+**To fully remove GitMem:**
+
+```bash
+# Remove local data
+rm -rf .gitmem/
+
+# Remove from MCP config (Claude Code)
+# Delete the "gitmem" entry from .mcp.json
+
+# Remove CLAUDE.md section (between gitmem:start and gitmem:end markers)
+```
+
+There is no lock-in. No proprietary format. No "export request" workflow. The data is yours — always readable, always portable.
+
+---
+
+### Do I need to change how I prompt my agent?
+
+No. The `init` wizard adds memory instructions to your agent's system prompt file (`CLAUDE.md`, `.cursorrules`, or `.windsurfrules`). Your agent picks up the recall → confirm → close protocol automatically.
+
+In practice, this means:
+- **Session start** happens automatically (via hooks or agent initiative)
+- **Recall** fires before consequential actions — the agent does this on its own
+- **Creating SCARs** happens naturally — just say "that should be a SCAR" or let the closing ceremony capture lessons
+- **Session close** triggers when you say "done" or "closing"
+
+The only new habit is the closing ceremony: taking 60 seconds at the end of a session to reflect on what happened. That's where most institutional memory is born.
+
+> *Deep dive: [Your First Session](/docs/getting-started/first-session)*
+
+---
+
+### Can multiple agents share the same memory?
+
+Yes — and this happens naturally on a single developer's machine.
+
+**Sub-agents within a session:** When your main agent spawns sub-agents (code reviewers, test runners, researchers), use `prepare_context` to brief them and `absorb_observations` to capture what they find:
+
+```
+# Before spawning a sub-agent
+prepare_context(plan: "review auth middleware", format: "compact")
+# → Returns top SCARs/patterns in ~500 tokens, ready to inject into the sub-agent's prompt
+
+# After sub-agent returns
+absorb_observations(observations: [
+  { source: "code-review-agent", text: "Found hardcoded API key in config.js", severity: "scar_candidate" }
+])
+```
+
+**Parallel CLI sessions:** If you run multiple Claude Code sessions against the same project, they all read from the same `.gitmem/` directory. A SCAR created in one terminal is immediately available to `recall` in another. This is the most common multi-agent pattern — one developer, multiple concurrent agents, shared local memory.
+
+**Sequential sessions:** Every session inherits what previous sessions learned. The closing ceremony in session A creates SCARs that `recall` surfaces in session B. No configuration needed — it just works because memory persists in `.gitmem/`.
+
+> *Deep dive: [Multi-Agent Workflows](/docs/guides/multi-agent-workflows)*

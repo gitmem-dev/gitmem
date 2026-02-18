@@ -1,0 +1,114 @@
+---
+title: "The Silent Migration"
+description: A database migration CLI silently reads the wrong directory. Institutional memory catches it before production gets corrupted.
+---
+
+# The Silent Migration
+
+A migration CLI runs without error — but it's reading the wrong directory. No warning, no failure, just the wrong migrations applied to a production database. This is the kind of bug that doesn't announce itself until the damage is done.
+
+## The Situation
+
+A team manages a monorepo with two services that share the same database:
+
+```
+my-project/
+├── backend/
+│   └── migrations/     # 12 migration files
+└── services/
+    └── migrations/     # 3 migration files
+```
+
+Both directories contain migrations targeting the same database. The migration CLI determines which migrations to apply based on the current working directory — it looks for a `migrations/` folder relative to where you run the command.
+
+An agent working on a deployment task ran:
+
+```bash
+cd /workspace/my-project/services
+db-migrate push --linked
+```
+
+The CLI found 3 migrations in `services/migrations/` and compared them against the 12 remote migrations already applied. It printed:
+
+```
+Error: Remote migration versions not found in local migrations directory
+```
+
+The agent spent 20 minutes investigating — checking remote state, comparing version hashes, verifying database connectivity. The actual problem? It was running from the wrong directory. The 12 migrations it needed were in `backend/migrations/`, not `services/migrations/`.
+
+The fix was one command:
+
+```bash
+cd /workspace/my-project/backend
+db-migrate push --linked
+# ✅ All 12 migrations found, push successful
+```
+
+## The Scar
+
+After the incident, the agent created this scar:
+
+```json
+{
+  "learning_type": "scar",
+  "title": "db-migrate push from wrong CWD silently reads the wrong migrations directory",
+  "description": "When backend/migrations/ and services/migrations/ both target the same database, running db-migrate push from the wrong directory causes it to read the wrong migrations. The CLI uses migrations/ relative to CWD, not an absolute path. This produced a confusing 'Remote migration versions not found' error. The fix was simply running from the correct directory.",
+  "severity": "medium",
+  "scar_type": "process",
+  "counter_arguments": [
+    "You might think db-migrate push uses the linked project ref to determine which migrations to read — but the project ref only determines the remote target. Local migration discovery is purely CWD-based.",
+    "You might think the error message 'Remote versions not found' means the remote has unknown migrations — but it can also mean you're looking at the wrong local directory."
+  ]
+}
+```
+
+Two things make this scar effective:
+
+1. **The counter-arguments pre-empt the exact wrong assumptions** the agent made during the incident. "You might think the project ref determines which migrations to read" — that's exactly what it thought, and exactly what's wrong.
+
+2. **The title includes the mechanism** (`from wrong CWD`) not just the symptom. This makes it findable when a future agent plans any migration-related work.
+
+## The Save
+
+Three weeks later, a different session picked up a database migration task. The agent called `recall` before starting:
+
+```
+recall({ plan: "run database migration for new user fields" })
+```
+
+GitMem surfaced the scar:
+
+```
+🧠 INSTITUTIONAL MEMORY ACTIVATED
+
+Found 2 relevant scars for your plan:
+
+🟡 db-migrate push from wrong CWD silently reads the wrong
+   migrations directory (medium, score: 0.74)
+   When backend/migrations/ and services/migrations/ both target
+   the same database, running db-migrate push from the wrong
+   directory causes it to read the wrong migrations...
+```
+
+The agent confirmed the scar before proceeding:
+
+```
+confirm_scars([{
+  scar_id: "...",
+  decision: "APPLYING",
+  evidence: "Verified CWD is /workspace/my-project/backend before running db-migrate push. Confirmed 12 migration files visible in backend/migrations/.",
+  relevance: "high"
+}])
+```
+
+The agent explicitly checked its working directory, confirmed the right migrations were visible, and then ran the command. No 20-minute debugging session. No risk of applying the wrong migrations to production.
+
+## The Takeaway
+
+This example shows three properties of effective institutional memory:
+
+**Silent failures are the most valuable scars.** The migration CLI didn't crash — it ran successfully against the wrong data. These bugs don't leave stack traces. They leave corrupted databases. A scar is the only thing standing between "it worked" and "it worked on the wrong thing."
+
+**Counter-arguments encode the debugging dead ends.** The two counter-arguments in this scar document the exact wrong mental models that led to the 20-minute investigation. Future agents skip those dead ends entirely because the scar says "you might think X — but actually Y."
+
+**The confirm protocol forces verification.** The agent didn't just see the scar and move on. The `APPLYING` decision required past-tense evidence: "Verified CWD is `/workspace/my-project/backend`." This turns a warning into a checklist item with proof of compliance.

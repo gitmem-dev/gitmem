@@ -3,6 +3,8 @@ title: Configuration
 description: Configure GitMem with environment variables and config files.
 ---
 
+import { SignupForm } from '@/components/signup-form'
+
 # Configuration
 
 GitMem works out of the box with zero configuration on the free tier. For Pro tier features (Supabase storage, semantic search), you'll need environment variables.
@@ -34,7 +36,9 @@ Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
 
 ### Pro Tier (Coming Soon)
 
-Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.ai) to get notified.
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. Sign up to get notified:
+
+<SignupForm label="Notify Me" />
 
 ## Project Namespaces
 

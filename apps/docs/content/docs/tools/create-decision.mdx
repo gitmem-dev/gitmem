@@ -1,0 +1,25 @@
+---
+title: "create_decision"
+description: "Log architectural/operational decision to institutional memory."
+---
+
+# create_decision
+
+**Tier:** Free · **Aliases:** `gitmem-cd`
+
+Log architectural/operational decision to institutional memory
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `title` | string | Yes | Decision title |
+| `decision` | string | Yes | What was decided |
+| `rationale` | string | Yes | Why this decision was made |
+| `alternatives_considered` | string[] | No | Alternatives that were rejected |
+| `personas_involved` | string[] | No | Personas involved in decision |
+| `docs_affected` | string[] | No | Docs/files affected by this decision (relative paths from repo root) |
+| `linear_issue` | string | No | Associated Linear issue |
+| `session_id` | string | No | Current session ID |
+| `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
+

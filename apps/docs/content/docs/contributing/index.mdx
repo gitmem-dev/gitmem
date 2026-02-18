@@ -1,0 +1,72 @@
+---
+title: Contributing
+description: How to contribute to GitMem.
+---
+
+# Contributing
+
+GitMem is open source. Contributions are welcome.
+
+## Development Setup
+
+```bash
+git clone https://github.com/nTEG-dev/gitmem
+cd gitmem
+npm install
+npm run build
+```
+
+## Running Tests
+
+```bash
+# Unit tests (fast, no deps)
+npm run test:unit
+
+# Smoke tests (MCP server boot)
+npx vitest run --config vitest.smoke.config.ts
+
+# All tests
+npm test
+```
+
+See [Testing](/docs/contributing/testing) for the full test pyramid.
+
+## Project Structure
+
+```
+gitmem/
+├── src/
+│   ├── server.ts           # MCP server entry
+│   ├── tools/              # Tool implementations
+│   │   ├── definitions.ts  # Tool schemas (source of truth)
+│   │   ├── recall.ts       # Scar surfacing
+│   │   ├── session-start.ts
+│   │   └── ...
+│   ├── services/           # Business logic
+│   │   ├── tier.ts         # Tier gating
+│   │   ├── startup.ts      # Cache initialization
+│   │   └── ...
+│   └── types/              # TypeScript types
+├── tests/
+│   ├── unit/               # Unit tests
+│   ├── smoke/              # Smoke tests
+│   ├── integration/        # Integration tests (Docker)
+│   └── e2e/                # End-to-end tests
+├── apps/
+│   └── docs/               # This documentation site
+└── docs/                   # Internal development docs
+```
+
+## Submitting Changes
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-change`
+3. Make your changes with tests
+4. Run the test suite: `npm test`
+5. Submit a pull request
+
+## Code Style
+
+- TypeScript strict mode
+- ESM-only (no CommonJS)
+- `console.error` for diagnostics (never `console.log` — it corrupts MCP stdio)

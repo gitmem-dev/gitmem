@@ -1,0 +1,27 @@
+---
+title: "record_scar_usage"
+description: "Track scar application for effectiveness measurement."
+---
+
+# record_scar_usage
+
+**Tier:** Free · **Aliases:** `gitmem-rs`
+
+Track scar application for effectiveness measurement
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scar_id` | string | Yes | UUID of the scar  |
+| `issue_id` | string | No | Linear issue UUID |
+| `issue_identifier` | string | No | Linear issue identifier (e.g., PROJ-123) |
+| `surfaced_at` | string | Yes | ISO timestamp when scar was retrieved |
+| `acknowledged_at` | string | No | ISO timestamp when scar was acknowledged |
+| `reference_type` | `"explicit"` \| `"implicit"` \| `"acknowledged"` \| `"refuted"` \| `"none"` | Yes | How the scar was referenced |
+| `reference_context` | string | Yes | How the scar was applied (1-2 sentences) |
+| `execution_successful` | boolean | No | Whether the task succeeded after applying scar |
+| `session_id` | string | No | GitMem session UUID (for non-issue session tracking) |
+| `agent` | string | No | Agent identity (CLI, DAC, CODA-1, etc.) |
+| `variant_id` | string | No | UUID of the assigned variant from scar_enforcement_variants (for A/B testing) |
+

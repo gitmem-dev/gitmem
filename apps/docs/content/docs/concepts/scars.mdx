@@ -1,0 +1,66 @@
+---
+title: Scars
+description: How GitMem captures and surfaces mistakes as institutional memory.
+---
+
+# Scars
+
+A **scar** is a mistake captured as institutional memory. When an AI agent encounters a problem, the lesson is recorded as a scar so that future agents (or future sessions of the same agent) don't repeat it.
+
+## How Scars Work
+
+1. **Something goes wrong** — A deployment fails, a bug slips through, a wrong assumption costs time
+2. **The scar is created** — The lesson is captured with title, description, severity, and counter-arguments
+3. **Future recall surfaces it** — When an agent plans a similar action, the scar appears automatically
+
+## Scar Anatomy
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Done != Deployed != Verified Working",
+  "description": "Marking a task as done after committing code is not enough. The full loop is: commit → push → deploy → verify the service is running and accessible.",
+  "severity": "high",
+  "scar_type": "process",
+  "counter_arguments": [
+    "For local-only changes, deployment verification is unnecessary",
+    "In CI/CD pipelines, deployment may be automatic"
+  ]
+}
+```
+
+### Required Fields
+
+| Field | Purpose |
+|-------|---------|
+| `title` | Short, memorable name for the lesson |
+| `description` | Detailed explanation of what went wrong and how to avoid it |
+| `severity` | `critical`, `high`, `medium`, or `low` |
+| `counter_arguments` | At least 2 reasons why someone might reasonably ignore this scar |
+
+### Scar Types
+
+| Type | Decay | Use When |
+|------|-------|----------|
+| `process` | Never | The lesson is about how to work (e.g., "always run tests before pushing") |
+| `incident` | 180 days | A specific incident that may become less relevant over time |
+| `context` | 30 days | Temporary context (e.g., "API X is down, use fallback") |
+
+## Counter-Arguments
+
+Every scar **requires** at least 2 counter-arguments. This prevents scar accumulation from becoming a burden. Counter-arguments document when it's reasonable to ignore the scar.
+
+Good counter-arguments:
+- Describe specific scenarios where the scar doesn't apply
+- Acknowledge trade-offs (speed vs safety)
+- Note when the underlying cause has been fixed
+
+## The Confirm Protocol
+
+When scars are surfaced via `recall`, the agent must **confirm** each one before proceeding:
+
+- **APPLYING** — "I've accounted for this lesson" (with evidence)
+- **N_A** — "This scar doesn't apply to my current situation" (with reasoning)
+- **REFUTED** — "I'm deliberately overriding this scar" (acknowledging risk)
+
+This ensures scars are actively considered, not just passively displayed.

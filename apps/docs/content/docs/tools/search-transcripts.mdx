@@ -1,0 +1,20 @@
+---
+title: "search_transcripts"
+description: "Semantic search over session transcript chunks."
+---
+
+# search_transcripts
+
+**Tier:** Dev · **Aliases:** `gitmem-stx`, `gm-stx`
+
+Semantic search over session transcript chunks. Generates embedding for query and calls match_transcript_chunks RPC to find relevant conversation fragments across all indexed sessions.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Natural language search query (e.g., 'deployment verification discussion', 'what was decided about caching') |
+| `match_count` | number | No | Maximum number of chunks to return (default: 10, max: 50) |
+| `similarity_threshold` | number | No | Minimum similarity score 0-1 (default: 0.3). Higher values return more relevant results. |
+| `project` | string | No | Project namespace to filter by (e.g., 'my-project') |
+

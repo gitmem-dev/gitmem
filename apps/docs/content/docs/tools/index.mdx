@@ -1,0 +1,77 @@
+---
+title: Tool Reference
+description: Complete reference for all GitMem MCP tools.
+---
+
+# Tool Reference
+
+GitMem exposes tools via the [Model Context Protocol](https://modelcontextprotocol.io). Each tool has a canonical name and short aliases for convenience.
+
+## Core Tools (All Tiers)
+
+### Session Management
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [session_start](/docs/tools/session-start) | `gitmem-ss`, `gm-open` | Initialize session with context |
+| [session_refresh](/docs/tools/session-refresh) | `gitmem-sr`, `gm-refresh` | Reload context mid-session |
+| [session_close](/docs/tools/session-close) | `gitmem-sc`, `gm-close` | Close session with reflection |
+
+### Memory Operations
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [recall](/docs/tools/recall) | `gitmem-r` | Surface relevant scars before acting |
+| [confirm_scars](/docs/tools/confirm-scars) | `gitmem-cs`, `gm-confirm` | Confirm recalled scars (APPLYING/N_A/REFUTED) |
+| [create_learning](/docs/tools/create-learning) | `gitmem-cl`, `gm-scar` | Create scar/win/pattern |
+| [create_decision](/docs/tools/create-decision) | `gitmem-cd` | Log architectural decision |
+| [record_scar_usage](/docs/tools/record-scar-usage) | `gitmem-rs` | Track scar application |
+
+### Search and Discovery
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [search](/docs/tools/search) | `gitmem-search`, `gm-search` | Explore institutional memory |
+| [log](/docs/tools/log) | `gitmem-log`, `gm-log` | List recent learnings |
+| [analyze](/docs/tools/analyze) | `gitmem-analyze`, `gm-analyze` | Session analytics |
+
+### Thread Management
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [list_threads](/docs/tools/list-threads) | `gitmem-lt`, `gm-threads` | List open threads |
+| [create_thread](/docs/tools/create-thread) | `gitmem-ct`, `gm-thread-new` | Create thread with dedup |
+| [resolve_thread](/docs/tools/resolve-thread) | `gitmem-rt`, `gm-resolve` | Mark thread resolved |
+| [promote_suggestion](/docs/tools/promote-suggestion) | `gitmem-ps`, `gm-promote` | Promote suggested thread |
+| [dismiss_suggestion](/docs/tools/dismiss-suggestion) | `gitmem-ds`, `gm-dismiss` | Dismiss suggested thread |
+| [cleanup_threads](/docs/tools/cleanup-threads) | `gitmem-cleanup`, `gm-cleanup` | Triage by health |
+
+### Multi-Agent
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [prepare_context](/docs/tools/prepare-context) | `gitmem-pc`, `gm-pc` | Memory payload for sub-agents |
+| [absorb_observations](/docs/tools/absorb-observations) | `gitmem-ao`, `gm-absorb` | Capture sub-agent findings |
+
+### Utility
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| [graph_traverse](/docs/tools/graph-traverse) | `gitmem-graph`, `gm-graph` | Knowledge graph traversal |
+| [archive_learning](/docs/tools/archive-learning) | `gitmem-al`, `gm-archive` | Archive a learning |
+| [health](/docs/tools/health) | `gitmem-health`, `gm-health` | Write health report |
+| `gitmem-help` | — | Show available commands |
+
+## Pro-Only Tools (Coming Soon)
+
+These tools will be available when the Pro tier launches:
+
+| Tool | Aliases | Purpose |
+|------|---------|---------|
+| record_scar_usage_batch | `gitmem-rsb` | Batch scar recording |
+| save_transcript | `gitmem-st` | Save session transcript |
+| get_transcript | `gitmem-gt` | Retrieve transcript |
+| search_transcripts | `gitmem-stx`, `gm-stx` | Search transcripts |
+| cache_status | `gitmem-cache-status`, `gm-cache-s` | Cache status |
+| cache_health | `gitmem-cache-health`, `gm-cache-h` | Cache vs remote comparison |
+| cache_flush | `gitmem-cache-flush`, `gm-cache-f` | Force cache reload |

@@ -1,0 +1,79 @@
+---
+title: Learning Types
+description: The four types of institutional memory in GitMem.
+---
+
+# Learning Types
+
+GitMem supports four types of institutional memory, each serving a different purpose.
+
+## Scars
+
+**Mistakes to avoid.** The most common learning type. Scars are surfaced automatically via `recall` when an agent plans a similar action.
+
+```json
+{
+  "learning_type": "scar",
+  "title": "Always validate UUID format before DB lookup",
+  "severity": "medium",
+  "counter_arguments": ["Internal-only tools may trust input", "UUIDs from trusted sources are pre-validated"]
+}
+```
+
+**Required fields:** title, description, severity, counter_arguments (2+)
+
+See [Scars](/docs/concepts/scars) for details.
+
+## Wins
+
+**Approaches that worked well.** Capture what succeeded so you can replicate it.
+
+```json
+{
+  "learning_type": "win",
+  "title": "Parallel agent spawning cut review time by 60%",
+  "problem_context": "Code review of 500-line PR was taking too long with sequential analysis",
+  "solution_approach": "Spawned 3 agents in parallel: one for logic, one for tests, one for security"
+}
+```
+
+**Required fields:** title, description
+
+## Patterns
+
+**Reusable strategies.** Document approaches that work in specific contexts.
+
+```json
+{
+  "learning_type": "pattern",
+  "title": "5-Tier Test Pyramid for MCP Servers",
+  "applies_when": ["shipping MCP servers to npm", "pre-release verification"]
+}
+```
+
+**Required fields:** title, description
+
+## Anti-Patterns
+
+**Approaches that seem good but aren't.** Document why a seemingly reasonable approach fails.
+
+```json
+{
+  "learning_type": "anti_pattern",
+  "title": "Don't use console.log in MCP servers",
+  "description": "MCP uses stdio for JSON-RPC. Any console.log corrupts the transport. Use console.error for diagnostics."
+}
+```
+
+**Required fields:** title, description
+
+## Severity Levels
+
+Severity applies to scars and determines surfacing priority:
+
+| Level | Meaning | Example |
+|-------|---------|---------|
+| `critical` | Data loss or security risk | "Never store API keys in git" |
+| `high` | Significant time waste or user impact | "Done != Deployed != Verified" |
+| `medium` | Moderate friction or repeated issue | "Always validate UUIDs before DB lookup" |
+| `low` | Minor optimization or preference | "Use descriptive branch names" |

@@ -1,0 +1,48 @@
+---
+title: Configuration
+description: Configure GitMem with environment variables and config files.
+---
+
+# Configuration
+
+GitMem works out of the box with zero configuration on the free tier. For Pro tier features (Supabase storage, semantic search), you'll need environment variables.
+
+## Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GITMEM_DIR` | `.gitmem/` | Override the storage directory location |
+| `GITMEM_DEFAULT_PROJECT` | `default` | Default project namespace for scoping |
+
+## Storage
+
+### Free Tier (Local)
+
+All data stored in `.gitmem/` relative to your project root:
+
+```
+.gitmem/
+├── active-sessions.json    # Current session registry
+├── sessions/               # Session data per session ID
+├── learnings/              # Scars, wins, patterns (JSON)
+├── decisions/              # Decision log
+├── threads/                # Open threads tracking
+└── cache/                  # Local vector search cache
+```
+
+Add `.gitmem/` to your `.gitignore` — session data is machine-specific.
+
+### Pro Tier (Coming Soon)
+
+Pro will add Supabase PostgreSQL with pgvector for semantic search, cross-machine sync, and shared team memory. [Join the mailing list](https://gitmem.ai) to get notified.
+
+## Project Namespaces
+
+GitMem supports arbitrary project names to scope sessions and searches:
+
+```
+session_start({ project: "my-api" })
+recall({ plan: "add auth", project: "my-api" })
+```
+
+Projects are free-form strings. Use them to separate concerns when working across multiple codebases or domains.

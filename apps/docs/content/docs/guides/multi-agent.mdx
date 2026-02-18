@@ -1,0 +1,61 @@
+---
+title: Multi-Agent Workflows
+description: Inject institutional memory into sub-agents and capture their findings.
+---
+
+# Multi-Agent Workflows
+
+GitMem helps coordinate teams of agents on a single machine. The lead agent can inject context into sub-agents and absorb their findings back into institutional memory.
+
+> **Note:** Cross-machine shared memory requires the Pro tier (coming soon). The workflows below work on the free tier for agents running on the same machine.
+
+## Context Injection
+
+Before spawning a sub-agent, use `prepare_context` to generate a memory payload:
+
+```
+prepare_context({
+  plan: "review authentication middleware",
+  format: "compact"  // ~500 tokens
+})
+```
+
+Formats:
+- **`full`** — Rich markdown, unlimited tokens
+- **`compact`** — ~500 tokens, one line per scar
+- **`gate`** — ~100 tokens, blocking scars only
+
+Include the payload in the sub-agent's prompt so it starts with institutional awareness.
+
+## Absorbing Observations
+
+When a sub-agent returns, capture its findings:
+
+```
+absorb_observations({
+  observations: [
+    {
+      source: "Sub-Agent: code review",
+      text: "Auth middleware doesn't validate token expiry",
+      severity: "scar_candidate"
+    },
+    {
+      source: "Sub-Agent: code review",
+      text: "Good use of middleware pattern for request validation",
+      severity: "info"
+    }
+  ]
+})
+```
+
+Severity levels:
+- **`info`** — Noteworthy but not actionable
+- **`warning`** — Potential issue worth tracking
+- **`scar_candidate`** — Should be promoted to a scar
+
+## Best Practices
+
+1. **Always `prepare_context` before spawning** — The 2-3 second cost prevents agents from repeating known mistakes
+2. **Always `absorb_observations` after return** — Don't lose sub-agent findings
+3. **Use `compact` format for most agents** — `gate` for simple tasks, `full` for complex reviews
+4. **Scope by project** — Use project namespaces to keep memories relevant

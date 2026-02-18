@@ -20,7 +20,7 @@ The recommended way to install GitMem. One command, interactive setup, safe to r
 
 ```bash
 cd your-project
-npx gitmem init
+npx gitmem-mcp init
 ```
 
 <Steps>
@@ -54,17 +54,17 @@ Adds `.gitmem/` to `.gitignore` — memory data stays local.
 
 ```bash
 # Accept all defaults (non-interactive)
-npx gitmem init --yes
+npx gitmem-mcp init --yes
 
 # Preview what would change (no files written)
-npx gitmem init --dry-run
+npx gitmem-mcp init --dry-run
 
 # Set a project namespace
-npx gitmem init --project my-app
+npx gitmem-mcp init --project my-app
 ```
 
 <Callout type="info" title="Idempotent">
-Re-running `npx gitmem init` is safe — completed steps are skipped with "Already configured."
+Re-running `npx gitmem-mcp init` is safe — completed steps are skipped with "Already configured."
 </Callout>
 
 ### What Gets Created
@@ -89,14 +89,14 @@ Re-running `npx gitmem init` is safe — completed steps are skipped with "Alrea
 ### Uninstall
 
 ```bash
-npx gitmem uninstall
+npx gitmem-mcp uninstall
 ```
 
 Cleanly reverses everything init did. Your `.gitmem/` data is preserved by default.
 
 ```bash
 # Also delete .gitmem/ memory data
-npx gitmem uninstall --all
+npx gitmem-mcp uninstall --all
 ```
 
 </Tab>
@@ -206,14 +206,14 @@ See [Configuration](/docs/getting-started/configuration) for full details.
 ## Troubleshooting
 
 <Accordions type="single">
-<Accordion title="npx gitmem init hangs or fails">
-Ensure Node.js 18+ is installed (`node --version`). If behind a corporate proxy, try `npm install -g gitmem-mcp` first, then use `gitmem init` without npx.
+<Accordion title="npx gitmem-mcp init hangs or fails">
+Ensure Node.js 18+ is installed (`node --version`). If behind a corporate proxy, try `npm install -g gitmem-mcp` first, then use `gitmem-mcp init` without npx.
 </Accordion>
 <Accordion title="Agent can't find gitmem tools">
 Check that `.mcp.json` exists in your project root and contains the gitmem server entry. For Claude Desktop, verify the config path matches your OS. Restart the client after config changes.
 </Accordion>
 <Accordion title="Permission errors on tool calls">
-Run `npx gitmem init` to add tool permissions to `.claude/settings.json`, or manually add `mcp__gitmem__*` to the `allow` array.
+Run `npx gitmem-mcp init` to add tool permissions to `.claude/settings.json`, or manually add `mcp__gitmem__*` to the `allow` array.
 </Accordion>
 <Accordion title="Starter scars show wrong age">
 Starter scars use fixed creation dates. This is cosmetic — the scars function correctly regardless of displayed age.

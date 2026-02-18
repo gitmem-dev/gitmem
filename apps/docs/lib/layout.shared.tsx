@@ -3,7 +3,18 @@ import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: "GitMem",
+      title: (
+        <>
+          <img
+            src="/docs/logo.svg"
+            alt=""
+            className="nav-logo"
+            style={{ width: 24, height: 24 }}
+          />
+          GitMem
+        </>
+      ),
+      url: "/docs",
     },
     links: [
       {
@@ -12,7 +23,7 @@ export function baseOptions(): BaseLayoutProps {
         active: "nested-url",
       },
       {
-        text: "Home",
+        text: "Website",
         url: "https://gitmem.ai",
         external: true,
       },

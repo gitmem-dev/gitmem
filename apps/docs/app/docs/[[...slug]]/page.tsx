@@ -19,11 +19,12 @@ export default async function Page(props: PageProps) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const isIndex = !params.slug || params.slug.length === 0;
 
   return (
     <DocsPage toc={page.data.toc}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
+      {!isIndex && <DocsTitle>{page.data.title}</DocsTitle>}
+      {!isIndex && <DocsDescription>{page.data.description}</DocsDescription>}
       <DocsBody>
         <MDX components={{ ...defaultMdxComponents }} />
       </DocsBody>

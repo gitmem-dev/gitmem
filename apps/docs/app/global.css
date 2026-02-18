@@ -25,17 +25,35 @@
   background-repeat: no-repeat;
 }
 
-/* Banner image on docs landing */
-.gitmem-banner {
-  margin: 0 auto 1.5rem;
-  max-width: 48rem;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  border: 1px solid hsl(0, 0%, 85%);
+
+/* Reduce gap between sidebar and content */
+@theme {
+  --fd-page-width: 1400px;
 }
 
-.dark .gitmem-banner {
-  border-color: hsl(0, 0%, 20%);
+/* Nav logo: invert black to white in dark mode */
+.dark .nav-logo {
+  filter: invert(1) !important;
+}
+
+/* Banner image on docs landing */
+.gitmem-banner {
+  margin: 0 auto 0;
+  max-width: 48rem;
+  overflow: hidden;
+}
+
+/* Screen-reader only h1 for SEO */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 .gitmem-banner img {
@@ -47,7 +65,7 @@
 /* Hero section styles for docs landing */
 .gitmem-hero {
   text-align: center;
-  padding: 2rem 0 3rem;
+  padding: 0 0 0.5rem;
 }
 
 .gitmem-hero h1 {
@@ -68,7 +86,7 @@
   display: flex;
   gap: 0.75rem;
   justify-content: center;
-  margin-top: 1.5rem;
+  margin-top: 0.75rem;
   flex-wrap: wrap;
 }
 
@@ -83,22 +101,27 @@
   text-decoration: none;
 }
 
+.gitmem-hero .hero-cta .github-icon {
+  margin-right: 0.375rem;
+  vertical-align: -0.125em;
+}
+
 .gitmem-hero .hero-cta a.primary {
-  background: hsl(358, 84%, 42%);
+  background: hsl(0, 0%, 15%);
   color: white;
 }
 
 .gitmem-hero .hero-cta a.primary:hover {
-  background: hsl(358, 84%, 36%);
+  background: hsl(0, 0%, 25%);
 }
 
 .dark .gitmem-hero .hero-cta a.primary {
-  background: hsl(358, 84%, 52%);
-  color: white;
+  background: hsl(0, 0%, 95%);
+  color: hsl(0, 0%, 10%);
 }
 
 .dark .gitmem-hero .hero-cta a.primary:hover {
-  background: hsl(358, 84%, 58%);
+  background: hsl(0, 0%, 100%);
 }
 
 .gitmem-hero .hero-cta a.secondary {
@@ -107,7 +130,9 @@
 }
 
 .gitmem-hero .hero-cta a.secondary:hover {
-  background: hsl(0, 0%, 96%);
+  background: hsl(358, 84%, 97%);
+  border-color: hsl(358, 84%, 80%);
+  color: hsl(358, 84%, 38%);
 }
 
 .dark .gitmem-hero .hero-cta a.secondary {
@@ -115,7 +140,9 @@
 }
 
 .dark .gitmem-hero .hero-cta a.secondary:hover {
-  background: hsl(0, 0%, 15%);
+  background: hsla(358, 84%, 30%, 0.2);
+  border-color: hsl(358, 84%, 45%);
+  color: hsl(358, 84%, 72%);
 }
 
 /* Memory loop diagram */
@@ -152,13 +179,13 @@
   margin: 1.5rem 0;
   padding: 1.5rem;
   border-radius: 0.75rem;
-  border: 1px solid hsl(358, 84%, 85%);
-  background: hsl(358, 84%, 98%);
+  border: 1px solid hsl(0, 0%, 85%);
+  background: hsl(0, 0%, 97%);
 }
 
 .dark .install-block {
-  border-color: hsla(358, 84%, 40%, 0.3);
-  background: hsla(358, 84%, 15%, 0.15);
+  border-color: hsl(0, 0%, 25%);
+  background: hsl(0, 0%, 12%);
 }
 
 /* Inline signup form */
@@ -243,4 +270,25 @@
 
 .dark .signup-inline .signup-ok {
   color: hsl(145, 50%, 55%);
+}
+
+/* Make feature/explore cards pop */
+[data-card="true"] {
+  border-left: 3px solid hsl(358, 84%, 65%) !important;
+  transition: all 0.15s ease !important;
+}
+
+[data-card="true"]:hover {
+  border-left-color: hsl(358, 84%, 52%) !important;
+  box-shadow: 0 2px 8px hsla(358, 84%, 40%, 0.12) !important;
+  transform: translateY(-1px);
+}
+
+.dark [data-card="true"] {
+  border-left-color: hsl(358, 84%, 45%) !important;
+}
+
+.dark [data-card="true"]:hover {
+  border-left-color: hsl(358, 84%, 55%) !important;
+  box-shadow: 0 2px 12px hsla(358, 84%, 30%, 0.25) !important;
 }

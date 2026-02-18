@@ -7,42 +7,27 @@ import { Cards, Card } from 'fumadocs-ui/components/card'
 import { Callout } from 'fumadocs-ui/components/callout'
 import { Steps, Step } from 'fumadocs-ui/components/steps'
 
+<h1 className="sr-only">GitMem — Institutional memory for AI coding agents</h1>
+
 <div className="gitmem-banner">
   <img src="/docs/banner.svg" alt="GitMem — Institutional memory for AI coding agents" />
 </div>
 
 <div className="gitmem-hero">
 
-# GitMem
-
-Institutional memory for AI coding agents.
-Every mistake learned from. Every win remembered.
-
-<div className="memory-loop">
-  <span className="step">recall</span>
-  <span className="arrow">&rarr;</span>
-  <span className="step">work</span>
-  <span className="arrow">&rarr;</span>
-  <span className="step">learn</span>
-  <span className="arrow">&rarr;</span>
-  <span className="step">close</span>
-  <span className="arrow">&rarr;</span>
-  <span className="step">recall</span>
-</div>
-
 <div className="hero-cta">
   <a href="/docs/getting-started/installation" className="primary">Get Started</a>
-  <a href="https://github.com/gitmem-dev/gitmem" className="secondary">GitHub</a>
+  <a href="https://github.com/gitmem-dev/gitmem" className="secondary"><svg className="github-icon" viewBox="0 0 16 16" fill="currentColor" width="16" height="16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
   <a href="/docs/tools" className="secondary">Tool Reference</a>
 </div>
 
 </div>
 
----
-
 ## What is GitMem?
 
-Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem captures these lessons and surfaces them automatically before the agent takes similar actions.
+Every time an AI agent makes a mistake, fixes a bug, or discovers a better approach, that knowledge disappears when the session ends. GitMem is an MCP server that gives AI coding agents **persistent institutional memory** — the ability to learn from mistakes, remember what works, track decisions, and carry context across sessions and projects.
+
+It's not a note-taker. It's a **memory system with teeth**: scars surface automatically before the agent repeats a mistake, sessions close with structured reflection, and open threads carry forward so nothing falls through the cracks. One `npx gitmem-mcp init` and every session builds on the last — mistakes, wins, decisions, and human corrections compound into an agent that gets sharper in your dev context over time.
 
 <Cards>
   <Card title="Scars" href="/docs/concepts/scars">
@@ -56,6 +41,12 @@ Every time an AI agent makes a mistake, fixes a bug, or discovers a better appro
   </Card>
   <Card title="Threads" href="/docs/concepts/threads">
     Unresolved work that carries across sessions. Never lose track of open items.
+  </Card>
+  <Card title="Decisions" href="/docs/concepts/learning-types">
+    Architectural choices logged with rationale and alternatives considered. Searchable forever.
+  </Card>
+  <Card title="Knowledge Graph" href="/docs/tools/graph-traverse">
+    Trace any decision, scar, or session back to its origin. See how your institutional memory connects.
   </Card>
 </Cards>
 

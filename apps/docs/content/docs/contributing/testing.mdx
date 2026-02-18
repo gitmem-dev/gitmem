@@ -1,78 +1,31 @@
 ---
 title: Testing
-description: GitMem's test pyramid and how to run each tier.
+description: GitMem's 6-tier test pyramid, CI pipeline, and how to run each tier.
 ---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
 
 # Testing
 
-GitMem uses a 6-tier test pyramid. All runnable tests must pass before shipping.
+GitMem uses a 6-tier testing pyramid. Each tier adds cost/time but tests closer to the real user experience.
 
-## Test Tiers
+## Test Pyramid
 
-### Tier 1: Unit Tests
+| Tier | Command | Tests | Speed | Cost | What it tests |
+|------|---------|-------|-------|------|---------------|
+| **1 - Unit** | `npm run test:unit` | 597 | ~3s | Free | Schema validation, pure functions, golden regressions |
+| **2 - Smoke** | `npm run test:smoke` | 9 | ~5s | Free | MCP server boot, tool registration, basic tool calls via stdio |
+| **3 - Integration** | `npm run test:integration` | 63 | ~30s | Free (Docker) | Real PostgreSQL, session lifecycle, cache behavior, query plans |
+| **4 - E2E** | `npm run test:e2e` | 68 | ~90s | Free (Docker for pro) | CLI install flow, hooks, free/pro tier MCP via stdio |
+| **5 - User Journey** | `npm run test:e2e -- tests/e2e/user-journey.test.ts` | 6 | ~60s | API calls | Real Claude session via Agent SDK |
+| **6 - Performance** | `npm run test:perf` | benchmarks | ~30s | Free | Cold start, recall latency, cache hit rate microbenchmarks |
 
-```bash
-npm run test:unit
-```
+**Run all:** `npm run test:all` (runs tiers 1-4 + 6; excludes user-journey)
 
-- **Count:** 660+ tests
-- **Speed:** ~3 seconds
-- **Dependencies:** None
-- **Coverage:** Schema validation, pure functions, golden regressions
-
-### Tier 2: Smoke Tests
-
-```bash
-npx vitest run --config vitest.smoke.config.ts
-```
-
-- **Count:** 9 tests (4 free + 5 pro)
-- **Speed:** ~5 seconds
-- **Dependencies:** None (free) / Supabase (pro)
-- **Coverage:** MCP server boot, tool registration, basic stdio calls
-
-### Tier 3: Integration Tests
-
-```bash
-npx vitest run --config vitest.integration.config.ts
-```
-
-- **Count:** 63 tests
-- **Speed:** ~30 seconds
-- **Dependencies:** Docker (Supabase PostgreSQL)
-- **Coverage:** Database operations, session lifecycle, cache, query plans
-
-### Tier 4: E2E Tests
-
-```bash
-npx vitest run --config vitest.e2e.config.ts
-```
-
-- **Count:** 60 tests
-- **Speed:** ~75 seconds
-- **Dependencies:** Varies by suite
-- **Coverage:** Full install flow, hooks, MCP via stdio
-
-### Tier 5: User Journey
-
-```bash
-npx vitest run tests/e2e/user-journey.test.ts --config vitest.e2e.config.ts
-```
-
-- **Count:** 6 tests
-- **Speed:** ~60 seconds
-- **Dependencies:** Claude API key
-- **Coverage:** Real Claude session verifying hooks, tools, and ceremony
-
-### Tier 6: Performance
-
-```bash
-npx vitest bench --config vitest.perf.config.ts
-```
-
-- **Count:** 4 benchmark files
-- **Speed:** ~30 seconds
-- **Coverage:** Cold start latency, recall speed, cache performance
+<Callout type="info" title="Before pushing">
+Always run `npm run test:unit` at minimum. Before shipping to npm, run tiers 1-5. Tier 5 (User Journey) is the most important gate.
+</Callout>
 
 ## Quick Run (No Docker)
 
@@ -83,3 +36,293 @@ npm run test:unit && npx vitest run --config vitest.smoke.config.ts
 ```
 
 This covers 670+ tests in under 10 seconds.
+
+---
+
+## Tier Details
+
+### Tier 1 — Unit Tests (597 tests, 34 files)
+
+Pure unit tests with no external dependencies. Fast, deterministic, run everywhere.
+
+| Category | Files | What it covers |
+|----------|-------|----------------|
+| **Schemas** | 13 files | Zod schema validation for all tool inputs |
+| **Services** | 11 files | Thread manager, active sessions, file locks, gitmem-dir, timezone |
+| **Tools** | 2 files | absorb-observations, prepare-context |
+| **Hooks** | 2 files | format-utils, quick-retrieve |
+| **Diagnostics** | 4 files | anonymizer, channels, check-command, collector |
+| **Golden Regressions** | 1 file | 11 tests replaying specific historical bugs |
+| **Standalone** | 3 files | Variant assignment and enforcement (21 tests) |
+
+### Tier 2 — Smoke Tests (9 tests, 2 files)
+
+Boot the MCP server via stdio transport and verify basic functionality.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| `smoke-free.test.ts` | 4 | Free tier server boot, tool list, basic recall |
+| `smoke-pro.test.ts` | 5 | Pro tier server boot (skips without Supabase credentials) |
+
+### Tier 3 — Integration Tests (63 tests, 5 files)
+
+Tests against a real PostgreSQL database via Testcontainers. Catches issues mocks would miss: missing indexes, query plan regressions, schema drift.
+
+All tests share a single Testcontainers setup that starts `pgvector/pgvector:pg16`, stubs `auth.role()` for Supabase compatibility, and loads `schema/setup.sql`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| `fresh-install.test.ts` | ~12 | Empty database behavior, first session, first learning |
+| `session-lifecycle.test.ts` | ~15 | Session create/close, concurrent sessions, close compliance |
+| `cache-behavior.test.ts` | 9 | Cache file operations, TTL expiry, cache symmetry |
+| `query-plans.test.ts` | ~12 | Index usage verification (EXPLAIN), query performance at scale |
+| `scale-profiles.test.ts` | ~15 | Behavior at 0, 15, 100, 500, 1000 scars |
+
+### Tier 4 — E2E Tests (68 tests, 6 files)
+
+Tests CLI commands and MCP protocol end-to-end. Pro tests spawn Testcontainers.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| `cli-fresh-install.test.ts` | 27 | `gitmem init`, `gitmem check`, `gitmem install-hooks`, output sanitization |
+| `free-tier.test.ts` | 15 | Free tier MCP: session lifecycle, recall, create_learning, parameter validation |
+| `pro-fresh.test.ts` | 11 | Pro tier with PostgreSQL: tool registration, recall, session lifecycle |
+| `pro-mature.test.ts` | 7 | Pro tier at scale (1000 scars): performance, cache hit rate, throughput |
+| `organic-discovery.test.ts` | 2 | Multi-session organic adoption measurement (API calls) |
+| `user-journey.test.ts` | 6 | Real Claude session (see Tier 5) |
+
+### Tier 5 — User Journey (6 tests)
+
+The most important pre-ship gate. Spawns a real Claude session and verifies the full user experience using the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/sdk).
+
+What it verifies:
+1. SessionStart hook fires with correct ceremony wording
+2. MCP tools are registered and connected
+3. Agent calls `session_start` and `recall`
+4. No internal references leak into output
+5. Session completes successfully
+
+### Tier 6 — Performance Benchmarks
+
+Vitest `bench()` microbenchmarks measuring operation latency with statistical rigor.
+
+| Suite | What it benchmarks |
+|-------|--------------------|
+| `cold-start.bench.ts` | Cache initialization, first session start |
+| `recall.bench.ts` | Local vector search at 15 and 1000 scars |
+| `cache.bench.ts` | Cache key generation |
+| `session-start.bench.ts` | Session start components |
+
+#### Performance Baselines
+
+| Component | Baseline (ms) |
+|-----------|--------------|
+| `session_start_total` | 750 |
+| `recall_with_scars` | 2000 |
+| `recall_empty` | 500 |
+| `scar_search_local` | 100 |
+| `session_close_total` | 1500 |
+| `cache_hit` | 5 |
+
+Tests fail if measurement exceeds baseline x 1.5 (alert threshold).
+
+---
+
+## CI Pipeline
+
+Source: `.github/workflows/ci.yml`
+
+**Triggers:** Push to `main`, `v*` tags, PRs against `main`.
+
+### Build Job (matrix: Node 18, 20, 22)
+
+| Step | Command | What it does |
+|------|---------|-------------|
+| Type check | `npm run typecheck` | `tsc --noEmit` |
+| Build | `npm run build` | `tsc` — compile to `dist/` |
+| Unit tests | `npm run test:unit` | 764 tests via vitest |
+| Smoke test | `npm run test:smoke:free` | 4 MCP integration tests |
+
+### Publish Job (tag pushes only)
+
+Runs after all 3 build matrix jobs pass. Only fires on `v*` tag pushes.
+
+### Release Workflow
+
+```bash
+# 1. Make changes, commit
+# 2. Bump version
+npm version patch
+# 3. Tag and push
+git tag v1.0.X
+git push origin main --tags
+# CI builds -> tests -> publishes automatically
+```
+
+### What's NOT in CI
+
+| Test tier | Why not | How to run |
+|-----------|---------|-----------|
+| Integration (Tier 3) | Needs Docker | `npm run test:integration` locally |
+| E2E pro (Tier 4) | Needs Docker | `npm run test:e2e` locally |
+| User Journey (Tier 5) | Needs Claude API key | `npm run test:e2e -- tests/e2e/user-journey.test.ts` |
+| Performance (Tier 6) | Benchmarks, not pass/fail | `npm run test:perf` |
+
+---
+
+## Prerequisites
+
+### Docker (Tiers 3-4)
+
+Integration and pro E2E tests use [Testcontainers](https://node.testcontainers.org/) to spin up `pgvector/pgvector:pg16` PostgreSQL containers.
+
+- Docker daemon must be running (`docker info` must succeed)
+- Tests skip gracefully when Docker is unavailable
+- Docker-in-Docker: mount the host Docker socket (`/var/run/docker.sock`)
+
+### Auth Schema Stub
+
+Plain pgvector PostgreSQL doesn't include Supabase's `auth` schema. All Docker-based tests must stub it:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.role() RETURNS TEXT AS $$
+  SELECT 'service_role'::TEXT;
+$$ LANGUAGE sql;
+```
+
+### Claude CLI (Tier 5)
+
+User Journey tests require the Claude CLI installed and authenticated. Detection: `claude --version`.
+
+---
+
+## Skip Conditions
+
+Tests skip gracefully when dependencies are missing:
+
+| Test | Skip condition | Detection |
+|------|---------------|-----------|
+| `user-journey.test.ts` | Claude CLI not installed | `claude --version` |
+| `organic-discovery.test.ts` | Claude CLI not installed | `claude --version` |
+| `pro-fresh.test.ts` | Docker not available | `docker info` |
+| `pro-mature.test.ts` | Docker not available | `docker info` |
+| `smoke-pro.test.ts` | No Supabase credentials | env check |
+| All integration tests | Docker not available | `docker info` |
+
+---
+
+## Tool Tier Gating
+
+The MCP server gates tools by tier:
+
+| Tier | Tool Count | Includes |
+|------|-----------|----------|
+| **free** | 55 | Core tools only |
+| **pro** | 67 | + analyze, cache management, graph traverse |
+| **dev** | 73 | + batch operations, transcripts |
+
+---
+
+## Mapping Changes to Test Tiers
+
+Test at the tier where your change first touches a real boundary. Every change gets Tier 1. Then add the tier that matches the highest boundary crossed.
+
+```
+Did you change...
+  +- a pure function or schema?          -> Tier 1 (always)
+  +- how the MCP server responds?        -> + Tier 2 (5s, free)
+  +- a database query or migration?      -> + Tier 3 (30s, Docker)
+  +- a CLI command or hook script?       -> + Tier 4 (90s, Docker for pro)
+  +- what the agent experiences?          -> + Tier 5 (60s, ~$0.30)
+  +- performance-sensitive code?          -> + Tier 6 (30s, free)
+```
+
+### Pre-commit Minimum
+
+| Situation | Run |
+|-----------|-----|
+| Any code change | `npm run test:unit` (Tier 1) |
+| MCP server or tool changes | + `npm run test:smoke:free` (Tier 2) |
+| Before pushing to GitHub | Tiers 1 + 2 minimum |
+| Before npm publish | Tiers 1-5 (Tier 5 is the ship gate) |
+
+---
+
+## Agent SDK Testing Pattern
+
+The `user-journey.test.ts` file establishes a reusable pattern for testing Claude CLI integrations:
+
+```typescript
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage, HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+
+const toolCalls: string[] = [];
+const hookObserver: HookCallback = async (input) => {
+  if (input.hook_event_name === "PreToolUse") {
+    toolCalls.push((input as PreToolUseHookInput).tool_name);
+  }
+  return {};
+};
+
+for await (const msg of query({
+  prompt: "Do something",
+  options: {
+    cwd: "/path/to/project",
+    model: "haiku",
+    maxTurns: 5,
+    maxBudgetUsd: 1.0,
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    persistSession: false,
+    settingSources: ["project"],
+    thinking: { type: "disabled" },
+    hooks: {
+      PreToolUse: [{ hooks: [hookObserver] }],
+    },
+  },
+})) {
+  // Process messages...
+}
+
+expect(toolCalls).toContain("mcp__gitmem__session_start");
+```
+
+### Key SDK Options for Testing
+
+| Option | Value | Why |
+|--------|-------|-----|
+| `model` | `"haiku"` | Fastest, cheapest |
+| `maxTurns` | 2-5 | Prevent runaway |
+| `maxBudgetUsd` | 1.0 | Hard cost cap |
+| `permissionMode` | `"bypassPermissions"` | No interactive prompts |
+| `persistSession` | `false` | No disk state |
+| `settingSources` | `["project"]` | Load project hooks |
+
+---
+
+## Adding New Tests
+
+| What you're adding | Tier | Location |
+|-------------------|------|----------|
+| Schema validation / pure logic | 1 | `tests/unit/schemas/` or `tests/unit/services/` |
+| Database behavior | 3 | `tests/integration/` |
+| Free tier CLI / hooks | 4 | `cli-fresh-install.test.ts` or `free-tier.test.ts` |
+| Pro tier MCP | 4 | `pro-fresh.test.ts` or `pro-mature.test.ts` |
+| Agent behavior | 5 | `user-journey.test.ts` |
+| Performance regression | 6 | `tests/performance/` |
+| Hook scripts | — | `hooks/tests/test-hooks.sh` |
+
+<Callout type="warn" title="Non-deterministic agents">
+For Tier 5 user-journey tests, keep prompts simple and use `appendSystemPrompt` to constrain agent behavior. Test that tools are _called_, not that the agent says specific words.
+</Callout>
+
+## MCP Protocol Compliance
+
+A dedicated compliance suite validates gitmem-mcp against the MCP protocol specification. See [Compliance Report](/docs/contributing/compliance) for the full report.
+
+**Latest result:** 36/36 PASS
+
+```bash
+GITMEM_TIER=free node tests/compliance/mcp-protocol-compliance.mjs
+```

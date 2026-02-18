@@ -1,11 +1,19 @@
 ---
 title: Threads
-description: Track unresolved work across sessions with GitMem threads.
+description: Track unresolved work across sessions with lifecycle management, vitality scoring, and semantic deduplication.
 ---
+
+import { Callout } from 'fumadocs-ui/components/callout'
 
 # Threads
 
-**Threads** track unresolved work that carries across sessions. When you can't finish something in the current session, create a thread so the next session picks it up.
+**Threads** are persistent work items that carry across sessions. They track what's unresolved, what's blocked, and what needs follow-up — surviving session boundaries so nothing gets lost.
+
+## Why Threads Exist
+
+Sessions end, but work doesn't. Before threads, open items lived as plain strings inside session records. They had no IDs, no lifecycle, no way to mark something as done. You'd see the same stale item surfaced session after session with no way to clear it.
+
+Threads give open items identity (`t-XXXXXXXX`), lifecycle status, vitality scoring, and a resolution trail.
 
 ## Creating Threads
 
@@ -13,44 +21,185 @@ description: Track unresolved work across sessions with GitMem threads.
 create_thread({ text: "Auth middleware needs rate limiting before production deploy" })
 ```
 
-Threads include:
-- A unique thread ID (e.g., `t-a1b2c3d4`)
-- Description text
-- Creation timestamp
-- Optional Linear issue link
+Threads are created in three ways:
 
-## Semantic Deduplication
-
-GitMem uses cosine similarity (threshold > 0.85) to prevent duplicate threads. If you try to create a thread that's semantically identical to an existing one, GitMem returns the existing thread instead.
+1. **Explicitly** via `create_thread` — mid-session when you identify a new open item
+2. **Implicitly** via `session_close` — when the closing payload includes `open_threads`
+3. **Promoted** from a suggestion via `promote_suggestion` — when a recurring topic is confirmed
 
 ## Thread Lifecycle
 
+Threads progress through a 5-stage state machine based on vitality scoring and age:
+
 ```
-create → surface at session_start → resolve
+create_thread / session_close payload
+        |
+        v
+  [ EMERGING ]  -- first 24 hours, high visibility
+        |
+        v (age > 24h)
+  [ ACTIVE ]  -- vitality > 0.5, actively referenced
+        |
+        v (vitality decays)
+  [ COOLING ]  -- 0.2 <= vitality <= 0.5, fading from use
+        |
+        v (vitality < 0.2)
+  [ DORMANT ]  -- vitality < 0.2, no recent touches
+        |
+        v (dormant 30+ days)
+  [ ARCHIVED ]  -- auto-archived, hidden from session_start
+
+Any state --(explicit resolve_thread)--> [ RESOLVED ]
 ```
 
-1. **Create** — `create_thread` during a session
-2. **Surface** — Open threads appear in the next `session_start` banner
-3. **Resolve** — `resolve_thread` with a resolution note when complete
+### Transitions
+
+| Transition | Condition |
+|-----------|-----------|
+| any -> emerging | Thread age < 24 hours |
+| emerging -> active | Thread age >= 24 hours, vitality > 0.5 |
+| active -> cooling | Vitality drops to [0.2, 0.5] |
+| cooling -> active | Touch refreshes vitality above 0.5 |
+| cooling -> dormant | Vitality drops below 0.2 |
+| dormant -> active | Touch refreshes vitality above 0.5 |
+| dormant -> archived | Dormant for 30+ consecutive days |
+| any -> resolved | Explicit `resolve_thread` call |
+
+**Terminal states:** Archived and resolved threads do not transition. To reopen an archived topic, create a new thread.
+
+## Vitality Scoring
+
+Every thread has a vitality score (0.0 to 1.0) computed from two components:
+
+```
+vitality = 0.55 * recency + 0.45 * frequency
+```
+
+### Recency
+
+Exponential decay based on thread class half-life:
+
+```
+recency = e^(-ln(2) * days_since_touch / half_life)
+```
+
+| Thread Class | Half-Life | Use Case |
+|-------------|-----------|----------|
+| operational | 3 days | Deploys, fixes, incidents, blockers |
+| backlog | 21 days | Research, long-running improvements |
+
+Thread class is auto-detected from keywords in the thread text ("deploy", "fix", "debug", "hotfix", "urgent", "broken", "incident", "blocker" = operational).
+
+### Frequency
+
+Log-scaled touch count normalized against thread age:
+
+```
+frequency = min(log(touch_count + 1) / log(days_alive + 1), 1.0)
+```
+
+### Status Thresholds
+
+| Vitality Score | Status |
+|---------------|--------|
+| > 0.5 | active |
+| 0.2 - 0.5 | cooling |
+| < 0.2 | dormant |
+
+Threads touched during a session have their `touch_count` incremented and `last_touched_at` refreshed, which revives decayed vitality.
+
+## Carry-Forward
+
+On `session_start`, open threads appear with vitality info:
+
+```
+Open threads (3):
+  t-abc12345: Fix auth timeout [ACTIVE 0.82] (operational, 2d ago)
+  t-def67890: Improve test coverage [COOLING 0.35] (backlog, 12d ago)
+  t-ghi11111: New thread just created [EMERGING 0.95] (backlog, today)
+```
+
+## Resolution
+
+Threads are resolved via `resolve_thread`:
+- **By ID** (preferred): `resolve_thread({ thread_id: "t-a1b2c3d4" })`
+- **By text match** (fallback): `resolve_thread({ text_match: "package name" })`
+
+Resolution records a timestamp, the resolving session, and an optional note. Knowledge graph triples are written to track the resolution relationship.
+
+## Semantic Deduplication
+
+When `create_thread` is called, the new thread text is compared against all open threads using embedding cosine similarity before creation.
+
+| Threshold | Value | Meaning |
+|-----------|-------|---------|
+| Dedup similarity | 0.85 | Above this = duplicate |
+
+**Dedup methods** (in priority order):
+1. **Embedding-based** — cosine similarity of text embeddings (when Supabase available)
+2. **Text normalization fallback** — exact match after lowercasing, stripping punctuation, collapsing whitespace
+
+When a duplicate is detected, the existing thread is returned (with `deduplicated: true`) and touched to keep it vital.
+
+## Suggested Threads
+
+At `session_close`, session embeddings are compared to detect recurring topics that should become threads.
+
+### Detection Algorithm
+
+1. Compare current session embedding against the last 20 sessions (30-day window)
+2. Find sessions with cosine similarity >= 0.70
+3. If 3+ sessions cluster (current + 2 historical):
+   - Check if an open thread already covers the topic (>= 0.80) -> skip
+   - Check if a pending suggestion already matches (>= 0.80) -> add evidence
+   - Otherwise, create a new suggestion
+
+Suggestions appear at `session_start`:
+
+```
+Suggested threads (2) -- recurring topics not yet tracked:
+  ts-a1b2c3d4: Recurring auth timeout pattern (3 sessions)
+  ts-e5f6g7h8: Build performance regression (4 sessions)
+  Use promote_suggestion or dismiss_suggestion to manage.
+```
+
+| Action | Tool | Effect |
+|--------|------|--------|
+| Promote | `promote_suggestion` | Converts to a real thread |
+| Dismiss | `dismiss_suggestion` | Suppresses (3x = permanent) |
+
+## Knowledge Graph Integration
+
+Thread creation and resolution generate knowledge graph triples:
+
+| Predicate | Subject | Object | When |
+|-----------|---------|--------|------|
+| `created_thread` | Session | Thread | Thread created |
+| `resolves_thread` | Session | Thread | Thread resolved |
+| `relates_to_thread` | Thread | Issue | Thread linked to Linear issue |
+
+Use `graph_traverse` to query these relationships with 4 lenses: `connected_to`, `produced_by`, `provenance`, `stats`.
 
 ## Managing Threads
 
 | Tool | Purpose |
 |------|---------|
-| `list_threads` | See all open threads |
-| `resolve_thread` | Mark a thread as done |
-| `cleanup_threads` | Triage by health (active/cooling/dormant) |
+| [`create_thread`](/docs/tools/create-thread) | Create a new open thread |
+| [`resolve_thread`](/docs/tools/resolve-thread) | Mark a thread as done |
+| [`list_threads`](/docs/tools/list-threads) | See all open threads |
+| [`cleanup_threads`](/docs/tools/cleanup-threads) | Triage by health (active/cooling/dormant) |
+| [`promote_suggestion`](/docs/tools/promote-suggestion) | Convert suggestion to real thread |
+| [`dismiss_suggestion`](/docs/tools/dismiss-suggestion) | Suppress a suggestion |
 
-### Thread Health
+## Storage
 
-`cleanup_threads` categorizes threads by vitality:
+| Location | Purpose | Tier |
+|----------|---------|------|
+| `.gitmem/threads.json` | Runtime cache / free tier SOT | All |
+| `.gitmem/suggested-threads.json` | Pending suggestions | All |
+| Supabase `threads` table | Source of truth (full vitality, lifecycle, embeddings) | Pro/Dev |
+| Supabase `sessions.open_threads` | Legacy fallback | Pro/Dev |
 
-- **Active** — Recently created or referenced
-- **Cooling** — Not referenced in a while
-- **Dormant** — Untouched for 30+ days (auto-archivable)
-
-### Suggested Threads
-
-`session_start` may suggest threads based on session context. You can:
-- **Promote** — `promote_suggestion` converts it to a real thread
-- **Dismiss** — `dismiss_suggestion` suppresses it (3 dismissals = permanent suppression)
+<Callout type="info" title="Free vs Pro">
+On free tier, `.gitmem/threads.json` IS the source of truth. On pro/dev tier, it's a cache — Supabase is authoritative.
+</Callout>

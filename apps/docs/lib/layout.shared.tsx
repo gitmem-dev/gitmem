@@ -18,7 +18,7 @@ export function baseOptions(): BaseLayoutProps {
       },
       {
         text: "GitHub",
-        url: "https://github.com/nTEG-dev/gitmem",
+        url: "https://github.com/gitmem-dev/gitmem",
         external: true,
       },
       {

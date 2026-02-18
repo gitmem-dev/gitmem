@@ -7,7 +7,7 @@ description: "Check institutional memory for relevant scars before taking action
 
 **Tier:** Free · **Aliases:** `gitmem-r`
 
-Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons.
+Check institutional memory for relevant scars before taking action. Returns matching scars and their lessons. Integrates variant assignment when issue_id provided.
 
 ## Parameters
 
@@ -17,4 +17,5 @@ Check institutional memory for relevant scars before taking action. Returns matc
 | `project` | string | No | Project namespace (e.g., 'my-project'). Scopes sessions and searches. |
 | `match_count` | number | No | Number of scars to return (default: 3) |
 | `issue_id` | string | No | Linear issue identifier for variant assignment (e.g., 'PROJ-123'). When provided, scars with variants will be randomly assigned and formatted accordingly. |
+| `similarity_threshold` | number | No | Minimum similarity score (0-1) to include results. Weak matches below threshold are suppressed. Default: 0.4 (free tier BM25), 0.35 (pro tier embeddings). |
 

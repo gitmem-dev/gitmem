@@ -64,7 +64,7 @@ export interface LogResult {
 
 function buildLogDisplay(entries: LogEntry[], total: number, filters: LogResult["filters"]): string {
   const lines: string[] = [];
-  lines.push(`gitmem log · ${total} entries · ${filters.project}`);
+  lines.push(`gitmem log · ${total} most recent learnings · ${filters.project}`);
   const fp: string[] = [];
   if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
   if (filters.severity) fp.push(`severity=${filters.severity}`);

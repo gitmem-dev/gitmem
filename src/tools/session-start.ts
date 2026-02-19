@@ -50,6 +50,34 @@ import type {
   ThreadObject,
 } from "../types/index.js";
 
+/**
+ * Closing payload schema — returned in session_start/refresh so agents
+ * know the exact field names for closing-payload.json without guessing.
+ */
+const CLOSING_PAYLOAD_SCHEMA: Record<string, unknown> = {
+  closing_reflection: {
+    what_broke: "Q1: What broke that you didn't expect?",
+    what_took_longer: "Q2: What took longer than it should have?",
+    do_differently: "Q3: What would you do differently next time?",
+    what_worked: "Q4: What pattern or approach worked well?",
+    wrong_assumption: "Q5: What assumption was wrong?",
+    scars_applied: ["Q6: scar titles applied"],
+    institutional_memory_items: "Q7: What to capture as institutional memory?",
+  },
+  task_completion: {
+    questions_displayed_at: "ISO-8601",
+    reflection_completed_at: "ISO-8601",
+    human_asked_at: "ISO-8601",
+    human_response_at: "ISO-8601",
+    human_response: "human's corrections or 'no corrections'",
+  },
+  human_corrections: "",
+  scars_to_record: [],
+  learnings_created: [],
+  open_threads: [],
+  decisions: [],
+};
+
 // Supabase record types
 interface SessionRecord {
   id: string;
@@ -539,6 +567,7 @@ async function sessionStartFree(
     ...(freeMergedThreads.length > 0 && { open_threads: freeMergedThreads }),
     recent_decisions: decisions,
     gitmem_dir: getGitmemDir(),
+    closing_payload_schema: CLOSING_PAYLOAD_SCHEMA,
     project,
     performance,
   };
@@ -1027,6 +1056,7 @@ export async function sessionStart(
     recent_decisions: decisions,
     ...(recordingPath && { recording_path: recordingPath }),
     gitmem_dir: getGitmemDir(),
+    closing_payload_schema: CLOSING_PAYLOAD_SCHEMA,
     project,
     performance,
   };
@@ -1195,6 +1225,7 @@ export async function sessionRefresh(
     recent_decisions: decisions,
     // Rapport disabled — not injected into session context
     ...(recordingPath && { recording_path: recordingPath }),
+    closing_payload_schema: CLOSING_PAYLOAD_SCHEMA,
     project,
     performance,
   };

@@ -506,6 +506,36 @@ async function stepMemoryStore() {
     }
   }
 
+  // Closing payload template — agents read this before writing closing-payload.json
+  const templatePath = join(gitmemDir, "closing-payload-template.json");
+  if (!existsSync(templatePath)) {
+    writeJson(templatePath, {
+      closing_reflection: {
+        what_broke: "",
+        what_took_longer: "",
+        do_differently: "",
+        what_worked: "",
+        wrong_assumption: "",
+        scars_applied: [],
+        institutional_memory_items: "",
+        collaborative_dynamic: "",
+        rapport_notes: ""
+      },
+      task_completion: {
+        questions_displayed_at: "ISO-8601 timestamp",
+        reflection_completed_at: "ISO-8601 timestamp",
+        human_asked_at: "ISO-8601 timestamp",
+        human_response_at: "ISO-8601 timestamp",
+        human_response: "no corrections | actual corrections text"
+      },
+      human_corrections: "",
+      scars_to_record: [],
+      learnings_created: [],
+      open_threads: [],
+      decisions: []
+    });
+  }
+
   console.log(
     `  Created .gitmem/ with ${starterScars.length} starter scars` +
       (added < starterScars.length

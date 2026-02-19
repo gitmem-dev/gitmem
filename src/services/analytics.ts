@@ -585,7 +585,7 @@ export function formatSummary(data: SummaryAnalytics): string {
   const lines: string[] = [
     `## ${period.days}-Day Summary (${period.start} to ${period.end})`,
     ``,
-    `**Sessions:** ${total_sessions} | **Decisions:** ${total_decisions} | **Open Threads:** ${total_open_threads}`,
+    `**Sessions:** ${total_sessions} | **Decisions:** ${total_decisions} | **Threads Referenced:** ${total_open_threads}`,
     `**With Reflections:** ${sessions_with_reflections} | **With Issues:** ${sessions_with_issues}`,
     ``,
     `### Agents`,

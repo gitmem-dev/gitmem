@@ -5,6 +5,10 @@
  * Tool definitions are in ./tools/definitions.ts
  */
 
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -89,7 +93,7 @@ export function createServer(): Server {
   const server = new Server(
     {
       name: "gitmem-mcp",
-      version: "1.0.3",
+      version: pkg.version,
     },
     {
       capabilities: {
@@ -309,7 +313,7 @@ export function createServer(): Server {
           const cmdLines = visibleCommands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
 
           const display = [
-            `gitmem v1.0.3 · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            `gitmem v${pkg.version} · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
             "Memory that compounds.",
             "",
             cmdLines,
@@ -322,7 +326,7 @@ export function createServer(): Server {
           ].join("\n");
 
           result = {
-            version: "1.0.3",
+            version: pkg.version,
             tier,
             tools_registered: registeredTools.length,
             storage: hasSupabase() ? "supabase" : "local (.gitmem/)",

@@ -100,12 +100,16 @@ function buildCleanupDisplay(
 
   for (const [label, items] of sections) {
     if (items.length === 0) continue;
-    lines.push(`${label} (${items.length}):`);
+    lines.push(`**${label}** (${items.length}):`);
+    lines.push("");
+    lines.push("| ID | Thread | Last Touch |");
+    lines.push("|----|--------|------------|");
     for (const t of items) {
-      const text = truncate(t.text, 48);
+      const text = truncate(t.text, 60);
       const time = formatDaysAgo(t.days_since_touch);
-      lines.push(`  ${t.thread_id}  ${text.padEnd(50)} ${time.padStart(8)}`);
+      lines.push(`| ${t.thread_id} | ${text} | ${time} |`);
     }
+    lines.push("");
   }
 
   lines.push("");

@@ -64,28 +64,16 @@ function buildThreadsDisplay(
     a.created_at.localeCompare(b.created_at)
   );
 
-  const NUM_W = 3;
-  const ID_W = 12;
-  const TEXT_W = 40;
-  const DATE_W = 8;
-  const hr = (l: string, j: string, r: string) =>
-    `${l}${"─".repeat(NUM_W + 2)}${j}${"─".repeat(ID_W + 2)}${j}${"─".repeat(TEXT_W + 2)}${j}${"─".repeat(DATE_W + 2)}${r}`;
-  const hdr = (l: string, j: string, r: string) =>
-    `${l}${"═".repeat(NUM_W + 2)}${j}${"═".repeat(ID_W + 2)}${j}${"═".repeat(TEXT_W + 2)}${j}${"═".repeat(DATE_W + 2)}${r}`;
-  const row = (n: string, id: string, t: string, d: string) =>
-    `│ ${n.padEnd(NUM_W)} │ ${id.padEnd(ID_W)} │ ${t.padEnd(TEXT_W)} │ ${d.padStart(DATE_W)} │`;
-
-  lines.push(hr("┌", "┬", "┐"));
-  lines.push(row("#", "ID", "Thread", "Active"));
-  lines.push(hdr("╞", "╪", "╡"));
+  // Markdown table — renders cleanly in all MCP clients
+  lines.push("| # | ID | Thread | Active |");
+  lines.push("|---|-----|--------|--------|");
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i];
-    const shortId = truncate(t.id, ID_W);
-    const text = truncate(t.text, TEXT_W);
+    const shortId = t.id;
+    const text = truncate(t.text, 60);
     const date = shortDate(t.last_touched_at || t.created_at);
-    lines.push(row(`${i + 1}.`, shortId, text, date));
+    lines.push(`| ${i + 1} | ${shortId} | ${text} | ${date} |`);
   }
-  lines.push(hr("└", "┴", "┘"));
 
   return wrapDisplay(lines.join("\n"));
 }

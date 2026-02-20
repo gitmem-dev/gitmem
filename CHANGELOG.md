@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-02-20
+
+### Changed
+- **Recall default switched to c-review**: Production nudge header changed from "INSTITUTIONAL MEMORY ACTIVATED" to "N scars to review". Nudge-bench testing (54 runs × 3 models) showed 89% scar reference rate vs 44% — a 2x improvement across Opus, Sonnet, and Haiku.
+
+### Fixed
+- **Thread display cleanup**: Removed internal thread IDs from `list_threads` output. Threads now show `# | Thread | Active` — IDs were implementation detail with no user value.
+
 ## [1.1.3] - 2026-02-19
 
 ### Added

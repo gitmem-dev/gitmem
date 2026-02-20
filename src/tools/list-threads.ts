@@ -2,7 +2,7 @@
  * list_threads Tool
  *
  * List open threads across recent sessions. Shows unresolved work items
- * that carry over between sessions, with IDs for resolution.
+ * that carry over between sessions.
  *
  * Primary read from Supabase (source of truth).
  * Falls back to session-based aggregation (same as session_start),
@@ -65,14 +65,13 @@ function buildThreadsDisplay(
   );
 
   // Markdown table — renders cleanly in all MCP clients
-  lines.push("| # | ID | Thread | Active |");
-  lines.push("|---|-----|--------|--------|");
+  lines.push("| # | Thread | Active |");
+  lines.push("|---|--------|--------|");
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i];
-    const shortId = t.id;
     const text = truncate(t.text, 60);
     const date = shortDate(t.last_touched_at || t.created_at);
-    lines.push(`| ${i + 1} | ${shortId} | ${text} | ${date} |`);
+    lines.push(`| ${i + 1} | ${text} | ${date} |`);
   }
 
   return wrapDisplay(lines.join("\n"));

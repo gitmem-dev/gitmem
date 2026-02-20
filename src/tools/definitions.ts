@@ -621,7 +621,7 @@ export const TOOLS = [
   {
     name: "list_threads",
     description:
-      "List open threads across recent sessions. Shows unresolved work items that carry over between sessions, with IDs for resolution. Use resolve_thread to mark threads as done.",
+      "List open threads across recent sessions. Shows unresolved work items that carry over between sessions. Use resolve_thread to mark threads as done.",
     inputSchema: {
       type: "object" as const,
       properties: {

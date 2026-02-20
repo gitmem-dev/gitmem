@@ -287,8 +287,7 @@ describe("prepare_context: full format", () => {
     });
 
     expect(result.format).toBe("full");
-    expect(result.memory_payload).toContain("INSTITUTIONAL MEMORY ACTIVATED");
-    expect(result.memory_payload).toContain("Found 4 relevant scars");
+    expect(result.memory_payload).toContain("scars to review");
     expect(result.memory_payload).toContain("Acknowledge these lessons before proceeding.");
     expect(result.scars_included).toBe(4);
   });

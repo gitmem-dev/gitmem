@@ -69,7 +69,7 @@ describe("recall", () => {
     expect(result.scars[0].title).toBe("Test Scar");
     expect(result.scars[0].severity).toBe("high");
     expect(result.scars[0].similarity).toBe(0.85);
-    expect(result.formatted_response).toContain("INSTITUTIONAL MEMORY ACTIVATED");
+    expect(result.formatted_response).toContain("scars to review");
     expect(result.formatted_response).toContain("Test Scar");
   });
 

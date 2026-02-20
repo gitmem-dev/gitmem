@@ -143,7 +143,7 @@ export const TOOLS = [
   },
   {
     name: "session_close",
-    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
+    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. task_completion is auto-generated from closing_reflection timestamps and human_corrections — do NOT write it to the payload. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
       type: "object" as const,
       properties: {

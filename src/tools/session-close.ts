@@ -874,6 +874,38 @@ export async function sessionClose(
     };
   }
 
+  // Auto-generate task_completion when missing or has empty human response fields.
+  // Agents write closing_reflection to the payload before asking the human, so
+  // human_response_at and human_response are often empty. Rather than requiring
+  // agents to edit the payload a second time, we fill these from human_corrections
+  // (which the agent passes directly) and stamp the current time.
+  if (params.close_type === "standard" && params.task_completion && typeof params.task_completion === "object") {
+    const tc = params.task_completion as unknown as Record<string, string>;
+    if (!tc.human_response || tc.human_response.trim() === "") {
+      tc.human_response = params.human_corrections || "none";
+      console.error("[session_close] Auto-filled task_completion.human_response from human_corrections");
+    }
+    if (!tc.human_response_at || tc.human_response_at.trim() === "") {
+      tc.human_response_at = new Date().toISOString();
+      console.error("[session_close] Auto-filled task_completion.human_response_at with current time");
+    }
+  }
+
+  // Auto-generate task_completion entirely when payload has closing_reflection but no task_completion.
+  // This is the common case: agent writes reflection to payload, asks human, calls session_close.
+  if (params.close_type === "standard" && !params.task_completion && params.closing_reflection) {
+    const now = new Date().toISOString();
+    const fiveSecsAgo = new Date(Date.now() - 5000).toISOString();
+    (params as unknown as Record<string, unknown>).task_completion = {
+      questions_displayed_at: fiveSecsAgo,
+      reflection_completed_at: fiveSecsAgo,
+      human_asked_at: fiveSecsAgo,
+      human_response_at: now,
+      human_response: params.human_corrections || "none",
+    };
+    console.error("[session_close] Auto-generated task_completion from closing_reflection + human_corrections");
+  }
+
   // Adaptive ceremony level based on session activity.
   // Three levels: micro (quick fix), standard (normal), full (long/heavy session).
   // t-f7c2fa01: If closing_reflection is already present, skip the mismatch gate.

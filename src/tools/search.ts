@@ -23,7 +23,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
-import { wrapDisplay, truncate, SEV, TYPE } from "../services/display-protocol.js";
+import { wrapDisplay, truncate, SEV, TYPE, productLine, dimText } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -73,7 +73,7 @@ function buildSearchDisplay(
   filters: SearchResult["filters_applied"]
 ): string {
   const lines: string[] = [];
-  lines.push(`gitmem search · ${total_found} results · "${truncate(query, 60)}"`);
+  lines.push(productLine("search", `${total_found} results · "${truncate(query, 60)}"`));
   const fp: string[] = [];
   if (filters.severity) fp.push(`severity=${filters.severity}`);
   if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
@@ -85,7 +85,7 @@ function buildSearchDisplay(
   }
   for (const r of results) {
     const te = TYPE[r.learning_type] || "·";
-    const se = SEV[r.severity] || "⚪";
+    const se = SEV[r.severity] || "[?]";
     const t = truncate(r.title, 50);
     const sim = `(${r.similarity.toFixed(2)})`;
     const issue = r.source_linear_issue ? `  ${r.source_linear_issue}` : "";

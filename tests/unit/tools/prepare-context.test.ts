@@ -167,10 +167,10 @@ describe("prepare_context: compact format", () => {
       format: "compact",
     });
 
-    expect(result.memory_payload).toContain("🔴 CRITICAL");
-    expect(result.memory_payload).toContain("🟠 HIGH");
-    expect(result.memory_payload).toContain("🟡 MEDIUM");
-    expect(result.memory_payload).toContain("🟢 LOW");
+    expect(result.memory_payload).toContain("[!!] CRITICAL");
+    expect(result.memory_payload).toContain("[!] HIGH");
+    expect(result.memory_payload).toContain("[~] MEDIUM");
+    expect(result.memory_payload).toContain("[-] LOW");
   });
 
   it("truncates to token budget", async () => {
@@ -243,7 +243,7 @@ describe("prepare_context: gate format", () => {
 
     expect(result.memory_payload).toContain("MEMORY GATE:");
     expect(result.memory_payload).toContain("1 blocking scar");
-    expect(result.memory_payload).toContain("🚨 BLOCK");
+    expect(result.memory_payload).toContain("[!!] BLOCK");
     expect(result.memory_payload).toContain("Before modifying production");
     expect(result.memory_payload).toContain("SELECT count(*)");
     expect(result.memory_payload).toContain("MUST SHOW");

@@ -24,7 +24,7 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
-import { wrapDisplay, truncate } from "../services/display-protocol.js";
+import { wrapDisplay, truncate, productLine, dimText } from "../services/display-protocol.js";
 import type { ListThreadsParams, ListThreadsResult, ThreadObject } from "../types/index.js";
 
 /** Minimal session shape for aggregation (matches session_start) */
@@ -52,7 +52,7 @@ function buildThreadsDisplay(
   totalResolved: number
 ): string {
   const lines: string[] = [];
-  lines.push(`gitmem threads · ${totalOpen} open · ${totalResolved} resolved`);
+  lines.push(productLine("threads", `${totalOpen} open · ${totalResolved} resolved`));
   lines.push("");
   if (threads.length === 0) {
     lines.push("No threads found.");

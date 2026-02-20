@@ -28,7 +28,8 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
-import { wrapDisplay } from "../services/display-protocol.js";
+import { wrapDisplay, productLine } from "../services/display-protocol.js";
+import { formatNudgeHeader } from "../services/nudge-variants.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 import {
   estimateTokens,
@@ -79,18 +80,14 @@ Proceed with caution — this may be new territory without documented lessons.`;
   }
 
   const lines: string[] = [
-    "🧠 INSTITUTIONAL MEMORY ACTIVATED",
-    "",
-    `Found ${scars.length} relevant scar${scars.length === 1 ? "" : "s"} for your plan:`,
+    formatNudgeHeader(scars.length),
     "",
   ];
 
   // Blocking verification requirements first
   const blockingScars = scars.filter((s) => s.required_verification?.blocking);
   if (blockingScars.length > 0) {
-    lines.push("═══════════════════════════════════════════════════════════════");
-    lines.push("🚨 **VERIFICATION REQUIRED BEFORE PROCEEDING**");
-    lines.push("═══════════════════════════════════════════════════════════════");
+    lines.push("[!!] VERIFICATION REQUIRED BEFORE PROCEEDING");
     lines.push("");
 
     for (const scar of blockingScars) {
@@ -109,12 +106,12 @@ Proceed with caution — this may be new territory without documented lessons.`;
       lines.push("");
     }
 
-    lines.push("═══════════════════════════════════════════════════════════════");
+    lines.push("---");
     lines.push("");
   }
 
   for (const scar of scars) {
-    const emoji = SEVERITY_EMOJI[scar.severity] || "⚪";
+    const emoji = SEVERITY_EMOJI[scar.severity] || "[?]";
     lines.push(`${emoji} **${scar.title}** (${scar.severity}, score: ${(scar.similarity || 0).toFixed(2)})`);
     lines.push(scar.description);
 
@@ -248,7 +245,7 @@ function buildResult(
   }).catch(() => {});
 
   const display = wrapDisplay(
-    `prepare_context \u00b7 ${format} \u00b7 ${scars_included} scars (${blocking_scars} blocking) \u00b7 ~${token_estimate} tokens\n\n${memory_payload}`
+    `${productLine("prepare_context", `${format} · ${scars_included} scars (${blocking_scars} blocking) · ~${token_estimate} tokens`)}\n\n${memory_payload}`
   );
 
   return {

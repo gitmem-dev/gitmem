@@ -55,6 +55,18 @@ vi.mock("../../../src/services/gitmem-dir.js", () => ({
 
 vi.mock("../../../src/services/display-protocol.js", () => ({
   wrapDisplay: (content: string) => content,
+  productLine: (tool: string, detail?: string) => `gitmem -- ${tool}${detail ? ` · ${detail}` : ""}`,
+  STATUS: {
+    ok: "ok",
+    fail: "FAIL",
+    warn: "WARN",
+    rejected: "REJECTED",
+    complete: "COMPLETE",
+    failed: "FAILED",
+    pass: "+",
+    miss: "-",
+  },
+  ANSI: { red: "", yellow: "", green: "", bold: "", dim: "", reset: "" },
 }));
 
 vi.mock("fs", () => ({

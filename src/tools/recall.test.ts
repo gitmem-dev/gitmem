@@ -167,9 +167,9 @@ describe("recall", () => {
 
     const result = await recall({ plan: "test", match_count: 3 });
 
-    expect(result.formatted_response).toContain("🔴");
-    expect(result.formatted_response).toContain("🟠");
-    expect(result.formatted_response).toContain("🟡");
+    expect(result.formatted_response).toContain("[!!]");
+    expect(result.formatted_response).toContain("[!]");
+    expect(result.formatted_response).toContain("[~]");
   });
 
   it("includes cache_hit in performance data", async () => {

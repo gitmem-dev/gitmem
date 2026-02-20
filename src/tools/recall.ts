@@ -38,7 +38,8 @@ import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionPath } from "../services/gitmem-dir.js";
-import { wrapDisplay } from "../services/display-protocol.js";
+import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI } from "../services/display-protocol.js";
+import { formatNudgeHeader } from "../services/nudge-variants.js";
 import { fetchDismissalCounts, type DismissalCounts } from "../services/behavioral-decay.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
@@ -143,17 +144,13 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
   const scarsWithVerification = scars.filter((s) => s.required_verification?.blocking);
 
   const lines: string[] = [
-    "🧠 INSTITUTIONAL MEMORY ACTIVATED",
-    "",
-    `Found ${scars.length} relevant scar${scars.length === 1 ? "" : "s"} for your plan:`,
+    formatNudgeHeader(scars.length),
     "",
   ];
 
   // Display blocking verification requirements FIRST and prominently
   if (scarsWithVerification.length > 0) {
-    lines.push("═══════════════════════════════════════════════════════════════");
-    lines.push("🚨 **VERIFICATION REQUIRED BEFORE PROCEEDING**");
-    lines.push("═══════════════════════════════════════════════════════════════");
+    lines.push(`${ANSI.red}[!!] VERIFICATION REQUIRED BEFORE PROCEEDING${ANSI.reset}`);
     lines.push("");
 
     for (const scar of scarsWithVerification) {
@@ -170,23 +167,16 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       lines.push("");
       lines.push(`**MUST SHOW:** ${rv.must_show}`);
       lines.push("");
-      lines.push("⛔ DO NOT write SQL until verification output is shown above.");
+      lines.push(`${ANSI.red}[!!] DO NOT proceed until verification output is shown above.${ANSI.reset}`);
       lines.push("");
     }
 
-    lines.push("═══════════════════════════════════════════════════════════════");
-    lines.push("");
   }
 
   for (const scar of scars) {
-    const severityEmoji = {
-      critical: "🔴",
-      high: "🟠",
-      medium: "🟡",
-      low: "🟢",
-    }[scar.severity] || "⚪";
+    const sev = SEV[scar.severity] || "[?]";
 
-    lines.push(`${severityEmoji} **${scar.title}** (${scar.severity}, score: ${scar.similarity.toFixed(2)}) · id: ${scar.id}`);
+    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}`);
 
     // Inline archival hint: scars with high dismiss rates get annotated
     if (dismissals) {

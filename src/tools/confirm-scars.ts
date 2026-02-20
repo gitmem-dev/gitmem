@@ -24,7 +24,7 @@ import {
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getSessionPath } from "../services/gitmem-dir.js";
-import { wrapDisplay } from "../services/display-protocol.js";
+import { wrapDisplay, productLine, STATUS, ANSI } from "../services/display-protocol.js";
 import type {
   ConfirmScarsParams,
   ConfirmScarsResult,
@@ -99,16 +99,16 @@ function formatResponse(
   const lines: string[] = [];
 
   if (valid) {
-    lines.push("✅ SCAR CONFIRMATIONS ACCEPTED");
+    lines.push(`${STATUS.ok} SCAR CONFIRMATIONS ACCEPTED`);
     lines.push("");
     for (const conf of confirmations) {
-      const emoji = conf.decision === "APPLYING" ? "🟢" : conf.decision === "N_A" ? "⚪" : "🟠";
-      lines.push(`${emoji} **${conf.scar_title}** → ${conf.decision}`);
+      const indicator = conf.decision === "APPLYING" ? `${ANSI.green}+${ANSI.reset}` : conf.decision === "N_A" ? `${ANSI.dim}-${ANSI.reset}` : `${ANSI.yellow}!${ANSI.reset}`;
+      lines.push(`${indicator} **${conf.scar_title}** → ${conf.decision}`);
     }
     lines.push("");
     lines.push("All recalled scars addressed. Consequential actions are now unblocked.");
   } else {
-    lines.push("⛔ SCAR CONFIRMATIONS REJECTED");
+    lines.push(`${STATUS.rejected} SCAR CONFIRMATIONS REJECTED`);
     lines.push("");
 
     if (errors.length > 0) {
@@ -163,7 +163,7 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
   const session = getCurrentSession();
   if (!session) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
-    const noSessionMsg = "⛔ No active session. Call session_start before confirm_scars.";
+    const noSessionMsg = `${STATUS.rejected} No active session. Call session_start before confirm_scars.`;
     return {
       valid: false,
       errors: ["No active session. Call session_start first."],
@@ -181,7 +181,7 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
 
   if (recallScars.length === 0) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
-    const noScarsMsg = "✅ No recall-surfaced scars to confirm. Proceed freely.";
+    const noScarsMsg = `${STATUS.ok} No recall-surfaced scars to confirm. Proceed freely.`;
     return {
       valid: true,
       errors: [],

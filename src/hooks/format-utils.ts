@@ -29,11 +29,12 @@ export interface FormattableScar {
 
 // --- Severity Constants ---
 
+/** Text severity indicators — no emoji (column width is unpredictable across terminals) */
 export const SEVERITY_EMOJI: Record<string, string> = {
-  critical: "\uD83D\uDD34",
-  high: "\uD83D\uDFE0",
-  medium: "\uD83D\uDFE1",
-  low: "\uD83D\uDFE2",
+  critical: "[!!]",
+  high: "[!]",
+  medium: "[~]",
+  low: "[-]",
 };
 
 export const SEVERITY_LABEL: Record<string, string> = {
@@ -81,7 +82,7 @@ export function formatCompact(
   let included = 0;
 
   for (const scar of sorted) {
-    const emoji = SEVERITY_EMOJI[scar.severity] || "\u26AA";
+    const emoji = SEVERITY_EMOJI[scar.severity] || "[?]";
     const label = SEVERITY_LABEL[scar.severity] || "UNKNOWN";
     const firstSentence = scar.description.split(/\.\s/)[0].slice(0, 120);
     const line = `${emoji} ${label}: ${scar.title} \u2014 ${firstSentence}`;
@@ -122,7 +123,7 @@ export function formatGate(scars: FormattableScar[]): { payload: string; blockin
 
   for (const scar of blockingScars) {
     const rv = scar.required_verification!;
-    lines.push(`\uD83D\uDEA8 BLOCK: ${rv.when}`);
+    lines.push(`[!!] BLOCK: ${rv.when}`);
     if (rv.queries && rv.queries.length > 0) {
       for (const query of rv.queries) {
         lines.push(`  RUN: ${query}`);

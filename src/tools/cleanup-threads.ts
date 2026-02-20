@@ -21,7 +21,7 @@ import {
   recordMetrics,
   buildPerformanceData,
 } from "../services/metrics.js";
-import { wrapDisplay, relativeTime, truncate } from "../services/display-protocol.js";
+import { wrapDisplay, relativeTime, truncate, productLine, boldText, dimText } from "../services/display-protocol.js";
 import type { Project } from "../types/index.js";
 import type { PerformanceData } from "../services/metrics.js";
 
@@ -81,7 +81,7 @@ function buildCleanupDisplay(
 ): string {
   const lines: string[] = [];
   lines.push(
-    `gitmem cleanup · ${summary.total_open} open · ${summary.active} active · ${summary.cooling} cooling · ${summary.dormant} dormant`
+    productLine("cleanup", `${summary.total_open} open · ${summary.active} active · ${summary.cooling} cooling · ${summary.dormant} dormant`)
   );
   lines.push("");
 
@@ -100,7 +100,7 @@ function buildCleanupDisplay(
 
   for (const [label, items] of sections) {
     if (items.length === 0) continue;
-    lines.push(`**${label}** (${items.length}):`);
+    lines.push(`${boldText(label)} (${items.length}):`);
     lines.push("");
     lines.push("| ID | Thread | Last Touch |");
     lines.push("|----|--------|------------|");

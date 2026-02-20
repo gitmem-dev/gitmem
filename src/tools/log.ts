@@ -22,7 +22,7 @@ import {
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
 import { formatTimestamp } from "../services/timezone.js";
-import { wrapDisplay, relativeTime, truncate, SEV, TYPE } from "../services/display-protocol.js";
+import { wrapDisplay, relativeTime, truncate, SEV, TYPE, productLine, dimText } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -64,7 +64,7 @@ export interface LogResult {
 
 function buildLogDisplay(entries: LogEntry[], total: number, filters: LogResult["filters"]): string {
   const lines: string[] = [];
-  lines.push(`gitmem log · ${total} most recent learnings · ${filters.project}`);
+  lines.push(productLine("log", `${total} most recent · ${filters.project}`));
   const fp: string[] = [];
   if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
   if (filters.severity) fp.push(`severity=${filters.severity}`);
@@ -77,7 +77,7 @@ function buildLogDisplay(entries: LogEntry[], total: number, filters: LogResult[
   }
   for (const e of entries) {
     const te = TYPE[e.learning_type] || "·";
-    const se = e.learning_type === "decision" ? "\u{1F4CB}" : (SEV[e.severity] || "\u{26AA}");
+    const se = e.learning_type === "decision" ? "[d]" : (SEV[e.severity] || "[?]");
     const t = truncate(e.title, 50);
     const time = relativeTime(e.created_at);
     const issue = e.source_linear_issue ? `  ${e.source_linear_issue}` : "";

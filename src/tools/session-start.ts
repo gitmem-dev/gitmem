@@ -38,6 +38,7 @@ import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "..
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
+import { productLine, dimText } from "../services/display-protocol.js";
 // Suggested threads removed from start display
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
 import type {
@@ -817,14 +818,14 @@ function stripThreadPrefix(text: string): string {
 function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>): string {
   const visual: string[] = [];
 
-  // Line 1: product name + session state
+  // Line 1: branded product line + session state
   const stateLabel = result.refreshed ? "refreshed" : (result.resumed ? "resumed" : "active");
-  visual.push(`gitmem ── ${stateLabel}`);
+  visual.push(productLine(stateLabel));
 
-  // Line 2: session ID + agent + project
+  // Line 2: session ID + agent + project (dim metadata)
   const parts = [result.session_id, result.agent];
   if (result.project) parts.push(result.project);
-  visual.push(parts.join(" · "));
+  visual.push(dimText(parts.join(" · ")));
 
   // Threads section — top 5 by vitality, truncated to 60 chars
   const hasThreads = result.open_threads && result.open_threads.length > 0;

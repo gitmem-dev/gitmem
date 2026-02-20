@@ -28,7 +28,7 @@ import {
   buildPerformanceData,
   updateRelevanceData,
 } from "../services/metrics.js";
-import { wrapDisplay, truncate } from "../services/display-protocol.js";
+import { wrapDisplay, truncate, productLine, boldText, dimText, STATUS, ANSI } from "../services/display-protocol.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
@@ -310,13 +310,10 @@ function formatCloseDisplay(
   const lines: string[] = [];
 
   // Header
-  const B = "\x1b[1m"; // bold on
-  const D = "\x1b[2m"; // dim on
-  const R = "\x1b[0m"; // reset
   const closeLabel = compliance.close_type.toUpperCase();
-  const status = success ? "COMPLETE" : "FAILED";
-  lines.push(`${B}${closeLabel} CLOSE — ${status}${R}`);
-  lines.push(`Session ${sessionId.slice(0, 8)} · ${compliance.agent}`);
+  const status = success ? STATUS.complete : STATUS.failed;
+  lines.push(productLine("close", `${closeLabel} · ${status}`));
+  lines.push(dimText(`Session ${sessionId.slice(0, 8)} · ${compliance.agent}`));
 
   if (!success && errors?.length) {
     lines.push("");
@@ -325,8 +322,8 @@ function formatCloseDisplay(
 
   // Checklist (compact)
   lines.push("");
-  const ok = "\u2713";
-  const no = "\u2717";
+  const ok = STATUS.pass;
+  const no = STATUS.miss;
   if (compliance.close_type === "standard") {
     lines.push(`  ${ok} Session state read`);
     lines.push(`  ${compliance.questions_answered_by_agent ? ok : no} Reflection (9 questions)`);
@@ -339,7 +336,7 @@ function formatCloseDisplay(
   // Decisions table
   if (params.decisions?.length) {
     lines.push("");
-    lines.push(`${B}Decisions${R}`);
+    lines.push(boldText("Decisions"));
     for (const d of params.decisions) {
       lines.push(`  ${truncate(d.title, 60)}`);
       lines.push(`    ${truncate(d.decision, 70)}`);
@@ -349,7 +346,7 @@ function formatCloseDisplay(
   // Learnings created
   if (params.learnings_created?.length) {
     lines.push("");
-    lines.push(`${B}Learnings (${params.learnings_created.length})${R}`);
+    lines.push(boldText(`Learnings (${params.learnings_created.length})`));
     for (const l of params.learnings_created) {
       // learnings_created is (string | Record)[] — show truncated ID or object key
       const label = typeof l === "string" ? (l.length > 12 ? l.slice(0, 8) : l) : String(l);
@@ -362,7 +359,7 @@ function formatCloseDisplay(
     const acknowledged = params.scars_to_record.filter(s => s.reference_type !== "none");
     const ignored = params.scars_to_record.length - acknowledged.length;
     lines.push("");
-    lines.push(`${B}Scars (${acknowledged.length} applied${ignored > 0 ? `, ${ignored} surfaced-only` : ""})${R}`);
+    lines.push(boldText(`Scars (${acknowledged.length} applied${ignored > 0 ? `, ${ignored} surfaced-only` : ""})`));
     for (const s of acknowledged) {
       const ref = s.reference_type === "explicit" ? "applied" :
                   s.reference_type === "implicit" ? "implicit" :
@@ -395,14 +392,14 @@ function formatCloseDisplay(
     const openCount = threads.filter(t => typeof t === "string" || t.status === "open").length;
     const resolvedCount = threads.length - openCount;
     lines.push("");
-    lines.push(`${B}Threads${R}: ${openCount} open${resolvedCount > 0 ? `, ${resolvedCount} resolved` : ""}`);
+    lines.push(`${boldText("Threads")}: ${openCount} open${resolvedCount > 0 ? `, ${resolvedCount} resolved` : ""}`);
   }
 
   // Write health — only surface when there are failures (dev diagnostic)
   const healthReport = getEffectTracker().getHealthReport();
   if (healthReport.overall.failed > 0) {
     lines.push("");
-    lines.push(`${B}Write Health${R} (${healthReport.overall.failed} failure${healthReport.overall.failed > 1 ? "s" : ""})`);
+    lines.push(`${boldText("Write Health")} (${healthReport.overall.failed} failure${healthReport.overall.failed > 1 ? "s" : ""})`);
     lines.push(getEffectTracker().formatSummary());
   }
 
@@ -411,10 +408,10 @@ function formatCloseDisplay(
     const r = params.closing_reflection;
     if (r.what_worked) {
       lines.push("");
-      lines.push(`${B}What worked${R}: ${truncate(r.what_worked, 80)}`);
+      lines.push(`${boldText("What worked")}: ${truncate(r.what_worked, 80)}`);
     }
     if (r.do_differently) {
-      lines.push(`${B}Next time${R}: ${truncate(r.do_differently, 80)}`);
+      lines.push(`${boldText("Next time")}: ${truncate(r.do_differently, 80)}`);
     }
   }
 

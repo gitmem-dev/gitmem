@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-02-19
+
+### Fixed
+- **Thread display output**: `list_threads` and `cleanup_threads` replaced ASCII box-drawing tables with markdown tables. Thread text truncation increased from 40-48 to 60 characters. Output now renders cleanly in all MCP clients instead of clipping on narrow terminals.
+
 ## [1.1.2] - 2026-02-17
 
 ### Changed

@@ -46,18 +46,19 @@ Safe alternatives: `env | grep -c VARNAME` (count only), `[ -n "$VARNAME" ] && e
 
 **End:** On "closing", "done for now", or "wrapping up":
 
-1. **Answer these reflection questions** and display to the human:
-   - What broke that you didn't expect?
-   - What took longer than it should have?
-   - What would you do differently next time?
-   - What pattern or approach worked well?
-   - What assumption was wrong?
-   - Which scars did you apply?
-   - What should be captured as institutional memory?
+1. **Write reflection directly to payload** — do NOT display the full Q&A to the human.
+   Internally answer these 9 questions and write them straight to `.gitmem/closing-payload.json`:
+   - Q1: What broke that you didn't expect?
+   - Q2: What took longer than it should have?
+   - Q3: What would you do differently next time?
+   - Q4: What pattern or approach worked well?
+   - Q5: What assumption was wrong?
+   - Q6: Which scars did you apply?
+   - Q7: What should be captured as institutional memory?
+   - Q8: How did the human prefer to work this session?
+   - Q9: What collaborative dynamic worked or didn't?
 
-2. **Ask the human**: "Any corrections or additions?" Wait for their response.
-
-3. **Write payload** to `.gitmem/closing-payload.json`:
+   Payload schema (`.gitmem/closing-payload.json`):
    ```json
    {
      "closing_reflection": {
@@ -67,16 +68,34 @@ Safe alternatives: `env | grep -c VARNAME` (count only), `[ -n "$VARNAME" ] && e
        "what_worked": "...",
        "wrong_assumption": "...",
        "scars_applied": ["scar title 1", "scar title 2"],
-       "institutional_memory_items": "..."
+       "institutional_memory_items": "...",
+       "collaborative_dynamic": "...",
+       "rapport_notes": "..."
+     },
+     "task_completion": {
+       "questions_displayed_at": "ISO timestamp (when reflection started)",
+       "reflection_completed_at": "ISO timestamp (when payload written)",
+       "human_asked_at": "ISO timestamp (when 'Corrections?' shown)",
+       "human_response_at": "ISO timestamp (when human replied)",
+       "human_response": "user's correction text or 'none'"
      },
      "human_corrections": "",
      "scars_to_record": [],
+     "learnings_created": [],
      "open_threads": [],
      "decisions": []
    }
    ```
 
-4. **Call `session_close`** with `session_id` and `close_type: "standard"`
+2. **Show compact summary** (3-4 lines max):
+   ```
+   Session close: [N] learnings captured, [M] scars applied, [K] threads open
+   Key lesson: [one-sentence from Q7]
+   ```
+
+3. **Ask**: "Corrections?" — wait for response, then call `session_close`.
+
+4. **Call `session_close`** with `session_id` and `close_type: "standard"`.
 
 For short exploratory sessions (< 30 min, no real work), use `close_type: "quick"` — no questions needed.
 # --- gitmem:end ---

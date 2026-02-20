@@ -102,7 +102,7 @@ function formatResponse(
     lines.push(`${STATUS.ok} SCAR CONFIRMATIONS ACCEPTED`);
     lines.push("");
     for (const conf of confirmations) {
-      const indicator = conf.decision === "APPLYING" ? `${ANSI.green}+${ANSI.reset}` : conf.decision === "N_A" ? `${ANSI.dim}-${ANSI.reset}` : `${ANSI.yellow}!${ANSI.reset}`;
+      const indicator = conf.decision === "APPLYING" ? STATUS.pass : conf.decision === "N_A" ? `${ANSI.dim}-${ANSI.reset}` : `${ANSI.yellow}!${ANSI.reset}`;
       lines.push(`${indicator} **${conf.scar_title}** → ${conf.decision}`);
     }
     lines.push("");

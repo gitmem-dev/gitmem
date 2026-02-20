@@ -150,7 +150,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
 
   // Display blocking verification requirements FIRST and prominently
   if (scarsWithVerification.length > 0) {
-    lines.push(`${ANSI.red}[!!] VERIFICATION REQUIRED BEFORE PROCEEDING${ANSI.reset}`);
+    lines.push(`${ANSI.yellow}VERIFICATION REQUIRED${ANSI.reset}`);
     lines.push("");
 
     for (const scar of scarsWithVerification) {
@@ -167,7 +167,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       lines.push("");
       lines.push(`**MUST SHOW:** ${rv.must_show}`);
       lines.push("");
-      lines.push(`${ANSI.red}[!!] DO NOT proceed until verification output is shown above.${ANSI.reset}`);
+      lines.push(`${ANSI.red}Do not proceed until verification output is shown.${ANSI.reset}`);
       lines.push("");
     }
 

@@ -339,7 +339,7 @@ function formatCloseDisplay(
     if (r.what_worked || r.do_differently) {
       lines.push("");
       if (r.what_worked) {
-        lines.push(`${ANSI.green}+${ANSI.reset} ${truncate(r.what_worked, 72)}`);
+        lines.push(`${STATUS.pass} ${truncate(r.what_worked, 72)}`);
       }
       if (r.do_differently) {
         lines.push(`${ANSI.yellow}>${ANSI.reset} ${truncate(r.do_differently, 72)}`);

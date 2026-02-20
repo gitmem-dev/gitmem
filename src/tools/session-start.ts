@@ -38,7 +38,7 @@ import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "..
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
-import { productLine, dimText } from "../services/display-protocol.js";
+import { productLine, dimText, boldText } from "../services/display-protocol.js";
 // Suggested threads removed from start display
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
 import type {
@@ -833,7 +833,7 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
 
   if (hasThreads) {
     visual.push("");
-    visual.push(`Threads (${result.open_threads!.length})`);
+    visual.push(boldText(`Threads (${result.open_threads!.length})`));
 
     const enriched = result.open_threads!.map(t => ({
       thread: t,
@@ -856,7 +856,7 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   // Decisions section — top 3 with compact date
   if (hasDecisions) {
     visual.push("");
-    visual.push(`Decisions (${result.recent_decisions!.length})`);
+    visual.push(boldText(`Decisions (${result.recent_decisions!.length})`));
     for (const d of result.recent_decisions!.slice(0, 3)) {
       const title = d.title.length > 50 ? d.title.slice(0, 47) + "..." : d.title;
       visual.push(`  ${title} · ${d.date}`);

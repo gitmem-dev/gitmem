@@ -61,15 +61,22 @@ export function wrapDisplay(content: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Brand mark — ripple icon preceding product name
+// ---------------------------------------------------------------------------
+
+/** Ripple mark: dim outer ring, red inner ring, bold center dot. */
+export const RIPPLE = `${dim}(${reset}${red}(${reset}${bold}●${reset}${red})${reset}${dim})${reset}`;
+
+// ---------------------------------------------------------------------------
 // Product line — first line of every tool output
 // ---------------------------------------------------------------------------
 
 /**
- * Build the product line: `gitmem ── <tool> [· detail]`
- * The word "gitmem" is always red (brand accent).
+ * Build the product line: `((●)) gitmem ── <tool> [· detail]`
+ * The ripple mark + red "gitmem" form the brand identity.
  */
 export function productLine(tool: string, detail?: string): string {
-  let line = `${red}gitmem${reset} ── ${tool}`;
+  let line = `${RIPPLE} ${red}gitmem${reset} ── ${tool}`;
   if (detail) line += ` · ${detail}`;
   return line;
 }

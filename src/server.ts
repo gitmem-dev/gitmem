@@ -58,6 +58,7 @@ import {
   startBackgroundInit,
 } from "./services/startup.js";
 import { getEffectTracker } from "./services/effect-tracker.js";
+import { RIPPLE, ANSI } from "./services/display-protocol.js";
 import { getProject } from "./services/session-state.js";
 import { checkEnforcement } from "./services/enforcement.js";
 import {
@@ -313,8 +314,8 @@ export function createServer(): Server {
           const cmdLines = visibleCommands.map(c => `  ${c.alias.padEnd(22)} ${c.description}`).join("\n");
 
           const display = [
-            `gitmem v${pkg.version} · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
-            "Memory that compounds.",
+            `${RIPPLE} ${ANSI.red}gitmem${ANSI.reset} v${pkg.version} · ${tier} · ${registeredTools.length} tools · ${hasSupabase() ? "supabase" : "local (.gitmem/)"}`,
+            "      Memory that compounds.",
             "",
             cmdLines,
             "",

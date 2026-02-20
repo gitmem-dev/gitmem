@@ -150,21 +150,35 @@ The severity brackets (`[!!]`, `[!]`, `[~]`, `[-]`) are 4 chars wide including b
 
 ## Layout Structure
 
-### Product Line
+### Brand Mark (Ripple)
 
-Every display output starts with a **product line** — the tool identity. The word `gitmem` is always red:
+The **ripple** `((●))` is GitMem's brand mark — a memory node radiating outward. It precedes the product name on every product line.
 
 ```
-{red}gitmem{/} ── <tool> [· <count/context>] [· <scope>]
+{dim}({/}{red}({/}{bold}●{/}{red}){/}{dim}){/}
+```
+
+- **Bold `●`** — the core memory (center dot, U+25CF)
+- **Red `()`** — the inner ring (brand accent)
+- **Dim `()`** — the outer ring (fading outward)
+
+The gradient (bold → red → dim) evokes knowledge radiating from a single point — recall, rippling through sessions. The `●` is a Tier 1 safe character (U+25CF, BMP, single-width in all terminals).
+
+### Product Line
+
+Every display output starts with a **product line** — the ripple mark, product name, and tool identity:
+
+```
+{dim}({/}{red}({/}{bold}●{/}{red}){/}{dim}){/} {red}gitmem{/} ── <tool> [· <count/context>] [· <scope>]
 ```
 
 Examples:
 ```
-gitmem ── active
-gitmem ── log · 10 most recent · orchestra_dev
-gitmem ── search · 5 results · "deployment"
-gitmem ── threads · 12 open · 3 resolved
-gitmem ── recall · 3 scars · "deploy edge function"
+((●)) gitmem ── active
+((●)) gitmem ── log · 10 most recent · orchestra_dev
+((●)) gitmem ── search · 5 results · "deployment"
+((●)) gitmem ── threads · 12 open · 3 resolved
+((●)) gitmem ── recall · 3 scars · "deploy edge function"
 ```
 
 The `──` (U+2500 box-drawing) is the product separator. It appears in exactly one place: the product line.
@@ -228,8 +242,8 @@ In actual code these are ANSI escape sequences. Shown as tokens here for readabi
 ### session_start
 
 ```
-{red}gitmem{/} ── active
-{dim}8970e043 · cli · orchestra_dev{/}
+{dim}({/}{red}({/}{bold}●{/}{red}){/}{dim}){/} {red}gitmem{/} ── active
+      {dim}8970e043 · cli · orchestra_dev{/}
 
 {bold}Threads (16){/}
   Publish "The Static LLM That Learns" blog post…
@@ -420,12 +434,12 @@ Found 3 relevant scars for your plan:      ← chatbot voice
 **Do this instead:**
 
 ```
-gitmem ── recall · 3 scars · "your plan"   ← red product name, clean layout
-                                            ← whitespace
-[!!] Title (critical, 0.87)                ← red text severity
-                                            ← breathing room
-gitmem ── confirm · 3 scars addressed      ← green confirmation
-gitmem ── confirm · REJECTED               ← red rejection
+((●)) gitmem ── recall · 3 scars · "your plan"   ← ripple + red product name
+                                                  ← whitespace
+[!!] Title (critical, 0.87)                       ← red text severity
+                                                  ← breathing room
+((●)) gitmem ── confirm · 3 scars addressed      ← green confirmation
+((●)) gitmem ── confirm · REJECTED               ← red rejection
 ```
 
 ## Implementation
@@ -460,9 +474,12 @@ const TYPE = {
   decision:     "dec",
 };
 
+// Brand mark (ripple)
+const RIPPLE = `${D}(${X}${R}(${X}${B}●${X}${R})${X}${D})${X}`;
+
 // Product line
 function productLine(tool: string, detail?: string): string {
-  const parts = [`${R}gitmem${X} ── ${tool}`];
+  const parts = [`${RIPPLE} ${R}gitmem${X} ── ${tool}`];
   if (detail) parts[0] += ` · ${detail}`;
   return parts[0];
 }

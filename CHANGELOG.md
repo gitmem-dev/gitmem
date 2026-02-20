@@ -9,8 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.3] - 2026-02-19
 
+### Added
+- **Multi-client init wizard**: `npx gitmem-mcp init` now supports VS Code, Windsurf, and generic MCP clients in addition to Claude Code and Cursor.
+- **Server-side enforcement layer**: Universal compliance enforcement that works across all MCP clients — recall before consequential actions, scar confirmation gates.
+- **Scar framing guidance**: `create_learning` tool now guides agents to frame scars as "what we now know" (factual discovery) rather than "what I did wrong" (self-criticism).
+- **Auto-detect agent and session**: Scar usage tracking automatically detects the current agent identity and session context.
+- **Closing payload schema**: Session close payload schema now ships with `init` and `session_start` for client reference.
+- **npm discoverability keywords**: Added `mcp-server`, `claude-code`, `ai-memory`, `ai-agent` keywords for npm search.
+- **Documentation site**:
+  - Restored Fumadocs source for gitmem.ai/docs with emerald theme.
+  - Redesigned docs landing page with improved messaging and branding.
+  - Added FAQ page with 11 questions.
+  - Added MCP one-liner explainer for new users.
+  - Added 3 docs examples (scar stories): credential leak, phantom deploy, and first scar.
+  - Inline mailing list signup form in docs pages.
+  - Rich installation page with multi-client instructions.
+
 ### Fixed
 - **Thread display output**: `list_threads` and `cleanup_threads` replaced ASCII box-drawing tables with markdown tables. Thread text truncation increased from 40-48 to 60 characters. Output now renders cleanly in all MCP clients instead of clipping on narrow terminals.
+- **Version reporting**: Server now reads version from `package.json` instead of hardcoded `1.0.3`.
+- **Log header clarity**: `gitmem log` header now says "most recent learnings" instead of ambiguous label.
+- **Analyze output**: Relabeled misleading "Open Threads" to "Threads Referenced" in analyze output.
+- **Stale thread cleanup**: Drop stale local-only threads on `session_start` when Supabase is authoritative source.
+- **Package name in docs**: Corrected to `npx gitmem-mcp init` (was `npx gitmem init`).
+- **Docs fixes**: Removed duplicate h1 headers, fixed sidebar nav duplicate entry, corrected GitHub URLs after org migration.
 
 ## [1.1.2] - 2026-02-17
 

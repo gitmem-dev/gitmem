@@ -309,110 +309,75 @@ function formatCloseDisplay(
 ): string {
   const lines: string[] = [];
 
-  // Header
-  const closeLabel = compliance.close_type.toUpperCase();
+  // Header: branded product line
   const status = success ? STATUS.complete : STATUS.failed;
-  lines.push(productLine("close", `${closeLabel} · ${status}`));
-  lines.push(dimText(`Session ${sessionId.slice(0, 8)} · ${compliance.agent}`));
+  lines.push(productLine("close", status));
 
+  // Stats line: compact one-liner with key counts
+  const stats: string[] = [];
+  const scarsApplied = params.scars_to_record?.filter(s => s.reference_type !== "none").length || 0;
+  if (scarsApplied > 0) stats.push(`${scarsApplied} scars applied`);
+  if (learningsCount > 0) stats.push(`${learningsCount} learnings`);
+  if (params.decisions?.length) stats.push(`${params.decisions.length} decision${params.decisions.length > 1 ? "s" : ""}`);
+  const threads = params.open_threads || [];
+  const openCount = threads.filter(t => typeof t === "string" || t.status === "open").length;
+  if (openCount > 0) stats.push(`${openCount} threads`);
+  if (stats.length > 0) {
+    lines.push(stats.join(" · "));
+  }
+  lines.push(dimText(`${sessionId.slice(0, 8)} · ${compliance.agent} · ${compliance.close_type}`));
+
+  // Errors — only on failure
   if (!success && errors?.length) {
     lines.push("");
-    for (const e of errors) lines.push(`  !! ${e}`);
+    for (const e of errors) lines.push(`  ${STATUS.miss} ${e}`);
   }
 
-  // Checklist (compact)
-  lines.push("");
-  const ok = STATUS.pass;
-  const no = STATUS.miss;
-  if (compliance.close_type === "standard") {
-    lines.push(`  ${ok} Session state read`);
-    lines.push(`  ${compliance.questions_answered_by_agent ? ok : no} Reflection (9 questions)`);
-    lines.push(`  ${compliance.human_asked_for_corrections ? ok : no} Human corrections`);
-    lines.push(`  ${success ? ok : no} Persisted`);
-  } else {
-    lines.push(`  ${success ? ok : no} Persisted (${compliance.close_type})`);
+  // Reflection highlights FIRST — the most interesting part
+  if (params.closing_reflection) {
+    const r = params.closing_reflection;
+    if (r.what_worked || r.do_differently) {
+      lines.push("");
+      if (r.what_worked) {
+        lines.push(`${ANSI.green}+${ANSI.reset} ${truncate(r.what_worked, 72)}`);
+      }
+      if (r.do_differently) {
+        lines.push(`${ANSI.yellow}>${ANSI.reset} ${truncate(r.do_differently, 72)}`);
+      }
+    }
   }
 
-  // Decisions table
+  // Decisions — title only, one line each
   if (params.decisions?.length) {
     lines.push("");
-    lines.push(boldText("Decisions"));
     for (const d of params.decisions) {
-      lines.push(`  ${truncate(d.title, 60)}`);
-      lines.push(`    ${truncate(d.decision, 70)}`);
+      lines.push(`  ${dimText("d")} ${truncate(d.title, 68)}`);
     }
   }
 
-  // Learnings created
-  if (params.learnings_created?.length) {
+  // Scars applied — compact table, only if any were applied
+  if (scarsApplied > 0) {
     lines.push("");
-    lines.push(boldText(`Learnings (${params.learnings_created.length})`));
-    for (const l of params.learnings_created) {
-      // learnings_created is (string | Record)[] — show truncated ID or object key
-      const label = typeof l === "string" ? (l.length > 12 ? l.slice(0, 8) : l) : String(l);
-      lines.push(`  ${label}`);
-    }
-  }
-
-  // Scars applied
-  if (params.scars_to_record?.length) {
-    const acknowledged = params.scars_to_record.filter(s => s.reference_type !== "none");
-    const ignored = params.scars_to_record.length - acknowledged.length;
-    lines.push("");
-    lines.push(boldText(`Scars (${acknowledged.length} applied${ignored > 0 ? `, ${ignored} surfaced-only` : ""})`));
-    for (const s of acknowledged) {
+    for (const s of params.scars_to_record!.filter(s => s.reference_type !== "none")) {
       const ref = s.reference_type === "explicit" ? "applied" :
                   s.reference_type === "implicit" ? "implicit" :
                   s.reference_type === "acknowledged" ? "ack'd" :
-                  s.reference_type === "refuted" ? "REFUTED" : (s.reference_type || "?");
-      const scarId = s.scar_identifier || "(unknown)";
-      const id = scarId.length > 12 ? scarId.slice(0, 8) : scarId;
-      lines.push(`  ${id}  ${ref.padEnd(8)}  ${truncate(s.reference_context || "", 50)}`);
+                  s.reference_type === "refuted" ? `${ANSI.yellow}REFUTED${ANSI.reset}` : (s.reference_type || "?");
+      lines.push(`  ${dimText(ref.padEnd(8))} ${truncate(s.reference_context || "", 60)}`);
     }
   }
 
-  // Transcript status
-  if (transcriptStatus) {
+  // Transcript — only on failure
+  if (transcriptStatus && !transcriptStatus.saved) {
     lines.push("");
-    lines.push(`### Transcript`);
-    if (transcriptStatus.saved) {
-      let line = `- [done] Saved (${transcriptStatus.size_kb}KB) -> ${transcriptStatus.path}`;
-      if (transcriptStatus.patch_warning) {
-        line += ` (warning: session record not updated)`;
-      }
-      lines.push(line);
-    } else {
-      lines.push(`- [FAILED] ${transcriptStatus.error || "Unknown error"}`);
-    }
+    lines.push(`${STATUS.fail} transcript: ${transcriptStatus.error || "Unknown error"}`);
   }
 
-  // Threads summary
-  const threads = params.open_threads || [];
-  if (threads.length > 0) {
-    const openCount = threads.filter(t => typeof t === "string" || t.status === "open").length;
-    const resolvedCount = threads.length - openCount;
-    lines.push("");
-    lines.push(`${boldText("Threads")}: ${openCount} open${resolvedCount > 0 ? `, ${resolvedCount} resolved` : ""}`);
-  }
-
-  // Write health — only surface when there are failures (dev diagnostic)
+  // Write health — only on failure
   const healthReport = getEffectTracker().getHealthReport();
   if (healthReport.overall.failed > 0) {
     lines.push("");
-    lines.push(`${boldText("Write Health")} (${healthReport.overall.failed} failure${healthReport.overall.failed > 1 ? "s" : ""})`);
-    lines.push(getEffectTracker().formatSummary());
-  }
-
-  // Reflection highlights (Q4 what worked, Q3 do differently)
-  if (params.closing_reflection) {
-    const r = params.closing_reflection;
-    if (r.what_worked) {
-      lines.push("");
-      lines.push(`${boldText("What worked")}: ${truncate(r.what_worked, 80)}`);
-    }
-    if (r.do_differently) {
-      lines.push(`${boldText("Next time")}: ${truncate(r.do_differently, 80)}`);
-    }
+    lines.push(`${STATUS.warn} ${healthReport.overall.failed} write failure${healthReport.overall.failed > 1 ? "s" : ""}`);
   }
 
   return wrapDisplay(lines.join("\n"));

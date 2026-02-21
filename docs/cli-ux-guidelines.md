@@ -434,7 +434,7 @@ Found 3 relevant scars for your plan:      ← chatbot voice
 **Do this instead:**
 
 ```
-((●)) gitmem ── recall · 3 scars · "your plan"   ← ripple + red product name
+((●)) gitmem ── 3 scars to review · "your plan"  ← ripple + implied obligation
                                                   ← whitespace
 [!!] Title (critical, 0.87)                       ← red text severity
                                                   ← breathing room

@@ -136,7 +136,7 @@ Add this to your MCP client's config file:
 | **Session analytics** | Spot patterns in what keeps going wrong |
 | **Sub-agent briefing** | Hand institutional context to sub-agents automatically |
 | **Cloud persistence** | Memory survives machine changes, shareable across team |
-| **A/B testing** | Optimize scar phrasing based on what actually changes behavior |
+| **A/B testing analytics** | Measure which scar phrasings actually change agent behavior (free tier includes `GITMEM_NUDGE_VARIANT` for manual testing) |
 
 The free tier gives you everything for solo projects. Pro makes recall smarter and memory portable.
 

@@ -1263,6 +1263,33 @@ export async function sessionClose(
       updateRelevanceData(sessionId, normalizedScarsApplied).catch((err) => console.error("[session_close] updateRelevanceData failed:", err instanceof Error ? err.message : err));
     }
 
+    // Compute timing breakdown from task_completion timestamps.
+    // The human feels two things during close:
+    //   1. Agent reflection: questions_displayed_at → human_asked_at (LLM writes 9-question payload)
+    //   2. Tool execution: latency_ms (DB writes after human says "none" / gives corrections)
+    // The human does NOT feel: human_asked_at → human_response_at (their own thinking time)
+    let agentReflectionMs: number | undefined;
+    let humanWaitTimeMs: number | undefined;
+    if (params.task_completion && typeof params.task_completion === "object") {
+      const tc = params.task_completion as unknown as Record<string, string>;
+      // Agent reflection time = when questions shown → when human asked "Corrections?"
+      if (tc.questions_displayed_at && tc.human_asked_at) {
+        const started = new Date(tc.questions_displayed_at).getTime();
+        const askedHuman = new Date(tc.human_asked_at).getTime();
+        if (!isNaN(started) && !isNaN(askedHuman) && askedHuman > started) {
+          agentReflectionMs = askedHuman - started;
+        }
+      }
+      // Human wait time = "Corrections?" → human responds
+      if (tc.human_asked_at && tc.human_response_at) {
+        const asked = new Date(tc.human_asked_at).getTime();
+        const responded = new Date(tc.human_response_at).getTime();
+        if (!isNaN(asked) && !isNaN(responded) && responded > asked) {
+          humanWaitTimeMs = responded - asked;
+        }
+      }
+    }
+
     // Record metrics
     recordMetrics({
       id: metricsId,
@@ -1281,6 +1308,8 @@ export async function sessionClose(
         decisions_count: params.decisions?.length || 0,
         open_threads_count: params.open_threads?.length || 0,
         ceremony_duration_ms: params.ceremony_duration_ms,
+        agent_reflection_ms: agentReflectionMs,
+        human_wait_time_ms: humanWaitTimeMs,
         retroactive: isRetroactive,
       },
     }).catch(() => {});

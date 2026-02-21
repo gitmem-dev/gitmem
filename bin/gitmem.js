@@ -51,6 +51,9 @@ Other commands:
   npx gitmem-mcp check --full      Full diagnostic with benchmarks
   npx gitmem-mcp install-hooks     Install hooks (standalone)
   npx gitmem-mcp uninstall-hooks   Remove hooks (standalone)
+  npx gitmem-mcp telemetry status  Check telemetry settings
+  npx gitmem-mcp telemetry enable  Enable anonymous usage tracking (opt-in)
+  npx gitmem-mcp telemetry disable Disable usage tracking
   npx gitmem-mcp server            Start MCP server (default)
   npx gitmem-mcp help              Show this help message
 
@@ -200,6 +203,10 @@ async function cmdInit() {
     console.log("Add .gitmem/ to your .gitignore:");
     console.log("  echo '.gitmem/' >> .gitignore");
     console.log("");
+
+    // Prompt for telemetry (optional, non-blocking)
+    promptTelemetryOptIn();
+
     console.log("To upgrade to Pro tier (semantic search + Supabase persistence):");
     console.log("  Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then run init again.");
     return;
@@ -687,6 +694,29 @@ function cmdInstallHooks() {
 }
 
 /**
+ * Prompt user to opt-in to telemetry (non-blocking, async)
+ */
+function promptTelemetryOptIn() {
+  console.log("─────────────────────────────────────────────");
+  console.log("");
+  console.log("Help improve GitMem? (Optional)");
+  console.log("");
+  console.log("Send anonymous usage data to help us understand:");
+  console.log("  • Which features are most useful");
+  console.log("  • Where errors occur");
+  console.log("  • Performance patterns");
+  console.log("");
+  console.log("✓ No queries, scars, or project content");
+  console.log("✓ Randomized ID (not linked to you)");
+  console.log("✓ View all data before it's sent");
+  console.log("✓ Disable anytime");
+  console.log("");
+  console.log("To enable: npx gitmem-mcp telemetry enable");
+  console.log("Privacy policy: https://gitmem.ai/privacy");
+  console.log("");
+}
+
+/**
  * Uninstall gitmem hooks.
  *
  * Claude Code: removes from .claude/settings.json
@@ -857,6 +887,9 @@ switch (command) {
     break;
   case "check":
     import("../dist/commands/check.js").then((m) => m.main(process.argv.slice(3)));
+    break;
+  case "telemetry":
+    import("../dist/commands/telemetry.js").then((m) => m.main(process.argv.slice(3)));
     break;
   case "install-hooks":
     cmdInstallHooks();

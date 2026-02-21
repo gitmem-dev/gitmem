@@ -208,8 +208,27 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
     errors.push("No confirmations provided. Each recalled scar must be addressed.");
   } else {
     for (const conf of params.confirmations) {
-      // Check scar exists in recalled set
-      const scar = scarById.get(conf.scar_id);
+      // Check scar exists in recalled set (try exact match first)
+      let scar = scarById.get(conf.scar_id);
+
+      // If not found and looks like 8-char prefix, try prefix match
+      // This allows agents to copy IDs from recall display (which shows truncated IDs)
+      if (!scar && /^[0-9a-f]{8}$/i.test(conf.scar_id)) {
+        let matchedId: string | null = null;
+        for (const [fullId, scarData] of scarById.entries()) {
+          if (fullId.startsWith(conf.scar_id)) {
+            if (matchedId) {
+              // Ambiguous prefix - multiple matches
+              errors.push(`Ambiguous scar_id prefix "${conf.scar_id}" matches multiple scars. Use full UUID.`);
+              scar = undefined;
+              break;
+            }
+            matchedId = fullId;
+            scar = scarData;
+          }
+        }
+      }
+
       if (!scar) {
         errors.push(`Unknown scar_id "${conf.scar_id}". Only confirm scars returned by recall().`);
         continue;
@@ -224,14 +243,14 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
         const relevance = conf.relevance ??
           (conf.decision === "APPLYING" ? "high" : conf.decision === "N_A" ? "low" : "low");
         validConfirmations.push({
-          scar_id: conf.scar_id,
+          scar_id: scar.scar_id, // Use full UUID from matched scar, not potentially truncated input
           scar_title: scar.scar_title,
           decision: conf.decision,
           evidence: conf.evidence.trim(),
           confirmed_at: new Date().toISOString(),
           relevance,
         });
-        confirmedIds.add(conf.scar_id);
+        confirmedIds.add(scar.scar_id); // Track by full UUID
       }
     }
   }

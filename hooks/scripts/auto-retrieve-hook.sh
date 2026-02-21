@@ -65,6 +65,37 @@ PROMPT_LEN=${#PROMPT}
 
 RETRIEVAL_LEVEL=""
 
+# Priority 0: Knowledge-retrieval queries — route through gitmem, don't inject scars
+# These are queries where the user wants to ACCESS institutional memory, not just
+# have scars passively injected. Output a routing instruction instead of scars.
+IS_KNOWLEDGE_QUERY=false
+
+# Explicit recall/remember commands
+if echo "$PROMPT_LOWER" | grep -qE '\b(recall|remember)\b.*(doc|process|tree|structure|how|what|where|our)'; then
+    IS_KNOWLEDGE_QUERY=true
+# Process/documentation queries ("what's our process for X", "how do we usually Y")
+elif echo "$PROMPT_LOWER" | grep -qE "(what('s| is) our (process|approach|pattern|method)|how do we (usually|typically|normally)|remind me (how|what|about)|what('s| is) the (process|protocol|procedure) for)"; then
+    IS_KNOWLEDGE_QUERY=true
+# Documentation discovery ("show me the docs", "where are the scars")
+elif echo "$PROMPT_LOWER" | grep -qE '\b(show me|find|where (is|are|do)).*(doc(s|umentation)?|process(es)?|pattern(s)?|decision(s)?|scar(s)?|learning(s)?)\b'; then
+    IS_KNOWLEDGE_QUERY=true
+# Institutional knowledge queries ("what did we decide about", "what scars exist")
+elif echo "$PROMPT_LOWER" | grep -qE '\b(what did we (decide|learn|document)|what scars|what learnings|past decisions about|institutional (memory|knowledge))\b'; then
+    IS_KNOWLEDGE_QUERY=true
+# Direct "recall" as a verb/command at start of prompt
+elif echo "$PROMPT_LOWER" | grep -qE '^\s*recall\b'; then
+    IS_KNOWLEDGE_QUERY=true
+fi
+
+if [ "$IS_KNOWLEDGE_QUERY" = "true" ]; then
+    cat <<HOOKJSON
+{
+  "additionalContext": "KNOWLEDGE RETRIEVAL DETECTED. Route through GitMem FIRST:\n\n1. gitmem search (query relevant to the question) OR gitmem recall (if action-oriented)\n2. gitmem log (if browsing recent learnings)\n3. ONLY THEN fall back to filesystem reads if gitmem doesn't have the answer\n\nDo NOT start with Read/Glob/Grep on local files. Institutional memory exists precisely so we don't re-explore the filesystem every time."
+}
+HOOKJSON
+    exit 0
+fi
+
 # Priority 1: Trivial — skip retrieval entirely
 if echo "$PROMPT_LOWER" | grep -qE '^(yes|no|ok|k|y|n|sure|thanks|thank you|continue|go ahead|proceed|correct|right|exactly|got it|sounds good|lgtm|looks good|done|nope|yep|yup|agreed)$'; then
     exit 0

@@ -134,6 +134,6 @@ describe("Smoke: Free Tier", () => {
 
     expect(isToolError(result)).toBe(false);
     const closeText = getToolResultText(result);
-    expect(closeText).toContain("CLOSE");
+    expect(closeText.toLowerCase()).toContain("close");
   });
 });

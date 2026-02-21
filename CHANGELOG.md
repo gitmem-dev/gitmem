@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-20
+
+### Added
+- **Telemetry CLI**: `npx gitmem-mcp telemetry` command for viewing scar effectiveness metrics and recall statistics.
+- **Confirm-scars prefix matching**: `confirm_scars` now accepts 8-character ID prefixes instead of requiring full UUIDs — faster agent workflows.
+- **Session-close timing**: `session_close` now tracks and reports ceremony duration for performance visibility.
+
+### Fixed
+- **Test assertion alignment**: Updated smoke and E2E test assertions to match current CLI output format (branded `((●))` display, lowercase identifiers).
+- **No-console-log allowlist**: CLI commands correctly excluded from console.log lint rule.
+
 ## [1.1.4] - 2026-02-20
 
 ### Changed

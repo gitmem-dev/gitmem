@@ -620,7 +620,7 @@ describe("Fresh Install: Output Sanitization", () => {
 
     expect(content.toLowerCase()).not.toContain("orchestra");
     // Template includes reflection questions in session end section
-    expect(content.toLowerCase()).toContain("answer these reflection questions");
+    expect(content.toLowerCase()).toContain("answer these 9 questions");
   });
 
   it("starter-scars.json has no orchestra references", () => {

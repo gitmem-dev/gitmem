@@ -28,6 +28,11 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
+// CLI commands run outside MCP stdio transport — console.log is correct there
+const CLI_COMMAND_ALLOWLIST = new Set([
+  "src/commands/telemetry.ts",
+]);
+
 describe("no console.log in src/", () => {
   const srcDir = join(__dirname, "../../src");
   const files = collectTsFiles(srcDir);
@@ -36,10 +41,14 @@ describe("no console.log in src/", () => {
     expect(files.length).toBeGreaterThan(0);
   });
 
-  it("should not contain console.log in any src/ file", () => {
+  it("should not contain console.log in any src/ file (except CLI commands)", () => {
     const violations: string[] = [];
 
     for (const file of files) {
+      const relative = file.replace(srcDir, "src");
+      // CLI commands use stdout directly — not MCP stdio
+      if (CLI_COMMAND_ALLOWLIST.has(relative)) continue;
+
       const content = readFileSync(file, "utf-8");
       const lines = content.split("\n");
       for (let i = 0; i < lines.length; i++) {
@@ -47,7 +56,6 @@ describe("no console.log in src/", () => {
         // Skip comments
         if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
         if (line.includes("console.log")) {
-          const relative = file.replace(srcDir, "src");
           violations.push(`${relative}:${i + 1}: ${line.trim()}`);
         }
       }

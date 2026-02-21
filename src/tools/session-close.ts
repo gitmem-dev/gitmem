@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getConfirmations, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js";
+import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
@@ -681,11 +681,19 @@ function bridgeScarsToUsageRecords(
     const autoBridgedScars: ScarUsageEntry[] = [];
     const matchedScarIds = new Set<string>();
 
-    // Load structured confirmations from confirm_scars (preferred source)
+    // Load structured confirmations from confirm_scars (start-of-task)
     const confirmations: ScarConfirmation[] = getConfirmations();
     const confirmationMap = new Map<string, ScarConfirmation>();
     for (const conf of confirmations) {
       confirmationMap.set(conf.scar_id, conf);
+    }
+
+    // Load end-of-session reflections from reflect_scars (end-of-task)
+    // Reflections provide the most accurate execution_successful signal
+    const reflections = getReflections();
+    const reflectionMap = new Map<string, { outcome: string; evidence: string }>();
+    for (const ref of reflections) {
+      reflectionMap.set(ref.scar_id, { outcome: ref.outcome, evidence: ref.evidence });
     }
 
     // First pass: match surfaced scars against structured confirmations
@@ -693,13 +701,31 @@ function bridgeScarsToUsageRecords(
       const confirmation = confirmationMap.get(scar.scar_id);
       if (confirmation) {
         matchedScarIds.add(scar.scar_id);
+
+        // Prefer reflect_scars outcome over confirmation default
+        // reflect_scars gives actual end-of-session evidence; confirm_scars is intent
+        const reflection = reflectionMap.get(scar.scar_id);
+        let executionSuccessful: boolean | undefined;
+        let context: string;
+
+        if (reflection) {
+          // Reflection provides definitive signal
+          executionSuccessful = reflection.outcome === "OBEYED" ? true : false;
+          context = `Confirmed: ${confirmation.decision} → Reflected: ${reflection.outcome} — ${reflection.evidence.slice(0, 80)}`;
+        } else {
+          // Fall back to confirmation-based default (Option A)
+          executionSuccessful = confirmation.decision === "APPLYING" ? true : undefined;
+          context = `Confirmed via confirm_scars: ${confirmation.decision} — ${confirmation.evidence.slice(0, 100)}`;
+        }
+
         autoBridgedScars.push({
           scar_identifier: scar.scar_id,
           session_id: sessionId,
           agent: agentIdentity,
           surfaced_at: scar.surfaced_at,
           reference_type: decisionToRefType(confirmation.decision),
-          reference_context: `Confirmed via confirm_scars: ${confirmation.decision} — ${confirmation.evidence.slice(0, 100)}`,
+          reference_context: context,
+          execution_successful: executionSuccessful,
           variant_id: scar.variant_id,
         });
       }
@@ -733,6 +759,7 @@ function bridgeScarsToUsageRecords(
     }
 
     // For surfaced scars NOT matched by either method, record as "none"
+    // execution_successful = false — scar was surfaced but ignored entirely
     for (const scar of surfacedScars) {
       if (!matchedScarIds.has(scar.scar_id)) {
         autoBridgedScars.push({
@@ -742,6 +769,7 @@ function bridgeScarsToUsageRecords(
           surfaced_at: scar.surfaced_at,
           reference_type: "none",
           reference_context: `Surfaced during ${scar.source} but not mentioned in closing reflection`,
+          execution_successful: false,
           variant_id: scar.variant_id,
         });
       }

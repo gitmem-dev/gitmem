@@ -25,6 +25,7 @@ import { recordScarUsage } from "./tools/record-scar-usage.js";
 import { recordScarUsageBatch } from "./tools/record-scar-usage-batch.js";
 import { recall } from "./tools/recall.js";
 import { confirmScars } from "./tools/confirm-scars.js";
+import { reflectScars } from "./tools/reflect-scars.js";
 import { saveTranscript } from "./tools/save-transcript.js";
 import { getTranscript } from "./tools/get-transcript.js";
 import { searchTranscripts } from "./tools/search-transcripts.js";
@@ -82,6 +83,7 @@ import type {
   SaveTranscriptParams,
   GetTranscriptParams,
   ConfirmScarsParams,
+  ReflectScarsParams,
 } from "./types/index.js";
 import type { RecallParams } from "./tools/recall.js";
 import type { SearchParams } from "./tools/search.js";
@@ -158,6 +160,11 @@ export function createServer(): Server {
         case "gitmem-cs":
         case "gm-confirm":
           result = await confirmScars(toolArgs as unknown as ConfirmScarsParams);
+          break;
+        case "reflect_scars":
+        case "gitmem-rf":
+        case "gm-reflect":
+          result = await reflectScars(toolArgs as unknown as ReflectScarsParams);
           break;
         case "session_start":
         case "gitmem-ss":
@@ -269,6 +276,7 @@ export function createServer(): Server {
           const commands = [
             { alias: "gitmem-r", full: "recall", description: "Check scars before taking action" },
             { alias: "gitmem-cs", full: "confirm_scars", description: "Confirm recalled scars (APPLYING/N_A/REFUTED)" },
+            { alias: "gitmem-rf", full: "reflect_scars", description: "End-of-session scar reflection (OBEYED/REFUTED)" },
             { alias: "gitmem-ss", full: "session_start", description: "Initialize session with context" },
             { alias: "gitmem-sr", full: "session_refresh", description: "Refresh context for active session" },
             { alias: "gitmem-sc", full: "session_close", description: "Close session with compliance validation" },

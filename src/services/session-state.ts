@@ -12,7 +12,7 @@
  * This allows recall() to always assign variants even without explicit parameters.
  */
 
-import type { SurfacedScar, ScarConfirmation, Observation, SessionChild, ThreadObject } from "../types/index.js";
+import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 
 interface SessionContext {
   sessionId: string;
@@ -22,6 +22,7 @@ interface SessionContext {
   startedAt: Date;
   surfacedScars: SurfacedScar[]; // Track all scars surfaced during session
   confirmations: ScarConfirmation[]; // Refute-or-obey confirmations for recall-surfaced scars
+  reflections: ScarReflection[];    // End-of-session scar reflections (OBEYED/REFUTED)
   observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
   children: SessionChild[];      // v2 Phase 2: Child agent records
   threads: ThreadObject[];       // : Working thread state
@@ -34,11 +35,12 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     surfacedScars: context.surfacedScars || [],
     confirmations: [],
+    reflections: [],
     observations: context.observations || [],
     children: context.children || [],
     threads: context.threads || [],
@@ -135,6 +137,36 @@ export function addConfirmations(confirmations: ScarConfirmation[]): void {
  */
 export function getConfirmations(): ScarConfirmation[] {
   return currentSession?.confirmations || [];
+}
+
+/**
+ * Add end-of-session scar reflections (OBEYED/REFUTED) to the current session.
+ * Called by reflect_scars tool after validation.
+ */
+export function addReflections(reflections: ScarReflection[]): void {
+  if (!currentSession) {
+    console.warn("[session-state] Cannot add reflections: no active session");
+    return;
+  }
+
+  for (const ref of reflections) {
+    // Replace existing reflection for same scar_id (allow re-reflection)
+    const idx = currentSession.reflections.findIndex(r => r.scar_id === ref.scar_id);
+    if (idx >= 0) {
+      currentSession.reflections[idx] = ref;
+    } else {
+      currentSession.reflections.push(ref);
+    }
+  }
+
+  console.error(`[session-state] Reflections tracked: ${currentSession.reflections.length} total`);
+}
+
+/**
+ * Get all end-of-session scar reflections for the current session.
+ */
+export function getReflections(): ScarReflection[] {
+  return currentSession?.reflections || [];
 }
 
 /**

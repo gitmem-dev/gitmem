@@ -35,6 +35,7 @@ export type ToolName =
   | "resolve_thread"
   | "create_thread"
   | "confirm_scars"
+  | "reflect_scars"
   | "cleanup_threads"
   | "health";
 
@@ -106,6 +107,7 @@ export const PERFORMANCE_TARGETS: Record<ToolName, number> = {
   resolve_thread: 100,      // In-memory mutation + file write
   create_thread: 100,       // In-memory mutation + file write
   confirm_scars: 500,       // In-memory validation + file write
+  reflect_scars: 500,       // In-memory validation + file write
   cleanup_threads: 2000,    // Fetch all threads + lifecycle computation
   health: 100,              // In-memory read from EffectTracker
 };

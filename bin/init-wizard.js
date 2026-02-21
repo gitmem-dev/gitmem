@@ -253,6 +253,17 @@ function buildClaudeHooks() {
         ],
       },
     ],
+    UserPromptSubmit: [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: `bash ${relScripts}/auto-retrieve-hook.sh`,
+            timeout: 3000,
+          },
+        ],
+      },
+    ],
     PreToolUse: [
       {
         matcher: "Bash",

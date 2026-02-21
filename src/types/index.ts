@@ -399,6 +399,35 @@ export interface ConfirmScarsResult {
   performance: PerformanceData;
 }
 
+// End-of-session scar reflection (mirrors CODA-1's [Scar Reflection])
+export type ReflectionOutcome = "OBEYED" | "REFUTED";
+
+export interface ScarReflection {
+  scar_id: string;
+  scar_title: string;
+  outcome: ReflectionOutcome;
+  evidence: string;
+  reflected_at: string; // ISO timestamp
+}
+
+export interface ReflectScarsParams {
+  reflections: Array<{
+    scar_id: string;
+    outcome: ReflectionOutcome;
+    evidence: string;
+  }>;
+}
+
+export interface ReflectScarsResult {
+  valid: boolean;
+  errors: string[];
+  reflections: ScarReflection[];
+  missing_scars: string[]; // scar titles not reflected
+  formatted_response: string;
+  display?: string;
+  performance: PerformanceData;
+}
+
 // Scar usage tracking
 export type ReferenceType = "explicit" | "implicit" | "acknowledged" | "refuted" | "none";
 

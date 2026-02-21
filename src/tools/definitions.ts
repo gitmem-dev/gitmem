@@ -88,6 +88,39 @@ export const TOOLS = [
     },
   },
   {
+    name: "reflect_scars",
+    description: "End-of-session scar reflection — the closing counterpart to confirm_scars. Mirrors CODA-1's [Scar Reflection] protocol. Call BEFORE session_close to provide evidence of how each surfaced scar was handled. OBEYED: concrete evidence of compliance (min 15 chars). REFUTED: why it didn't apply + what was done instead (min 30 chars). Session close uses reflections to set execution_successful accurately.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        reflections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: {
+                type: "string",
+                description: "UUID of the surfaced scar (from recall or session_start)",
+              },
+              outcome: {
+                type: "string",
+                enum: ["OBEYED", "REFUTED"],
+                description: "OBEYED: followed the scar with evidence. REFUTED: scar didn't apply, explain why.",
+              },
+              evidence: {
+                type: "string",
+                description: "Concrete evidence of compliance (OBEYED, min 15 chars) or explanation of why scar didn't apply (REFUTED, min 30 chars).",
+              },
+            },
+            required: ["scar_id", "outcome", "evidence"],
+          },
+          description: "One reflection per surfaced scar.",
+        },
+      },
+      required: ["reflections"],
+    },
+  },
+  {
     name: "session_start",
     description: "Initialize session, detect agent, load institutional context (last session, recent decisions, open threads). Scars surface on-demand via recall(). DISPLAY: The result includes a pre-formatted 'display' field visible in the tool result. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
@@ -813,6 +846,29 @@ export const TOOLS = [
     },
   },
   {
+    name: "gitmem-rf",
+    description: "gitmem-rf (reflect_scars) - End-of-session scar reflection (OBEYED/REFUTED with evidence)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        reflections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: { type: "string", description: "UUID of the surfaced scar" },
+              outcome: { type: "string", enum: ["OBEYED", "REFUTED"], description: "Reflection outcome" },
+              evidence: { type: "string", description: "Evidence (OBEYED min 15 chars, REFUTED min 30 chars)" },
+            },
+            required: ["scar_id", "outcome", "evidence"],
+          },
+          description: "One reflection per surfaced scar",
+        },
+      },
+      required: ["reflections"],
+    },
+  },
+  {
     name: "gitmem-ss",
     description: "gitmem-ss (session_start) - Initialize session with institutional context. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
@@ -1511,6 +1567,29 @@ export const TOOLS = [
     },
   },
   {
+    name: "gm-reflect",
+    description: "gm-reflect (reflect_scars) - End-of-session scar reflection",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        reflections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              scar_id: { type: "string", description: "UUID of the surfaced scar" },
+              outcome: { type: "string", enum: ["OBEYED", "REFUTED"] },
+              evidence: { type: "string", description: "Evidence of compliance or refutation" },
+            },
+            required: ["scar_id", "outcome", "evidence"],
+          },
+          description: "One reflection per surfaced scar",
+        },
+      },
+      required: ["reflections"],
+    },
+  },
+  {
     name: "gm-refresh",
     description: "gm-refresh (session_refresh) - Refresh context for the active session without creating a new one. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
     inputSchema: {
@@ -2196,7 +2275,7 @@ export const TOOLS = [
  */
 export const ALIAS_TOOL_NAMES = new Set([
   // gitmem-* aliases
-  "gitmem-r", "gitmem-cs", "gitmem-ss", "gitmem-sr", "gitmem-sc",
+  "gitmem-r", "gitmem-cs", "gitmem-rf", "gitmem-ss", "gitmem-sr", "gitmem-sc",
   "gitmem-cl", "gitmem-cd", "gitmem-rs", "gitmem-rsb",
   "gitmem-st", "gitmem-gt", "gitmem-stx",
   "gitmem-search", "gitmem-log", "gitmem-analyze",
@@ -2204,7 +2283,7 @@ export const ALIAS_TOOL_NAMES = new Set([
   "gitmem-lt", "gitmem-rt", "gitmem-ct", "gitmem-ps", "gitmem-ds",
   "gitmem-cleanup", "gitmem-health", "gitmem-al", "gitmem-graph",
   // gm-* aliases
-  "gm-open", "gm-confirm", "gm-refresh", "gm-close",
+  "gm-open", "gm-confirm", "gm-reflect", "gm-refresh", "gm-close",
   "gm-scar", "gm-search", "gm-log", "gm-analyze",
   "gm-pc", "gm-absorb",
   "gm-threads", "gm-resolve", "gm-thread-new", "gm-promote", "gm-dismiss",

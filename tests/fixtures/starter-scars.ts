@@ -1,7 +1,7 @@
 /**
  * Test Fixtures: Starter Scars
  *
- * These match the 3 starter scars that ship with gitmem.
+ * Representative subset of the 12 starter scars that ship with gitmem.
  * Used for testing the "fresh install with starter scars" scenario.
  */
 
@@ -9,7 +9,7 @@ import { randomUUID } from "crypto";
 import type { TestScar } from "./scars.js";
 
 /**
- * The 3 starter scars for fresh installations
+ * Representative subset of starter scars for fresh installations
  */
 export const STARTER_SCARS: TestScar[] = [
   {

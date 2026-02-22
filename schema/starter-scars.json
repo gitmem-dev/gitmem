@@ -124,5 +124,95 @@
     "project": "default",
     "source_date": "2026-01-01",
     "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "5c1111a9-c161-4b2d-83f9-063780164b7c",
+    "learning_type": "scar",
+    "title": "Sub-agents Start With Zero Context — Always Inject Memory",
+    "description": "When you spawn a sub-agent (Task tool), it starts with a blank slate — no conversation history, no institutional memory, no project context. If you don't explicitly inject context via prepare_context or a detailed prompt, the sub-agent will repeat mistakes the team already learned from. The 2-3 seconds to prepare context prevents minutes of wasted work.",
+    "severity": "high",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "The sub-agent has access to the same tools so it can figure things out — but without memory context it will rediscover pitfalls the hard way",
+      "Injecting context slows down spawning — but 2-3 seconds of prep prevents full task re-runs when the agent hits a known issue"
+    ],
+    "keywords": ["sub-agent", "task-tool", "context", "delegation", "multi-agent", "prepare-context"],
+    "domain": ["multi-agent", "delegation"],
+    "project": "default",
+    "source_date": "2026-02-22",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "f7d1dcb8-dcf1-48fb-9ab0-e682cd704530",
+    "learning_type": "scar",
+    "title": "Sub-agents Cannot See Your Conversation — Spell Out Everything",
+    "description": "Sub-agents spawned via the Task tool do not inherit the parent conversation. They cannot see what the user asked, what files were discussed, or what decisions were made. Every requirement, file path, and constraint must be explicitly stated in the task prompt. Vague delegation like 'fix the bug we discussed' will fail because the sub-agent has no idea what was discussed.",
+    "severity": "high",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "The sub-agent description says it has 'access to current context' — but only certain agent types do, and even then the full nuance of the conversation may not transfer",
+      "I can just tell it to 'continue the work' — but without explicit requirements the sub-agent will interpret 'the work' differently than you intended"
+    ],
+    "keywords": ["sub-agent", "delegation", "prompt", "requirements", "context-loss", "multi-agent"],
+    "domain": ["multi-agent", "delegation"],
+    "project": "default",
+    "source_date": "2026-02-22",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "060389aa-c0fa-445d-bbfd-5d9250dc1e73",
+    "learning_type": "scar",
+    "title": "Don't Pre-read Files Before Delegating — Let the Sub-agent Read Them",
+    "description": "Reading files into your context before spawning a sub-agent wastes your context window and doesn't help the sub-agent (it can't see what you read). Instead, tell the sub-agent which files to read. The sub-agent has its own context budget and its own file access. Pre-reading just burns tokens twice.",
+    "severity": "medium",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "I need to understand the code before I can write a good prompt — true for architecture decisions, but for 'read and fix' tasks the sub-agent can do its own reading",
+      "What if the sub-agent reads the wrong files — provide specific file paths in the prompt rather than reading them yourself"
+    ],
+    "keywords": ["sub-agent", "context-window", "delegation", "file-reading", "tokens", "multi-agent"],
+    "domain": ["multi-agent", "efficiency"],
+    "project": "default",
+    "source_date": "2026-02-22",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "55b25d2e-41ad-47f4-8723-569b78586dff",
+    "learning_type": "scar",
+    "title": "Search Memory Before Creating Learnings — Duplicates Dilute Recall",
+    "description": "Before creating a new scar, win, or pattern, search existing memory first. Duplicate entries dilute recall quality — when the same lesson exists three times with slightly different wording, search results waste slots on redundant matches instead of surfacing diverse, relevant knowledge. One well-written scar beats three near-duplicates.",
+    "severity": "medium",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "Creating duplicates reinforces the lesson — but recall is similarity-based, so duplicates just crowd out other useful results",
+      "My wording is better than the existing one — then update the existing entry instead of creating a new one"
+    ],
+    "keywords": ["memory", "search", "duplicates", "recall", "learning", "scar-creation"],
+    "domain": ["memory-hygiene", "gitmem"],
+    "project": "default",
+    "source_date": "2026-02-22",
+    "created_at": "2026-02-22T00:00:00Z"
+  },
+  {
+    "id": "867cf3f6-a0e5-4ca2-8d4d-43cb1f10d94d",
+    "learning_type": "scar",
+    "title": "Ask Clarifying Questions Before Coding — 5 Seconds Prevents a Rewrite",
+    "description": "When requirements are ambiguous, ask a clarifying question before writing code. A 5-second question like 'Should this handle both cases or just the first?' prevents building the wrong thing and having to rewrite. Assumptions that seem obvious are often wrong. The cost of asking is near-zero; the cost of a wrong assumption is a full task redo.",
+    "severity": "high",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "Asking too many questions slows things down — but one targeted question is faster than a rewrite after building the wrong thing",
+      "I can just build both options and let the user pick — but that's double the work and the user wanted a decision, not a menu"
+    ],
+    "keywords": ["requirements", "clarification", "assumptions", "communication", "rewrite"],
+    "domain": ["communication", "planning"],
+    "project": "default",
+    "source_date": "2026-02-22",
+    "created_at": "2026-02-22T00:00:00Z"
   }
 ]

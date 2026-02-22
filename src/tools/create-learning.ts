@@ -113,6 +113,7 @@ export async function createLearning(
     created_at: new Date().toISOString(),
     persona_name: agentIdentity,
     source_date: new Date().toISOString().split("T")[0],
+    is_active: true,
     // LLM-cooperative enforcement fields (optional)
     ...(params.why_this_matters && { why_this_matters: params.why_this_matters }),
     ...(params.action_protocol && { action_protocol: params.action_protocol }),

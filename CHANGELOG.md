@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-02-22
+
+### Added
+- **Expanded starter scar pack** (7 → 12): Five new community-proposed scars covering multi-agent delegation, memory hygiene, and communication patterns.
+- **Closing payload pre-seeded during init**: `closing-payload.json` template created at install time, preventing Write permission prompt on first session close.
+- **`contribute_feedback` tool**: Agents can submit anonymous feedback (feature requests, bugs, friction) to help improve gitmem.
+
+### Fixed
+- **`is_active` filter for free tier**: `list()` now treats missing `is_active` as `true` instead of filtering out all learnings without the field.
+- **`learning_type` in recall results**: Recall now returns `learning_type` in search results so agents can distinguish scars from wins and patterns.
+- **Explicit `is_active: true` on learning creation**: New learnings are created with `is_active: true` to prevent filter mismatches.
+
 ## [1.3.1] - 2026-02-22
 
 ### Fixed

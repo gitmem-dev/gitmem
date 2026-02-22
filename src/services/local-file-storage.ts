@@ -83,7 +83,12 @@ export class LocalFileStorage {
     if (options.filters) {
       for (const [key, value] of Object.entries(options.filters)) {
         const cleanValue = value.startsWith("eq.") ? value.slice(3) : value;
-        records = records.filter((r) => String(r[key]) === cleanValue);
+        if (key === "is_active" && cleanValue === "true") {
+          // is_active defaults to true when not explicitly set
+          records = records.filter((r) => r[key] !== false);
+        } else {
+          records = records.filter((r) => String(r[key]) === cleanValue);
+        }
       }
     }
 
@@ -183,6 +188,7 @@ export class LocalFileStorage {
       mapped.push({
         id: r.id,
         title: String(l.title),
+        learning_type: String(l.learning_type || "scar"),
         description: String(l.description),
         severity: String(l.severity || "medium"),
         counter_arguments: (l.counter_arguments as string[]) || [],

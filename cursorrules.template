@@ -75,7 +75,7 @@ On "closing", "done for now", or "wrapping up":
      "task_completion": {
        "questions_displayed_at": "ISO timestamp (when reflection started)",
        "reflection_completed_at": "ISO timestamp (when payload written)",
-       "human_asked_at": "ISO timestamp (when 'Corrections?' shown)",
+       "human_asked_at": "ISO timestamp (when closing prompt shown)",
        "human_response_at": "ISO timestamp (when human replied)",
        "human_response": "user's correction text or 'none'"
      },
@@ -93,7 +93,7 @@ On "closing", "done for now", or "wrapping up":
    Key lesson: [one-sentence from Q7]
    ```
 
-3. **Ask**: "Corrections?" — wait for response, then call `session_close`.
+3. **Ask**: "Anything to add before I close this session?" — wait for response, then call `session_close`.
 
 4. **Call `session_close`** with `session_id` and `close_type: "standard"`.
 

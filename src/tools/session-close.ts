@@ -1300,7 +1300,7 @@ export async function sessionClose(
     let humanWaitTimeMs: number | undefined;
     if (params.task_completion && typeof params.task_completion === "object") {
       const tc = params.task_completion as unknown as Record<string, string>;
-      // Agent reflection time = when questions shown → when human asked "Corrections?"
+      // Agent reflection time = when questions shown → when closing prompt shown
       if (tc.questions_displayed_at && tc.human_asked_at) {
         const started = new Date(tc.questions_displayed_at).getTime();
         const askedHuman = new Date(tc.human_asked_at).getTime();
@@ -1308,7 +1308,7 @@ export async function sessionClose(
           agentReflectionMs = askedHuman - started;
         }
       }
-      // Human wait time = "Corrections?" → human responds
+      // Human wait time = closing prompt → human responds
       if (tc.human_asked_at && tc.human_response_at) {
         const asked = new Date(tc.human_asked_at).getTime();
         const responded = new Date(tc.human_response_at).getTime();

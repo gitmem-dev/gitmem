@@ -21,6 +21,7 @@ import { isFeedbackEnabled, getInstallId } from "../services/gitmem-dir.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { sanitizeFeedbackText } from "../services/feedback-sanitizer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
+import { submitFeedbackRemote } from "../services/feedback-remote.js";
 import { wrapDisplay } from "../services/display-protocol.js";
 import { Timer } from "../services/metrics.js";
 import type { ContributeFeedbackParams } from "../schemas/contribute-feedback.js";
@@ -118,17 +119,19 @@ export async function contributeFeedback(params: ContributeFeedbackParams): Prom
       "feedback",
       "remote-submit",
       async () => {
-        // Remote endpoint — POST to Supabase Edge Function or similar
-        // For now, this is a placeholder that logs the intent.
-        // The actual endpoint will be configured when the backend is ready.
-        console.error(`[contribute-feedback] Remote feedback queued: ${id} (${params.type})`);
-        // When endpoint is available:
-        // const response = await fetch(FEEDBACK_ENDPOINT, {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify(remotePayload),
-        // });
-        // if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await submitFeedbackRemote({
+          feedback_id: id,
+          type: params.type,
+          tool: params.tool,
+          description: sanitizedDescription,
+          severity: params.severity,
+          suggested_fix: sanitizedFix,
+          context: sanitizedContext,
+          gitmem_version: pkg.version,
+          agent_identity: getAgentIdentity(),
+          install_id: installId,
+          client_timestamp: now.toISOString(),
+        });
         return remotePayload;
       },
     );

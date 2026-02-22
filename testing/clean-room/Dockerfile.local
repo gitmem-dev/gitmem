@@ -1,14 +1,11 @@
-# GitMem Clean Room — New User Experience
+# GitMem Clean Room — Local Build Test
 #
-# Simulates a brand new user with nothing installed.
-# No gitmem, no pre-config — just node + git + claude.
+# Same as Dockerfile.npm but installs from local tarball instead of npm.
 #
 # Build & run:
-#   docker build -t gitmem-npm -f testing/clean-room/Dockerfile.npm testing/clean-room/
-#   docker run -it --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gitmem-npm
-#
-# Then test exactly what the website says:
-#   npx gitmem-mcp init
+#   cd /workspace/gitmem && npm pack && cp gitmem-mcp-*.tgz testing/clean-room/gitmem-mcp-local.tgz
+#   docker build -t gitmem-local -f testing/clean-room/Dockerfile.local testing/clean-room/
+#   docker run -it --rm gitmem-local
 
 FROM node:20-slim
 
@@ -24,6 +21,10 @@ RUN npm install -g npm@latest
 
 # Install Claude Code (as root, before user switch)
 RUN npm install -g @anthropic-ai/claude-code
+
+# Copy and install local tarball globally so npx resolves it
+COPY gitmem-mcp-local.tgz /tmp/gitmem-mcp-local.tgz
+RUN npm install -g /tmp/gitmem-mcp-local.tgz && rm /tmp/gitmem-mcp-local.tgz
 
 # Create non-root developer user with project dir
 RUN useradd -m -s /bin/bash developer \

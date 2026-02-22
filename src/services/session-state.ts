@@ -20,6 +20,7 @@ interface SessionContext {
   agent?: string;
   project?: string;              // Thread fix: track active project for list_threads default
   startedAt: Date;
+  recallCalled: boolean;         // Track whether recall() was invoked (independent of results)
   surfacedScars: SurfacedScar[]; // Track all scars surfaced during session
   confirmations: ScarConfirmation[]; // Refute-or-obey confirmations for recall-surfaced scars
   reflections: ScarReflection[];    // End-of-session scar reflections (OBEYED/REFUTED)
@@ -35,9 +36,10 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
+    recallCalled: false,
     surfacedScars: context.surfacedScars || [],
     confirmations: [],
     reflections: [],
@@ -80,6 +82,25 @@ export function getProject(): string | null {
  */
 export function hasActiveIssue(): boolean {
   return !!(currentSession?.linearIssue);
+}
+
+/**
+ * Mark that recall() was called this session (independent of whether it returned scars).
+ * Called by recall tool before any early return.
+ */
+export function setRecallCalled(): void {
+  if (currentSession) {
+    currentSession.recallCalled = true;
+    console.error("[session-state] recall() marked as called");
+  }
+}
+
+/**
+ * Check if recall() was called this session.
+ * Used by enforcement to avoid false positives when recall returns 0 scars.
+ */
+export function isRecallCalled(): boolean {
+  return currentSession?.recallCalled ?? false;
 }
 
 /**

@@ -11,7 +11,7 @@
  * - Lightweight: pure in-memory checks, no I/O
  */
 
-import { getCurrentSession, hasUnconfirmedScars, getSurfacedScars } from "./session-state.js";
+import { getCurrentSession, hasUnconfirmedScars, getSurfacedScars, isRecallCalled } from "./session-state.js";
 
 export interface EnforcementResult {
   /** Warning text to prepend to tool response (null = clean, no warning) */
@@ -123,19 +123,17 @@ export function checkEnforcement(toolName: string): EnforcementResult {
   }
 
   // Check 3: No recall before consequential action
-  if (CONSEQUENTIAL_TOOLS.has(toolName)) {
-    const recallScars = getSurfacedScars().filter(s => s.source === "recall");
-    if (recallScars.length === 0) {
-      return {
-        warning: [
-          "--- gitmem enforcement ---",
-          "No recall() was run this session before this action.",
-          "Consider calling recall() first to check for relevant institutional memory.",
-          "Past mistakes and patterns may prevent repeating known issues.",
-          "---",
-        ].join("\n"),
-      };
-    }
+  // Uses recallCalled boolean to avoid false positives when recall returns 0 scars
+  if (CONSEQUENTIAL_TOOLS.has(toolName) && !isRecallCalled()) {
+    return {
+      warning: [
+        "--- gitmem enforcement ---",
+        "No recall() was run this session before this action.",
+        "Consider calling recall() first to check for relevant institutional memory.",
+        "Past mistakes and patterns may prevent repeating known issues.",
+        "---",
+      ].join("\n"),
+    };
   }
 
   return { warning: null };

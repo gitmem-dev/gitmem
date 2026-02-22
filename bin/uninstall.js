@@ -28,6 +28,35 @@ const deleteAll = args.includes("--all");
 const clientIdx = args.indexOf("--client");
 const clientFlag = clientIdx !== -1 ? args[clientIdx + 1]?.toLowerCase() : null;
 
+// ── Colors (brand-matched to init wizard) ──
+
+const _color =
+  !process.env.NO_COLOR &&
+  !process.env.GITMEM_NO_COLOR &&
+  process.stdout.isTTY;
+
+const C = {
+  reset: _color ? "\x1b[0m" : "",
+  bold:  _color ? "\x1b[1m" : "",
+  dim:   _color ? "\x1b[2m" : "",
+  red:   _color ? "\x1b[31m" : "",
+  green: _color ? "\x1b[32m" : "",
+  yellow: _color ? "\x1b[33m" : "",
+};
+
+const RIPPLE = `${C.dim}(${C.reset}${C.red}(${C.reset}${C.bold}\u25cf${C.reset}${C.red})${C.reset}${C.dim})${C.reset}`;
+const PRODUCT = `${RIPPLE} ${C.red}gitmem${C.reset}`;
+const CHECK = `${C.bold}\u2714${C.reset}`;
+const SKIP = `${C.dim}\u00b7${C.reset}`;
+
+let actionsTaken = 0;
+
+function log(icon, msg, extra) {
+  if (icon === CHECK) actionsTaken++;
+  const suffix = extra ? ` ${C.dim}${extra}${C.reset}` : "";
+  console.log(`${icon} ${msg}${suffix}`);
+}
+
 // ── Client Configuration ──
 
 const CLIENT_CONFIGS = {
@@ -125,13 +154,11 @@ function writeJson(path, data) {
 }
 
 function isGitmemHook(entry) {
-  // Claude Code format: entry.hooks is an array of {command: "..."}
   if (entry.hooks && Array.isArray(entry.hooks)) {
     return entry.hooks.some(
       (h) => typeof h.command === "string" && h.command.includes("gitmem")
     );
   }
-  // Cursor format: entry itself has {command: "..."}
   if (typeof entry.command === "string") {
     return entry.command.includes("gitmem");
   }
@@ -142,49 +169,47 @@ function isGitmemHook(entry) {
 
 function stepInstructions() {
   if (!existsSync(cc.instructionsFile)) {
-    console.log(`  No ${cc.instructionsName} found. Skipping.`);
+    log(SKIP, `No ${cc.instructionsName} found`);
     return;
   }
 
   let content = readFileSync(cc.instructionsFile, "utf-8");
 
   if (!content.includes(cc.startMarker)) {
-    console.log(`  No gitmem section in ${cc.instructionsName}. Skipping.`);
+    log(SKIP, `No gitmem section in ${cc.instructionsName}`);
     return;
   }
 
   const startIdx = content.indexOf(cc.startMarker);
   const endIdx = content.indexOf(cc.endMarker);
   if (startIdx === -1 || endIdx === -1) {
-    console.log(`  Malformed gitmem markers in ${cc.instructionsName}. Skipping.`);
+    log(SKIP, `Malformed gitmem markers in ${cc.instructionsName}`);
     return;
   }
 
-  // Remove the block including markers and surrounding whitespace
   const before = content.slice(0, startIdx).trimEnd();
   const after = content.slice(endIdx + cc.endMarker.length).trimStart();
-
   const result = before + (before && after ? "\n\n" : "") + after;
 
   if (result.trim() === "") {
     rmSync(cc.instructionsFile);
-    console.log(`  Removed ${cc.instructionsName} (was gitmem-only)`);
+    log(CHECK, `Removed ${cc.instructionsName}`, "(was gitmem-only)");
   } else {
     writeFileSync(cc.instructionsFile, result.trimEnd() + "\n");
-    console.log(`  Stripped gitmem section from ${cc.instructionsName}`);
+    log(CHECK, `Stripped gitmem section from ${cc.instructionsName}`, "(your content preserved)");
   }
 }
 
 function stepMcpJson() {
   const config = readJson(cc.mcpConfigPath);
   if (!config?.mcpServers) {
-    console.log(`  No ${cc.mcpConfigName} found. Skipping.`);
+    log(SKIP, `No ${cc.mcpConfigName} found`);
     return;
   }
 
   const had = !!config.mcpServers.gitmem || !!config.mcpServers["gitmem-mcp"];
   if (!had) {
-    console.log(`  No gitmem in ${cc.mcpConfigName}. Skipping.`);
+    log(SKIP, `No gitmem in ${cc.mcpConfigName}`);
     return;
   }
 
@@ -193,9 +218,11 @@ function stepMcpJson() {
 
   const remaining = Object.keys(config.mcpServers).length;
   writeJson(cc.mcpConfigPath, config);
-  console.log(
-    `  Removed gitmem server (${remaining} other server${remaining !== 1 ? "s" : ""} preserved)`
-  );
+  if (remaining > 0) {
+    log(CHECK, `Removed gitmem server`, `(${remaining} other server${remaining !== 1 ? "s" : ""} preserved)`);
+  } else {
+    log(CHECK, `Removed gitmem server from ${cc.mcpConfigName}`);
+  }
 }
 
 function stepHooks() {
@@ -208,7 +235,7 @@ function stepHooks() {
 function stepHooksClaude() {
   const settings = readJson(cc.settingsFile);
   if (!settings?.hooks) {
-    console.log("  No hooks in .claude/settings.json. Skipping.");
+    log(SKIP, "No hooks in .claude/settings.json");
     return;
   }
 
@@ -232,7 +259,7 @@ function stepHooksClaude() {
   }
 
   if (removed === 0) {
-    console.log("  No gitmem hooks found. Skipping.");
+    log(SKIP, "No gitmem hooks found");
     return;
   }
 
@@ -243,18 +270,17 @@ function stepHooksClaude() {
   }
 
   writeJson(cc.settingsFile, settings);
-  console.log(
-    `  Removed gitmem hooks` +
-      (preserved > 0
-        ? ` (${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`
-        : "")
-  );
+  if (preserved > 0) {
+    log(CHECK, "Removed automatic memory hooks", `(${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`);
+  } else {
+    log(CHECK, "Removed automatic memory hooks");
+  }
 }
 
 function stepHooksCursor() {
   const config = readJson(cc.hooksFile);
   if (!config?.hooks) {
-    console.log(`  No hooks in ${cc.hooksFileName}. Skipping.`);
+    log(SKIP, `No hooks in ${cc.hooksFileName}`);
     return;
   }
 
@@ -278,7 +304,7 @@ function stepHooksCursor() {
   }
 
   if (removed === 0) {
-    console.log("  No gitmem hooks found. Skipping.");
+    log(SKIP, "No gitmem hooks found");
     return;
   }
 
@@ -289,38 +315,36 @@ function stepHooksCursor() {
   }
 
   writeJson(cc.hooksFile, config);
-  console.log(
-    `  Removed gitmem hooks` +
-      (preserved > 0
-        ? ` (${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`
-        : "")
-  );
+  if (preserved > 0) {
+    log(CHECK, "Removed automatic memory hooks", `(${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`);
+  } else {
+    log(CHECK, "Removed automatic memory hooks");
+  }
 }
 
 function stepPermissions() {
   if (!cc.hasPermissions) {
-    console.log(`  Not needed for ${cc.name}. Skipping.`);
+    log(SKIP, `Not needed for ${cc.name}`);
     return;
   }
 
   const settings = readJson(cc.settingsFile);
   const allow = settings?.permissions?.allow;
   if (!Array.isArray(allow)) {
-    console.log("  No permissions in .claude/settings.json. Skipping.");
+    log(SKIP, "No permissions in .claude/settings.json");
     return;
   }
 
   const pattern = "mcp__gitmem__*";
   const idx = allow.indexOf(pattern);
   if (idx === -1) {
-    console.log("  No gitmem permissions found. Skipping.");
+    log(SKIP, "No gitmem permissions found");
     return;
   }
 
   allow.splice(idx, 1);
   settings.permissions.allow = allow;
 
-  // Clean up empty permissions
   if (allow.length === 0) {
     delete settings.permissions.allow;
   }
@@ -332,31 +356,26 @@ function stepPermissions() {
   }
 
   writeJson(cc.settingsFile, settings);
-  console.log("  Removed mcp__gitmem__* from permissions.allow");
+  log(CHECK, "Removed tool permissions");
 }
 
 async function stepGitmemDir() {
   if (!existsSync(gitmemDir)) {
-    console.log("  No .gitmem/ directory. Skipping.");
+    log(SKIP, "No .gitmem/ directory");
     return;
   }
 
   if (deleteAll) {
     rmSync(gitmemDir, { recursive: true, force: true });
-    console.log("  Deleted .gitmem/ directory");
+    log(CHECK, "Deleted .gitmem/ directory");
     return;
   }
 
-  console.log(
-    "  This contains your memory data (scars, sessions, decisions)."
-  );
-
-  // Default to No for data deletion
-  if (await confirm("Delete .gitmem/?", false)) {
-    rmSync(gitmemDir, { recursive: true, force: true });
-    console.log("  Deleted .gitmem/ directory");
+  if (await confirm("Keep .gitmem/ memory data for future use?", true)) {
+    log(CHECK, ".gitmem/ preserved — your memories will be here if you reinstall");
   } else {
-    console.log("  Skipped — .gitmem/ preserved.");
+    rmSync(gitmemDir, { recursive: true, force: true });
+    log(CHECK, "Deleted .gitmem/ directory");
   }
 }
 
@@ -366,58 +385,38 @@ function stepGitignore() {
   let content = readFileSync(gitignorePath, "utf-8");
   if (!content.includes(".gitmem/")) return;
 
-  // Remove the .gitmem/ line
   const lines = content.split("\n");
   const filtered = lines.filter((line) => line.trim() !== ".gitmem/");
   writeFileSync(gitignorePath, filtered.join("\n"));
+  log(CHECK, "Cleaned .gitignore");
 }
 
 // ── Main ──
 
 async function main() {
+  const pkg = readJson(join(__dirname, "..", "package.json"));
+  const version = pkg?.version || "1.0.0";
+
   console.log("");
-  console.log(`  gitmem — Uninstall (${cc.name})`);
-  if (clientFlag) {
-    console.log(`  (client: ${client} — via --client flag)`);
-  } else {
-    console.log(`  (client: ${client} — auto-detected)`);
-  }
+  console.log(`${PRODUCT} \u2500\u2500 uninstall v${version}`);
+  console.log(`${C.dim}Removing gitmem from ${cc.name}${clientFlag ? "" : " (auto-detected)"}${C.reset}`);
   console.log("");
 
-  const stepCount = cc.hasPermissions ? 5 : 4;
-  let step = 1;
-
-  console.log(`  Step ${step}/${stepCount} — Remove gitmem section from ${cc.instructionsName}`);
   stepInstructions();
-  console.log("");
-  step++;
-
-  console.log(`  Step ${step}/${stepCount} — Remove gitmem from ${cc.mcpConfigName}`);
   stepMcpJson();
-  console.log("");
-  step++;
-
-  const hooksTarget = cc.hooksInSettings ? ".claude/settings.json" : cc.hooksFileName;
-  console.log(`  Step ${step}/${stepCount} — Remove gitmem hooks from ${hooksTarget}`);
   stepHooks();
-  console.log("");
-  step++;
-
-  if (cc.hasPermissions) {
-    console.log(`  Step ${step}/${stepCount} — Remove gitmem permissions from .claude/settings.json`);
-    stepPermissions();
-    console.log("");
-    step++;
-  }
-
-  console.log(`  Step ${step}/${stepCount} — Delete .gitmem/ directory?`);
+  stepPermissions();
   await stepGitmemDir();
-
-  // Also clean .gitignore entry
   stepGitignore();
 
   console.log("");
-  console.log("  Uninstall complete.");
+  if (actionsTaken > 0) {
+    console.log(`${C.dim}gitmem-mcp has been removed.${C.reset}`);
+    console.log(`${C.dim}Reinstall anytime: ${C.reset}${C.red}npx gitmem-mcp init${C.reset}`);
+  } else {
+    console.log(`${C.dim}gitmem-mcp is not installed in this project.${C.reset}`);
+    console.log(`${C.dim}Install: ${C.reset}${C.red}npx gitmem-mcp init${C.reset}`);
+  }
   console.log("");
 
   if (rl) rl.close();

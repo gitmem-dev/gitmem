@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-22
+
+### Added
+- **Expanded starter scars** (3 → 7): New scars covering testing, config drift, dependency management, and root-cause debugging.
+- **Real UUIDs on starter scars**: Replaced placeholder `00000000-*` IDs with real v4 UUIDs — fixes 8-char prefix matching in `confirm_scars`.
+- **First-recall welcome message**: When all recall results are starter scars, shows "This is your first recall — results will get more relevant as you add your own lessons."
+- **Starter thread**: Fresh installs get a welcome thread nudging users to add their first project-specific scar.
+- **Clean room Dockerfile for local builds**: `testing/clean-room/Dockerfile.local` for testing local tarballs.
+
+### Fixed
+- **Enforcement false positives**: `recall()` returning 0 scars no longer triggers "No recall() was run" warning. Tracks `recallCalled` boolean independently of result count.
+- **Init wizard brand styling**: Unified color system and ripple branding in both init and uninstall wizards.
+
+### Changed
+- **Clean room Dockerfiles**: Updated npm to latest to suppress upgrade nag during testing.
+
 ## [1.2.1] - 2026-02-21
 
 ### Added

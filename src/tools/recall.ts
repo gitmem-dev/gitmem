@@ -32,7 +32,7 @@ import {
   formatVariantEnforcement,
   type ScarWithVariant,
 } from "../services/variant-assignment.js";
-import { addSurfacedScars, getCurrentSession } from "../services/session-state.js";
+import { addSurfacedScars, getCurrentSession, setRecallCalled } from "../services/session-state.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
@@ -103,6 +103,7 @@ interface FormattedScar {
   applies_when: string[];
   source_issue?: string;
   similarity: number;
+  is_starter?: boolean;
   required_verification?: RequiredVerification;
   variant_info?: ScarWithVariant; // Variant assignment info
   // LLM-cooperative enforcement fields
@@ -140,6 +141,9 @@ function formatResponse(scars: FormattedScar[], plan: string, dismissals?: Map<s
 No past lessons match this plan closely enough. Scars accumulate as you work — create learnings during session close to build institutional memory.`;
   }
 
+  // First-recall welcome: all results are starter scars
+  const allStarter = scars.length > 0 && scars.every((s) => s.is_starter === true);
+
   // Check if any scars have required_verification (blocking gates)
   const scarsWithVerification = scars.filter((s) => s.required_verification?.blocking);
 
@@ -147,6 +151,11 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     formatNudgeHeader(scars.length),
     "",
   ];
+
+  if (allStarter) {
+    lines.push(`${dimText("This is your first recall — results will get more relevant as you add your own lessons from real experience.")}`);
+    lines.push("");
+  }
 
   // Display blocking verification requirements FIRST and prominently
   if (scarsWithVerification.length > 0) {
@@ -285,6 +294,10 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   const matchCount = params.match_count || 3;
   const issueId = params.issue_id; // For variant assignment
 
+  // Mark recall as called BEFORE any search — prevents enforcement false positives
+  // when recall returns 0 matching scars
+  setRecallCalled();
+
   // Similarity threshold — suppress weak matches
   // Pro tier: 0.45 calibrated from UX audit (66% N_A rate at 0.35, APPLYING avg 0.55, N_A avg 0.51)
   // Free tier: 0.4 (BM25 scores are relative — top result always 1.0)
@@ -308,6 +321,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
           counter_arguments: scar.counter_arguments || [],
           applies_when: [],
           similarity: scar.similarity || 0,
+          is_starter: (scar as unknown as Record<string, unknown>).is_starter as boolean | undefined,
         }))
         // Filter below threshold
         .filter((scar) => scar.similarity >= similarityThreshold);
@@ -489,6 +503,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         applies_when: (scar as ScarRecord).applies_when || [],
         source_issue: (scar as ScarRecord).source_linear_issue,
         similarity: scar.similarity || 0,
+        is_starter: (scar as unknown as Record<string, unknown>).is_starter as boolean | undefined,
         required_verification: (scar as ScarRecord).required_verification,
         variant_info: variantResults.get(scar.id),
         // LLM-cooperative enforcement fields

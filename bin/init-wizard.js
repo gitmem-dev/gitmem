@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * GitMem Init Wizard
+ * GitMem Init Wizard — v2
  *
- * Interactive setup that detects existing config, prompts, and merges.
- * Supports Claude Code and Cursor IDE.
+ * Non-interactive by default on fresh install. Prompts only when
+ * existing config needs a merge decision.
  *
- * Usage: npx gitmem-mcp init [--yes] [--dry-run] [--project <name>] [--client <claude|cursor|vscode|windsurf|generic>]
+ * Usage: npx gitmem-mcp init [--yes] [--interactive] [--dry-run] [--project <name>] [--client <claude|cursor|vscode|windsurf|generic>]
  */
 
 import {
@@ -24,9 +24,42 @@ import { createInterface } from "readline/promises";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
 
-// Parse flags
+// ── ANSI Colors — matches gitmem MCP display-protocol.ts ──
+
+function useColor() {
+  if (process.env.NO_COLOR !== undefined) return false;
+  if (process.env.GITMEM_NO_COLOR !== undefined) return false;
+  return true;
+}
+
+const _color = useColor();
+
+const C = {
+  reset: _color ? "\x1b[0m" : "",
+  bold:  _color ? "\x1b[1m" : "",
+  dim:   _color ? "\x1b[2m" : "",
+  red:   _color ? "\x1b[31m" : "",   // brand accent (Racing Red)
+  green: _color ? "\x1b[32m" : "",   // success
+  yellow: _color ? "\x1b[33m" : "",  // warning / prompts
+  underline: _color ? "\x1b[4m" : "",
+  italic: _color ? "\x1b[3m" : "",
+};
+
+// Brand mark: ripple icon — dim outer ring, red inner ring, bold center dot
+const RIPPLE = `${C.dim}(${C.reset}${C.red}(${C.reset}${C.bold}\u25cf${C.reset}${C.red})${C.reset}${C.dim})${C.reset}`;
+const PRODUCT = `${RIPPLE} ${C.red}gitmem${C.reset}`;
+
+const CHECK = `${C.bold}\u2714${C.reset}`;
+const SKIP = `${C.dim}\u00b7${C.reset}`;
+const WARN = `${C.yellow}!${C.reset}`;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ── Parse flags ──
+
 const args = process.argv.slice(2);
 const autoYes = args.includes("--yes") || args.includes("-y");
+const interactive = args.includes("--interactive") || args.includes("-i");
 const dryRun = args.includes("--dry-run");
 const projectIdx = args.indexOf("--project");
 const projectName = projectIdx !== -1 ? args[projectIdx + 1] : null;
@@ -35,7 +68,6 @@ const clientFlag = clientIdx !== -1 ? args[clientIdx + 1]?.toLowerCase() : null;
 
 // ── Client Configuration ──
 
-// Resolve user home directory for clients that use user-level config
 const homeDir = process.env.HOME || process.env.USERPROFILE || "~";
 
 const CLIENT_CONFIGS = {
@@ -55,7 +87,7 @@ const CLIENT_CONFIGS = {
     hasPermissions: true,
     hooksInSettings: true,
     hasHooks: true,
-    completionMsg: "Setup complete! Start Claude Code \u2014 memory is active.",
+    completionVerb: "Start Claude Code",
   },
   cursor: {
     name: "Cursor",
@@ -75,7 +107,7 @@ const CLIENT_CONFIGS = {
     hasHooks: true,
     hooksFile: join(cwd, ".cursor", "hooks.json"),
     hooksFileName: ".cursor/hooks.json",
-    completionMsg: "Setup complete! Open Cursor (Agent mode) \u2014 memory is active.",
+    completionVerb: "Open Cursor (Agent mode)",
   },
   vscode: {
     name: "VS Code (Copilot)",
@@ -93,7 +125,7 @@ const CLIENT_CONFIGS = {
     hasPermissions: false,
     hooksInSettings: false,
     hasHooks: false,
-    completionMsg: "Setup complete! Open VS Code \u2014 memory is active via Copilot.",
+    completionVerb: "Open VS Code",
   },
   windsurf: {
     name: "Windsurf",
@@ -111,7 +143,7 @@ const CLIENT_CONFIGS = {
     hasPermissions: false,
     hooksInSettings: false,
     hasHooks: false,
-    completionMsg: "Setup complete! Open Windsurf \u2014 memory is active.",
+    completionVerb: "Open Windsurf",
   },
   generic: {
     name: "Generic MCP Client",
@@ -129,27 +161,25 @@ const CLIENT_CONFIGS = {
     hasPermissions: false,
     hooksInSettings: false,
     hasHooks: false,
-    completionMsg:
-      "Setup complete! Configure your MCP client to use the gitmem server from .mcp.json.",
+    completionVerb: "Configure your MCP client with .mcp.json",
   },
 };
 
-// Shared paths (client-agnostic)
+// Shared paths
 const gitmemDir = join(cwd, ".gitmem");
 const gitignorePath = join(cwd, ".gitignore");
 const starterScarsPath = join(__dirname, "..", "schema", "starter-scars.json");
 const hooksScriptsDir = join(__dirname, "..", "hooks", "scripts");
 
 let rl;
-let client; // "claude" | "cursor" — set by detectClient()
-let cc; // shorthand for CLIENT_CONFIGS[client]
+let client;
+let cc;
 
 // ── Client Detection ──
 
 const VALID_CLIENTS = Object.keys(CLIENT_CONFIGS);
 
 function detectClient() {
-  // Explicit flag takes priority
   if (clientFlag) {
     if (!VALID_CLIENTS.includes(clientFlag)) {
       console.error(`  Error: Unknown client "${clientFlag}". Use --client ${VALID_CLIENTS.join("|")}.`);
@@ -158,7 +188,6 @@ function detectClient() {
     return clientFlag;
   }
 
-  // Auto-detect based on directory/file presence
   const hasCursorDir = existsSync(join(cwd, ".cursor"));
   const hasClaudeDir = existsSync(join(cwd, ".claude"));
   const hasMcpJson = existsSync(join(cwd, ".mcp.json"));
@@ -169,28 +198,20 @@ function detectClient() {
   const hasVscodeMcp = existsSync(join(cwd, ".vscode", "mcp.json"));
   const hasCopilotInstructions = existsSync(join(cwd, ".github", "copilot-instructions.md"));
   const hasWindsurfRules = existsSync(join(cwd, ".windsurfrules"));
-  const hasWindsurfMcp = existsSync(
-    join(homeDir, ".codeium", "windsurf", "mcp_config.json")
-  );
 
-  // Strong Cursor signals
   if (hasCursorDir && !hasClaudeDir && !hasMcpJson && !hasClaudeMd) return "cursor";
   if (hasCursorRules && !hasClaudeMd && !hasCopilotInstructions) return "cursor";
   if (hasCursorMcp && !hasMcpJson && !hasVscodeMcp) return "cursor";
 
-  // Strong Claude signals
   if (hasClaudeDir && !hasCursorDir && !hasVscodeDir) return "claude";
   if (hasMcpJson && !hasCursorMcp && !hasVscodeMcp) return "claude";
   if (hasClaudeMd && !hasCursorRules && !hasCopilotInstructions) return "claude";
 
-  // VS Code signals
   if (hasVscodeMcp && !hasMcpJson && !hasCursorMcp) return "vscode";
   if (hasCopilotInstructions && !hasClaudeMd && !hasCursorRules) return "vscode";
 
-  // Windsurf signals
   if (hasWindsurfRules && !hasClaudeMd && !hasCursorRules && !hasCopilotInstructions) return "windsurf";
 
-  // Default to Claude Code (most common)
   return "claude";
 }
 
@@ -202,7 +223,7 @@ async function confirm(message, defaultYes = true) {
     rl = createInterface({ input: process.stdin, output: process.stdout });
   }
   const suffix = defaultYes ? "[Y/n]" : "[y/N]";
-  const answer = await rl.question(`  ${message} ${suffix} `);
+  const answer = await rl.question(`${C.yellow}?${C.reset} ${message} ${C.dim}${suffix}${C.reset} `);
   const trimmed = answer.trim().toLowerCase();
   if (trimmed === "") return defaultYes;
   return trimmed === "y" || trimmed === "yes";
@@ -218,6 +239,15 @@ function readJson(path) {
 
 function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+}
+
+function log(icon, main, detail) {
+  if (detail) {
+    console.log(`${icon} ${C.bold}${main}${C.reset}`);
+    console.log(`  ${C.dim}${detail}${C.reset}`);
+  } else {
+    console.log(`${icon} ${main}`);
+  }
 }
 
 function buildMcpConfig() {
@@ -268,109 +298,40 @@ function buildClaudeHooks() {
       {
         matcher: "Bash",
         hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/credential-guard.sh`,
-            timeout: 3000,
-          },
-          {
-            type: "command",
-            command: `bash ${relScripts}/recall-check.sh`,
-            timeout: 5000,
-          },
+          { type: "command", command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 },
+          { type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 },
         ],
       },
       {
         matcher: "Read",
         hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/credential-guard.sh`,
-            timeout: 3000,
-          },
+          { type: "command", command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 },
         ],
       },
       {
         matcher: "Write",
         hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/recall-check.sh`,
-            timeout: 5000,
-          },
+          { type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 },
         ],
       },
       {
         matcher: "Edit",
         hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/recall-check.sh`,
-            timeout: 5000,
-          },
+          { type: "command", command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 },
         ],
       },
     ],
     PostToolUse: [
-      {
-        matcher: "mcp__gitmem__recall",
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/post-tool-use.sh`,
-            timeout: 3000,
-          },
-        ],
-      },
-      {
-        matcher: "mcp__gitmem__search",
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/post-tool-use.sh`,
-            timeout: 3000,
-          },
-        ],
-      },
-      {
-        matcher: "Bash",
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/post-tool-use.sh`,
-            timeout: 3000,
-          },
-        ],
-      },
-      {
-        matcher: "Write",
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/post-tool-use.sh`,
-            timeout: 3000,
-          },
-        ],
-      },
-      {
-        matcher: "Edit",
-        hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/post-tool-use.sh`,
-            timeout: 3000,
-          },
-        ],
-      },
+      { matcher: "mcp__gitmem__recall", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "mcp__gitmem__search", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Bash", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Write", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
+      { matcher: "Edit", hooks: [{ type: "command", command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }] },
     ],
     Stop: [
       {
         hooks: [
-          {
-            type: "command",
-            command: `bash ${relScripts}/session-close-check.sh`,
-            timeout: 5000,
-          },
+          { type: "command", command: `bash ${relScripts}/session-close-check.sh`, timeout: 5000 },
         ],
       },
     ],
@@ -379,49 +340,21 @@ function buildClaudeHooks() {
 
 function buildCursorHooks() {
   const relScripts = ".gitmem/hooks";
-  // Cursor hooks format: .cursor/hooks.json
-  // Events: sessionStart, beforeMCPExecution, afterMCPExecution, stop
-  // No per-tool matchers — all MCP calls go through beforeMCPExecution
   return {
-    sessionStart: [
-      {
-        command: `bash ${relScripts}/session-start.sh`,
-        timeout: 5000,
-      },
-    ],
+    sessionStart: [{ command: `bash ${relScripts}/session-start.sh`, timeout: 5000 }],
     beforeMCPExecution: [
-      {
-        command: `bash ${relScripts}/credential-guard.sh`,
-        timeout: 3000,
-      },
-      {
-        command: `bash ${relScripts}/recall-check.sh`,
-        timeout: 5000,
-      },
+      { command: `bash ${relScripts}/credential-guard.sh`, timeout: 3000 },
+      { command: `bash ${relScripts}/recall-check.sh`, timeout: 5000 },
     ],
-    afterMCPExecution: [
-      {
-        command: `bash ${relScripts}/post-tool-use.sh`,
-        timeout: 3000,
-      },
-    ],
-    stop: [
-      {
-        command: `bash ${relScripts}/session-close-check.sh`,
-        timeout: 5000,
-      },
-    ],
+    afterMCPExecution: [{ command: `bash ${relScripts}/post-tool-use.sh`, timeout: 3000 }],
+    stop: [{ command: `bash ${relScripts}/session-close-check.sh`, timeout: 5000 }],
   };
 }
 
 function isGitmemHook(entry) {
-  // Claude Code format: entry.hooks is an array of {command: "..."}
   if (entry.hooks && Array.isArray(entry.hooks)) {
-    return entry.hooks.some(
-      (h) => typeof h.command === "string" && h.command.includes("gitmem")
-    );
+    return entry.hooks.some((h) => typeof h.command === "string" && h.command.includes("gitmem"));
   }
-  // Cursor format: entry itself has {command: "..."}
   if (typeof entry.command === "string") {
     return entry.command.includes("gitmem");
   }
@@ -436,7 +369,29 @@ function getInstructionsTemplate() {
   }
 }
 
+function copyHookScripts() {
+  const destHooksDir = join(gitmemDir, "hooks");
+  if (!existsSync(destHooksDir)) {
+    mkdirSync(destHooksDir, { recursive: true });
+  }
+  if (existsSync(hooksScriptsDir)) {
+    try {
+      for (const file of readdirSync(hooksScriptsDir)) {
+        if (file.endsWith(".sh")) {
+          const src = join(hooksScriptsDir, file);
+          const dest = join(destHooksDir, file);
+          writeFileSync(dest, readFileSync(src));
+          chmodSync(dest, 0o755);
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+}
+
 // ── Steps ──
+// Each returns { done: bool } so main can track progress
 
 async function stepMemoryStore() {
   const learningsPath = join(gitmemDir, "learnings.json");
@@ -452,29 +407,29 @@ async function stepMemoryStore() {
   try {
     starterScars = JSON.parse(readFileSync(starterScarsPath, "utf-8"));
   } catch {
-    console.log("  ! Could not read starter-scars.json. Skipping.");
-    return;
+    log(WARN, "Could not read starter lessons. Skipping.");
+    return { done: false };
   }
 
   if (exists && existingCount >= starterScars.length) {
-    console.log(
-      `  Already configured (${existingCount} scars in .gitmem/). Skipping.`
-    );
-    return;
+    log(CHECK, `Memory store already set up ${C.dim}(${existingCount} lessons in .gitmem/)${C.reset}`);
+    return { done: false };
   }
 
-  const prompt = exists
-    ? `Merge ${starterScars.length} starter scars into .gitmem/? (${existingCount} existing)`
-    : `Create .gitmem/ with ${starterScars.length} starter scars?`;
-
-  if (!(await confirm(prompt))) {
-    console.log("  Skipped.");
-    return;
+  // Needs merge — prompt if existing data OR interactive mode
+  if (exists || interactive) {
+    const prompt = exists
+      ? `Merge ${starterScars.length} lessons into .gitmem/? (${existingCount} existing)`
+      : `Create .gitmem/ with ${starterScars.length} starter lessons?`;
+    if (!(await confirm(prompt))) {
+      log(SKIP, "Memory store skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log(`  [dry-run] Would create .gitmem/ with ${starterScars.length} starter scars`);
-    return;
+    log(CHECK, `Would create .gitmem/ with ${starterScars.length} starter lessons`, "[dry-run]");
+    return { done: true };
   }
 
   if (!existsSync(gitmemDir)) {
@@ -509,6 +464,19 @@ async function stepMemoryStore() {
   }
   writeJson(learningsPath, existing);
 
+  // Starter thread — nudges user to add their own project-specific scar
+  const threadsPath = join(gitmemDir, "threads.json");
+  if (!existsSync(threadsPath)) {
+    writeJson(threadsPath, [
+      {
+        id: "t-welcome01",
+        text: "Add your first project-specific scar from a real mistake — starter lessons are generic, yours will be relevant",
+        status: "open",
+        created_at: now,
+      },
+    ]);
+  }
+
   // Empty collection files
   for (const file of ["sessions.json", "decisions.json", "scar-usage.json"]) {
     const filePath = join(gitmemDir, file);
@@ -517,20 +485,14 @@ async function stepMemoryStore() {
     }
   }
 
-  // Closing payload template — agents read this before writing closing-payload.json
+  // Closing payload template
   const templatePath = join(gitmemDir, "closing-payload-template.json");
   if (!existsSync(templatePath)) {
     writeJson(templatePath, {
       closing_reflection: {
-        what_broke: "",
-        what_took_longer: "",
-        do_differently: "",
-        what_worked: "",
-        wrong_assumption: "",
-        scars_applied: [],
-        institutional_memory_items: "",
-        collaborative_dynamic: "",
-        rapport_notes: ""
+        what_broke: "", what_took_longer: "", do_differently: "",
+        what_worked: "", wrong_assumption: "", scars_applied: [],
+        institutional_memory_items: "", collaborative_dynamic: "", rapport_notes: ""
       },
       task_completion: {
         questions_displayed_at: "ISO-8601 timestamp",
@@ -539,56 +501,52 @@ async function stepMemoryStore() {
         human_response_at: "ISO-8601 timestamp",
         human_response: "no corrections | actual corrections text"
       },
-      human_corrections: "",
-      scars_to_record: [],
-      learnings_created: [],
-      open_threads: [],
-      decisions: []
+      human_corrections: "", scars_to_record: [],
+      learnings_created: [], open_threads: [], decisions: []
     });
   }
 
-  console.log(
-    `  Created .gitmem/ with ${starterScars.length} starter scars` +
-      (added < starterScars.length
-        ? ` (${added} new, ${starterScars.length - added} already existed)`
-        : "")
+  const mergeNote = added < starterScars.length
+    ? ` (${added} new, ${starterScars.length - added} already existed)`
+    : "";
+
+  log(CHECK,
+    "Created .gitmem/ \u2014 your local memory store",
+    `${starterScars.length} lessons from common mistakes included${mergeNote}`
   );
+  return { done: true };
 }
 
 async function stepMcpServer() {
   const mcpPath = cc.mcpConfigPath;
   const mcpName = cc.mcpConfigName;
-  const isUserLevel = cc.mcpConfigScope === "user";
 
   const existing = readJson(mcpPath);
-  const hasGitmem =
-    existing?.mcpServers?.gitmem || existing?.mcpServers?.["gitmem-mcp"];
+  const hasGitmem = existing?.mcpServers?.gitmem || existing?.mcpServers?.["gitmem-mcp"];
 
   if (hasGitmem) {
-    console.log(`  Already configured in ${mcpName}. Skipping.`);
-    return;
+    log(CHECK, `MCP server already configured ${C.dim}(${mcpName})${C.reset}`);
+    return { done: false };
   }
 
-  const serverCount = existing?.mcpServers
-    ? Object.keys(existing.mcpServers).length
-    : 0;
-  const tierLabel = process.env.SUPABASE_URL ? "pro" : "free";
-  const scopeNote = isUserLevel ? " (user-level config)" : "";
-  const prompt = existing
-    ? `Add gitmem to ${mcpName}?${scopeNote} (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
-    : `Create ${mcpName} with gitmem server?${scopeNote}`;
+  const serverCount = existing?.mcpServers ? Object.keys(existing.mcpServers).length : 0;
 
-  if (!(await confirm(prompt))) {
-    console.log("  Skipped.");
-    return;
+  // Existing servers — prompt for merge
+  if ((existing && serverCount > 0) || interactive) {
+    const prompt = existing
+      ? `Add gitmem to ${mcpName}? (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)`
+      : `Create ${mcpName} with gitmem server?`;
+    if (!(await confirm(prompt))) {
+      log(SKIP, "MCP server skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log(`  [dry-run] Would add gitmem entry to ${mcpName} (${tierLabel} tier${scopeNote})`);
-    return;
+    log(CHECK, `Would configure MCP server in ${mcpName}`, "[dry-run]");
+    return { done: true };
   }
 
-  // Ensure parent directory exists (for .cursor/mcp.json, .vscode/mcp.json, ~/.codeium/windsurf/)
   const parentDir = dirname(mcpPath);
   if (!existsSync(parentDir)) {
     mkdirSync(parentDir, { recursive: true });
@@ -599,12 +557,12 @@ async function stepMcpServer() {
   config.mcpServers.gitmem = buildMcpConfig();
   writeJson(mcpPath, config);
 
-  console.log(
-    `  Added gitmem entry to ${mcpName} (${tierLabel} tier` +
-      (process.env.SUPABASE_URL ? " \u2014 Supabase detected" : " \u2014 local storage") +
-      ")" +
-      (isUserLevel ? " [user-level]" : "")
+  const preserveNote = serverCount > 0 ? ` (${serverCount} existing server${serverCount !== 1 ? "s" : ""} preserved)` : "";
+  log(CHECK,
+    `Configured MCP server${preserveNote}`,
+    `${cc.name} connects to gitmem automatically`
   );
+  return { done: true };
 }
 
 async function stepInstructions() {
@@ -612,8 +570,8 @@ async function stepInstructions() {
   const instrName = cc.instructionsName;
 
   if (!template) {
-    console.log(`  ! ${instrName} template not found. Skipping.`);
-    return;
+    log(WARN, `${instrName} template not found. Skipping.`);
+    return { done: false };
   }
 
   const instrPath = cc.instructionsFile;
@@ -621,33 +579,31 @@ async function stepInstructions() {
   let content = exists ? readFileSync(instrPath, "utf-8") : "";
 
   if (content.includes(cc.startMarker)) {
-    console.log(`  Already configured in ${instrName}. Skipping.`);
-    return;
+    log(CHECK, `Instructions already configured ${C.dim}(${instrName})${C.reset}`);
+    return { done: false };
   }
 
-  const prompt = exists
-    ? `Append gitmem section to ${instrName}?`
-    : `Create ${instrName} with gitmem instructions?`;
-
-  if (!(await confirm(prompt))) {
-    console.log("  Skipped.");
-    return;
+  // Existing file without gitmem section — prompt for append
+  if (exists || interactive) {
+    const prompt = exists
+      ? `Add gitmem section to existing ${instrName}?`
+      : `Create ${instrName} with gitmem instructions?`;
+    if (!(await confirm(prompt))) {
+      log(SKIP, "Instructions skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log(
-      `  [dry-run] Would ${exists ? "append gitmem section to" : "create"} ${instrName}`
-    );
-    return;
+    log(CHECK, `Would ${exists ? "update" : "create"} ${instrName}`, "[dry-run]");
+    return { done: true };
   }
 
-  // Template should already have delimiters, but ensure they're there
   let block = template;
   if (!block.includes(cc.startMarker)) {
     block = `${cc.startMarker}\n${block}\n${cc.endMarker}`;
   }
 
-  // Ensure parent directory exists (for .github/copilot-instructions.md)
   const instrParentDir = dirname(instrPath);
   if (!existsSync(instrParentDir)) {
     mkdirSync(instrParentDir, { recursive: true });
@@ -660,35 +616,38 @@ async function stepInstructions() {
   }
 
   writeFileSync(instrPath, content);
-  console.log(
-    `  ${exists ? "Added gitmem section to" : "Created"} ${instrName}`
+
+  log(CHECK,
+    `${exists ? "Updated" : "Created"} ${instrName}`,
+    exists
+      ? "Added gitmem section (your existing content is preserved)"
+      : "Teaches your agent how to use memory"
   );
+  return { done: true };
 }
 
 async function stepPermissions() {
-  // Cursor doesn't have an equivalent permissions system
-  if (!cc.hasPermissions) {
-    console.log(`  Not needed for ${cc.name}. Skipping.`);
-    return;
-  }
+  if (!cc.hasPermissions) return { done: false };
 
   const existing = readJson(cc.settingsFile);
   const allow = existing?.permissions?.allow || [];
   const pattern = "mcp__gitmem__*";
 
   if (allow.includes(pattern)) {
-    console.log(`  Already configured in ${cc.configDir}/settings.json. Skipping.`);
-    return;
+    log(CHECK, `Tool permissions already configured`);
+    return { done: false };
   }
 
-  if (!(await confirm(`Add mcp__gitmem__* to ${cc.configDir}/settings.json?`))) {
-    console.log("  Skipped.");
-    return;
+  if (interactive) {
+    if (!(await confirm(`Auto-approve gitmem tools in ${cc.configDir}/settings.json?`))) {
+      log(SKIP, "Tool permissions skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log("  [dry-run] Would add gitmem tool permissions");
-    return;
+    log(CHECK, "Would auto-approve gitmem tools", "[dry-run]");
+    return { done: true };
   }
 
   const settings = existing || {};
@@ -701,35 +660,16 @@ async function stepPermissions() {
   settings.permissions = { ...permissions, allow: newAllow };
   writeJson(cc.settingsFile, settings);
 
-  console.log("  Added gitmem tool permissions");
-}
-
-function copyHookScripts() {
-  const destHooksDir = join(gitmemDir, "hooks");
-  if (!existsSync(destHooksDir)) {
-    mkdirSync(destHooksDir, { recursive: true });
-  }
-  if (existsSync(hooksScriptsDir)) {
-    try {
-      for (const file of readdirSync(hooksScriptsDir)) {
-        if (file.endsWith(".sh")) {
-          const src = join(hooksScriptsDir, file);
-          const dest = join(destHooksDir, file);
-          writeFileSync(dest, readFileSync(src));
-          chmodSync(dest, 0o755);
-        }
-      }
-    } catch {
-      // Non-critical
-    }
-  }
+  log(CHECK,
+    "Auto-approved gitmem tools",
+    "Memory tools run without interrupting you"
+  );
+  return { done: true };
 }
 
 async function stepHooks() {
   if (!cc.hasHooks) {
-    console.log(`  ${cc.name} does not support lifecycle hooks. Skipping.`);
-    console.log("  Enforcement relies on system prompt instructions instead.");
-    return;
+    return { done: false };
   }
   if (cc.hooksInSettings) {
     return stepHooksClaude();
@@ -743,11 +683,10 @@ async function stepHooksClaude() {
   const hasGitmem = JSON.stringify(hooks).includes("gitmem");
 
   if (hasGitmem) {
-    console.log("  Already configured in .claude/settings.json. Skipping.");
-    return;
+    log(CHECK, `Automatic memory hooks already configured`);
+    return { done: false };
   }
 
-  // Count existing non-gitmem hooks
   let existingHookCount = 0;
   for (const entries of Object.values(hooks)) {
     if (Array.isArray(entries)) {
@@ -755,19 +694,20 @@ async function stepHooksClaude() {
     }
   }
 
-  const prompt =
-    existingHookCount > 0
-      ? `Merge gitmem hooks into .claude/settings.json? (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
-      : "Add gitmem lifecycle hooks to .claude/settings.json?";
-
-  if (!(await confirm(prompt))) {
-    console.log("  Skipped.");
-    return;
+  // Existing hooks — prompt for merge
+  if (existingHookCount > 0 || interactive) {
+    const prompt = existingHookCount > 0
+      ? `Add memory hooks? (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+      : "Add automatic memory hooks for session tracking?";
+    if (!(await confirm(prompt))) {
+      log(SKIP, "Hooks skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log("  [dry-run] Would merge 4 gitmem hook types");
-    return;
+    log(CHECK, "Would add automatic memory hooks", "[dry-run]");
+    return { done: true };
   }
 
   copyHookScripts();
@@ -789,25 +729,23 @@ async function stepHooksClaude() {
   settings.hooks = merged;
   writeJson(cc.settingsFile, settings);
 
-  const preservedMsg =
-    existingHookCount > 0
-      ? ` (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
-      : "";
-  console.log(`  Merged 4 gitmem hook types${preservedMsg}`);
+  const preserveNote = existingHookCount > 0
+    ? ` (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+    : "";
 
-  // Warn about settings.local.json
+  log(CHECK,
+    `Added automatic memory hooks${preserveNote}`,
+    "Sessions auto-start, memory retrieval on key actions"
+  );
+
   if (cc.settingsLocalFile && existsSync(cc.settingsLocalFile)) {
     const local = readJson(cc.settingsLocalFile);
     if (local?.hooks) {
-      console.log("");
-      console.log(
-        "  Note: .claude/settings.local.json also has hooks."
-      );
-      console.log(
-        "  Local hooks take precedence. You may need to manually merge."
-      );
+      console.log(`  ${C.yellow}Note:${C.reset} ${C.dim}.claude/settings.local.json also has hooks \u2014 may need manual merge${C.reset}`);
     }
   }
+
+  return { done: true };
 }
 
 async function stepHooksCursor() {
@@ -818,11 +756,10 @@ async function stepHooksCursor() {
   const hasGitmem = existing ? JSON.stringify(existing).includes("gitmem") : false;
 
   if (hasGitmem) {
-    console.log(`  Already configured in ${hooksName}. Skipping.`);
-    return;
+    log(CHECK, `Automatic memory hooks already configured ${C.dim}(${hooksName})${C.reset}`);
+    return { done: false };
   }
 
-  // Count existing non-gitmem hooks
   let existingHookCount = 0;
   if (existing?.hooks) {
     for (const entries of Object.values(existing.hooks)) {
@@ -832,19 +769,19 @@ async function stepHooksCursor() {
     }
   }
 
-  const prompt =
-    existingHookCount > 0
-      ? `Merge gitmem hooks into ${hooksName}? (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
-      : `Add gitmem lifecycle hooks to ${hooksName}?`;
-
-  if (!(await confirm(prompt))) {
-    console.log("  Skipped.");
-    return;
+  if (existingHookCount > 0 || interactive) {
+    const prompt = existingHookCount > 0
+      ? `Add memory hooks to ${hooksName}? (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+      : `Add automatic memory hooks to ${hooksName}?`;
+    if (!(await confirm(prompt))) {
+      log(SKIP, "Hooks skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log("  [dry-run] Would merge 4 gitmem hook types");
-    return;
+    log(CHECK, "Would add automatic memory hooks", "[dry-run]");
+    return { done: true };
   }
 
   copyHookScripts();
@@ -866,11 +803,15 @@ async function stepHooksCursor() {
   config.hooks = merged;
   writeJson(hooksPath, config);
 
-  const preservedMsg =
-    existingHookCount > 0
-      ? ` (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
-      : "";
-  console.log(`  Merged 4 gitmem hook types${preservedMsg}`);
+  const preserveNote = existingHookCount > 0
+    ? ` (${existingHookCount} existing hook${existingHookCount !== 1 ? "s" : ""} preserved)`
+    : "";
+
+  log(CHECK,
+    `Added automatic memory hooks${preserveNote}`,
+    "Sessions auto-start, memory retrieval on key actions"
+  );
+  return { done: true };
 }
 
 async function stepGitignore() {
@@ -878,18 +819,20 @@ async function stepGitignore() {
   let content = exists ? readFileSync(gitignorePath, "utf-8") : "";
 
   if (content.includes(".gitmem/")) {
-    console.log("  Already configured in .gitignore. Skipping.");
-    return;
+    log(CHECK, `.gitignore already configured`);
+    return { done: false };
   }
 
-  if (!(await confirm("Add .gitmem/ to .gitignore?"))) {
-    console.log("  Skipped.");
-    return;
+  if (interactive) {
+    if (!(await confirm("Add .gitmem/ to .gitignore?"))) {
+      log(SKIP, "Gitignore skipped");
+      return { done: false };
+    }
   }
 
   if (dryRun) {
-    console.log("  [dry-run] Would add .gitmem/ to .gitignore");
-    return;
+    log(CHECK, "Would update .gitignore", "[dry-run]");
+    return { done: true };
   }
 
   if (exists) {
@@ -899,7 +842,11 @@ async function stepGitignore() {
   }
   writeFileSync(gitignorePath, content);
 
-  console.log(`  ${exists ? "Updated" : "Created"} .gitignore`);
+  log(CHECK,
+    `${exists ? "Updated" : "Created"} .gitignore`,
+    "Memory stays local \u2014 not committed to your repo"
+  );
+  return { done: true };
 }
 
 // ── Main ──
@@ -908,126 +855,71 @@ async function main() {
   const pkg = readJson(join(__dirname, "..", "package.json"));
   const version = pkg?.version || "1.0.0";
 
-  // Detect client before anything else
   client = detectClient();
   cc = CLIENT_CONFIGS[client];
 
+  // ── Header — matches gitmem MCP product line format ──
   console.log("");
-  console.log(`  gitmem v${version} \u2014 Setup for ${cc.name}`);
+  console.log(`${PRODUCT} \u2500\u2500 init v${version}`);
+  console.log(`${C.dim}Setting up for ${cc.name}${clientFlag ? "" : " (auto-detected)"}${C.reset}`);
+
   if (dryRun) {
-    console.log("  (dry-run mode \u2014 no files will be written)");
+    console.log(`${C.dim}dry-run mode \u2014 no files will be written${C.reset}`);
   }
-  if (clientFlag) {
-    console.log(`  (client: ${client} \u2014 via --client flag)`);
-  } else {
-    console.log(`  (client: ${client} \u2014 auto-detected)`);
-  }
+
   console.log("");
 
-  // Detect environment
-  console.log("  Detecting environment...");
-  const detections = [];
+  // ── Run steps ──
 
-  if (existsSync(cc.mcpConfigPath)) {
-    const mcp = readJson(cc.mcpConfigPath);
-    const count = mcp?.mcpServers ? Object.keys(mcp.mcpServers).length : 0;
-    detections.push(
-      `  ${cc.mcpConfigName} found (${count} server${count !== 1 ? "s" : ""})`
-    );
-  }
+  let configured = 0;
 
-  if (existsSync(cc.instructionsFile)) {
-    const content = readFileSync(cc.instructionsFile, "utf-8");
-    const hasGitmem = content.includes(cc.startMarker);
-    detections.push(
-      `  ${cc.instructionsName} found (${hasGitmem ? "has gitmem section" : "no gitmem section"})`
-    );
-  }
+  const d = _color && !dryRun ? 500 : 0;
 
-  if (cc.settingsFile && existsSync(cc.settingsFile)) {
-    const settings = readJson(cc.settingsFile);
-    const hookCount = settings?.hooks
-      ? Object.values(settings.hooks).flat().length
-      : 0;
-    detections.push(
-      `  .claude/settings.json found (${hookCount} hook${hookCount !== 1 ? "s" : ""})`
-    );
-  }
+  const r1 = await stepMemoryStore();
+  if (r1.done) configured++;
+  if (d) await sleep(d);
 
-  if (!cc.hooksInSettings && cc.hasHooks && cc.hooksFile && existsSync(cc.hooksFile)) {
-    const hooks = readJson(cc.hooksFile);
-    const hookCount = hooks?.hooks
-      ? Object.values(hooks.hooks).flat().length
-      : 0;
-    detections.push(
-      `  ${cc.hooksFileName} found (${hookCount} hook${hookCount !== 1 ? "s" : ""})`
-    );
-  }
+  const r2 = await stepMcpServer();
+  if (r2.done) configured++;
+  if (d) await sleep(d);
 
-  if (existsSync(gitignorePath)) {
-    detections.push("  .gitignore found");
-  }
-
-  if (existsSync(gitmemDir)) {
-    detections.push("  .gitmem/ found");
-  }
-
-  for (const d of detections) {
-    console.log(d);
-  }
-
-  const tier = process.env.SUPABASE_URL ? "pro" : "free";
-  console.log(
-    `  Tier: ${tier}` +
-      (tier === "free" ? " (no SUPABASE_URL detected)" : " (SUPABASE_URL detected)")
-  );
-  console.log("");
-
-  // Run steps — step count depends on client capabilities
-  let stepCount = 4; // memory store + mcp server + instructions + gitignore
-  if (cc.hasPermissions) stepCount++;
-  if (cc.hasHooks) stepCount++;
-  let step = 1;
-
-  console.log(`  Step ${step}/${stepCount} \u2014 Memory Store`);
-  await stepMemoryStore();
-  console.log("");
-  step++;
-
-  console.log(`  Step ${step}/${stepCount} \u2014 MCP Server`);
-  await stepMcpServer();
-  console.log("");
-  step++;
-
-  console.log(`  Step ${step}/${stepCount} \u2014 Project Instructions`);
-  await stepInstructions();
-  console.log("");
-  step++;
+  const r3 = await stepInstructions();
+  if (r3.done) configured++;
+  if (d) await sleep(d);
 
   if (cc.hasPermissions) {
-    console.log(`  Step ${step}/${stepCount} \u2014 Tool Permissions`);
-    await stepPermissions();
-    console.log("");
-    step++;
+    const r4 = await stepPermissions();
+    if (r4.done) configured++;
+    if (d) await sleep(d);
   }
 
   if (cc.hasHooks) {
-    console.log(`  Step ${step}/${stepCount} \u2014 Lifecycle Hooks`);
-    await stepHooks();
-    console.log("");
-    step++;
+    const r5 = await stepHooks();
+    if (r5.done) configured++;
+    if (d) await sleep(d);
   }
 
-  console.log(`  Step ${step}/${stepCount} \u2014 Gitignore`);
-  await stepGitignore();
-  console.log("");
+  const r6 = await stepGitignore();
+  if (r6.done) configured++;
 
+  // ── Footer ──
   if (dryRun) {
-    console.log("  Dry run complete \u2014 no files were modified.");
+    console.log(`${C.dim}Dry run complete \u2014 no files were modified.${C.reset}`);
+  } else if (configured === 0) {
+    console.log(`${C.dim}gitmem-mcp is already installed and configured.${C.reset}`);
+    console.log(`${C.dim}Need help? ${C.reset}${C.red}https://gitmem.ai/docs${C.reset}`);
   } else {
-    console.log(`  ${cc.completionMsg}`);
-    console.log("  To remove: npx gitmem-mcp uninstall");
+    console.log("");
+    console.log("───────────────────────────────────────────────────");
+    console.log("");
+    console.log(`${PRODUCT} ${C.red}${C.bold}installed successfully!${C.reset}`);
+    console.log(`${C.dim}Docs:${C.reset}    ${C.red}https://gitmem.ai/docs${C.reset}`);
+    console.log(`${C.dim}Remove:${C.reset}  npx gitmem-mcp uninstall`);
+    console.log("");
+    console.log(`${C.dim}Try asking your agent:${C.reset}`);
+    console.log(`  ${C.italic}"Review the gitmem tools, test them, convince yourself"${C.reset}`);
   }
+
   console.log("");
 
   if (rl) rl.close();

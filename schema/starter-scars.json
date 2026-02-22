@@ -1,6 +1,6 @@
 [
   {
-    "id": "00000000-0000-0000-0000-000000000002",
+    "id": "81fe2d44-24ae-4946-a063-d4ea3a12a71a",
     "learning_type": "scar",
     "title": "Done != Deployed != Verified Working",
     "description": "Code being 'done' (merged) doesn't mean it's deployed, and being deployed doesn't mean it's working correctly in production. The full loop is: merge → deploy → verify the feature works end-to-end in the target environment. Skipping verification leads to silent failures.",
@@ -18,7 +18,7 @@
     "created_at": "2026-01-01T00:00:00Z"
   },
   {
-    "id": "00000000-0000-0000-0000-000000000004",
+    "id": "07c7f9d3-1336-4fef-81da-af7c97590ab9",
     "learning_type": "scar",
     "title": "Database Migration Without Rollback Plan",
     "description": "Running database migrations without a tested rollback plan risks data loss or extended downtime. Destructive migrations (dropping columns, changing types) are especially dangerous. Always write and test the down migration before running the up migration in production.",
@@ -36,7 +36,7 @@
     "created_at": "2026-01-01T00:00:00Z"
   },
   {
-    "id": "00000000-0000-0000-0000-000000000010",
+    "id": "33996174-a7f4-42f5-81ac-f601e566cc5a",
     "learning_type": "scar",
     "title": "Silent Error Swallowing Hides Real Failures",
     "description": "Empty catch blocks and generic error handlers that log but don't surface errors lead to silent failures. The system appears to work while data is lost or corrupted. At minimum, log errors with enough context to diagnose the issue. Better: fail visibly so problems are caught early.",
@@ -49,6 +49,78 @@
     ],
     "keywords": ["error-handling", "catch", "silent-failure", "logging"],
     "domain": ["error-handling", "debugging"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "726c03d4-8962-4b0f-89a2-ea1cd0b223aa",
+    "learning_type": "scar",
+    "title": "Untested Code Passes By Coincidence",
+    "description": "Code without tests may appear to work because the happy path succeeds, but untested edge cases silently fail. Tests that don't exist can't catch regressions. 'It works on my machine' is not a test — write assertions for the behavior you expect, especially boundary conditions and error paths.",
+    "severity": "high",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "The code is simple enough that tests aren't needed — but simple code gets modified later and regressions appear without test coverage",
+      "Manual testing is sufficient for this — but manual tests don't run automatically and get skipped under time pressure"
+    ],
+    "keywords": ["testing", "coverage", "regression", "assertions", "edge-cases"],
+    "domain": ["testing", "quality"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "8a376e29-dc8d-49a7-b840-28643086e90a",
+    "learning_type": "scar",
+    "title": "Environment Config Drift Between Local and Production",
+    "description": "Environment variables, feature flags, and configuration that differ between local dev and production cause bugs that only appear after deployment. The fix works locally but breaks in prod because of a missing env var, different API URL, or stricter security policy. Keep a canonical list of all config, validate it at startup, and test with production-like config.",
+    "severity": "high",
+    "scar_type": "operational",
+    "is_starter": true,
+    "counter_arguments": [
+      "We use the same .env file everywhere — but .env files drift silently and new variables get added locally without updating production",
+      "Our staging environment matches production — but staging configs still diverge over time without automated drift detection"
+    ],
+    "keywords": ["environment", "config", "env-vars", "production", "deployment", "drift"],
+    "domain": ["config", "deployment"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "b6a9ac29-25ba-4667-9fed-0ada98dd588e",
+    "learning_type": "scar",
+    "title": "Changing Dependencies Without Checking Breaking Changes",
+    "description": "Upgrading or adding dependencies without reading the changelog introduces breaking changes that surface later as mysterious failures. Semver violations are common — a minor version bump can still break your code. Always read the changelog, check for breaking changes, and run your test suite after any dependency change.",
+    "severity": "medium",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "It's just a patch version so it should be safe — but semver is a social contract, not a guarantee, and patch releases do contain breaking changes",
+      "Our lockfile protects us — but lockfiles only help if everyone uses them consistently and CI doesn't do fresh installs"
+    ],
+    "keywords": ["dependencies", "npm", "upgrade", "breaking-changes", "changelog", "semver"],
+    "domain": ["dependencies", "maintenance"],
+    "project": "default",
+    "source_date": "2026-01-01",
+    "created_at": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "5db0ffc7-e6d8-48bc-aa23-fce7fd8eaadb",
+    "learning_type": "scar",
+    "title": "Fixing Symptoms Instead of Root Causes",
+    "description": "Adding workarounds, special cases, or retry logic to mask a bug treats the symptom while the root cause remains. The workaround becomes tech debt that makes the real fix harder to find later. Before writing a fix, trace the execution path to understand WHY the failure happens, not just WHERE it happens.",
+    "severity": "high",
+    "scar_type": "process",
+    "is_starter": true,
+    "counter_arguments": [
+      "We need a quick fix now and can investigate later — but 'later' rarely comes and the workaround becomes permanent",
+      "The root cause is in a system we don't control — but understanding the root cause still helps write a better workaround with clear documentation"
+    ],
+    "keywords": ["debugging", "root-cause", "workaround", "tech-debt", "symptoms"],
+    "domain": ["debugging", "engineering"],
     "project": "default",
     "source_date": "2026-01-01",
     "created_at": "2026-01-01T00:00:00Z"

@@ -5,6 +5,7 @@ import {
   clearCurrentSession,
   addSurfacedScars,
   addConfirmations,
+  setRecallCalled,
 } from "../../../src/services/session-state.js";
 
 describe("enforcement", () => {
@@ -145,6 +146,8 @@ describe("enforcement", () => {
         startedAt: new Date(),
       });
 
+      setRecallCalled();
+
       // Simulate recall surfacing scars
       addSurfacedScars([
         {
@@ -229,6 +232,8 @@ describe("enforcement", () => {
         project: "test",
         startedAt: new Date(),
       });
+
+      setRecallCalled();
 
       addSurfacedScars([
         {

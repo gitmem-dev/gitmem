@@ -146,6 +146,10 @@ function persistConfirmationsToFile(confirmations: ScarConfirmation[]): void {
 
     const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf8"));
     data.confirmations = confirmations;
+    // Also persist surfaced_scars so they survive MCP restart for reflect_scars
+    if (session.surfacedScars && session.surfacedScars.length > 0) {
+      data.surfaced_scars = session.surfacedScars;
+    }
     fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
     console.error(`[confirm_scars] Confirmations persisted to ${sessionFilePath}`);
   } catch (error) {

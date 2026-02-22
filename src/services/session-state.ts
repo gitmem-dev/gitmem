@@ -12,7 +12,9 @@
  * This allows recall() to always assign variants even without explicit parameters.
  */
 
+import fs from "fs";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
+import { getSessionPath } from "./gitmem-dir.js";
 
 interface SessionContext {
   sessionId: string;
@@ -127,7 +129,29 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
  * Get all surfaced scars for the current session
  */
 export function getSurfacedScars(): SurfacedScar[] {
-  return currentSession?.surfacedScars || [];
+  // Return in-memory if available
+  if (currentSession?.surfacedScars && currentSession.surfacedScars.length > 0) {
+    return currentSession.surfacedScars;
+  }
+
+  // Fallback: recover from per-session file if in-memory was lost (MCP restart)
+  if (currentSession?.sessionId) {
+    try {
+      const sessionFilePath = getSessionPath(currentSession.sessionId, "session.json");
+      if (fs.existsSync(sessionFilePath)) {
+        const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+        if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
+          currentSession.surfacedScars = data.surfaced_scars;
+          console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from file`);
+          return data.surfaced_scars;
+        }
+      }
+    } catch (error) {
+      console.warn("[session-state] Failed to recover surfaced scars from file:", error);
+    }
+  }
+
+  return [];
 }
 
 /**

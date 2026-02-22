@@ -1,13 +1,12 @@
-# GitMem Clean Room — New User Experience
+# GitMem Clean Room — Claude Code + npm (published release)
 #
-# Simulates a brand new user with nothing installed.
-# No gitmem, no pre-config — just node + git + claude.
+# Simulates a brand new Claude Code user installing gitmem from npm.
+# Tests the exact experience a real user gets.
 #
 # Build & run:
-#   docker build -t gitmem-npm -f testing/clean-room/Dockerfile.npm testing/clean-room/
-#   docker run -it --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gitmem-npm
+#   ./testing/clean-room/build-and-run.sh claude
 #
-# Then test exactly what the website says:
+# Then test:
 #   npx gitmem-mcp init
 
 FROM node:20-slim

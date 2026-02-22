@@ -1,11 +1,13 @@
-# GitMem Clean Room — Local Build Test
+# GitMem Clean Room — Claude Code + local tarball (dev testing)
 #
-# Same as Dockerfile.npm but installs from local tarball instead of npm.
+# Same as claude-npm but installs from local tarball instead of npm.
+# Use this to test changes before publishing.
 #
 # Build & run:
-#   cd /workspace/gitmem && npm pack && cp gitmem-mcp-*.tgz testing/clean-room/gitmem-mcp-local.tgz
-#   docker build -t gitmem-local -f testing/clean-room/Dockerfile.local testing/clean-room/
-#   docker run -it --rm gitmem-local
+#   ./testing/clean-room/build-and-run.sh claude local
+#
+# Then test:
+#   gitmem-mcp init
 
 FROM node:20-slim
 

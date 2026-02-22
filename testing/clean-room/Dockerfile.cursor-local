@@ -1,0 +1,55 @@
+# GitMem Clean Room — Cursor + local tarball (dev testing)
+#
+# Same as cursor-npm but installs from local tarball instead of npm.
+# Use this to test changes before publishing.
+#
+# Build & run:
+#   ./testing/clean-room/build-and-run.sh cursor local
+#
+# Then test:
+#   gitmem-mcp init
+#   cursor
+#
+# Expected: auto-detects Cursor, creates .cursor/mcp.json, .cursorrules, .cursor/hooks.json
+
+FROM node:20-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    jq \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# Keep npm current (suppresses upgrade nag for users)
+RUN npm install -g npm@latest
+
+# Install Cursor CLI (as root, before user switch)
+RUN curl https://cursor.com/install -fsS | bash
+
+# Make Cursor CLI available to developer user.
+RUN CURSOR_DIR=$(readlink -f /root/.local/bin/agent | xargs dirname) \
+ && cp -r "$CURSOR_DIR" /opt/cursor-agent \
+ && chmod -R a+rX /opt/cursor-agent \
+ && ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/cursor
+
+# Copy and install local tarball globally so npx resolves it
+COPY gitmem-mcp-local.tgz /tmp/gitmem-mcp-local.tgz
+RUN npm install -g /tmp/gitmem-mcp-local.tgz && rm /tmp/gitmem-mcp-local.tgz
+
+# Create non-root developer user with project dir
+RUN useradd -m -s /bin/bash developer \
+ && mkdir -p /home/developer/my-project \
+ && chown developer:developer /home/developer/my-project
+USER developer
+WORKDIR /home/developer/my-project
+
+# Init a git repo (gitmem expects one)
+RUN git init && git config user.email "dev@test.local" && git config user.name "Test Dev"
+
+# Create .cursor/ directory — this is what Cursor IDE creates on first open.
+RUN mkdir -p .cursor
+
+# Nothing else. Bare Cursor project. Just like a real new user.
+CMD ["bash"]

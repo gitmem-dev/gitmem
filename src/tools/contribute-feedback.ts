@@ -136,8 +136,9 @@ export async function contributeFeedback(params: ContributeFeedbackParams): Prom
   }
 
   const latencyMs = timer.stop();
+  const remaining = MAX_FEEDBACK_PER_SESSION - getFeedbackCount();
   const remoteNote = remoteSubmitted ? " (queued for remote)" : "";
-  const display = `Feedback recorded: ${id}\nType: ${params.type} | Tool: ${params.tool} | Severity: ${params.severity}\nSaved to .gitmem/feedback/${filename}${remoteNote}\n(${latencyMs}ms)`;
+  const display = `Feedback recorded: ${id} (${remaining} remaining this session)\nType: ${params.type} | Tool: ${params.tool} | Severity: ${params.severity}\nSaved to .gitmem/feedback/${filename}${remoteNote}\n(${latencyMs}ms)`;
 
   return {
     success: true,

@@ -40,8 +40,8 @@ if [[ "$MODE" == "local" ]]; then
   echo "--- Building local tarball ---"
   cd "$REPO_DIR"
   npm run build
-  npm pack
-  mv gitmem-mcp-*.tgz "$SCRIPT_DIR/gitmem-mcp-local.tgz"
+  TARBALL=$(npm pack --pack-destination "$SCRIPT_DIR" 2>/dev/null | tail -1)
+  mv "$SCRIPT_DIR/$TARBALL" "$SCRIPT_DIR/gitmem-mcp-local.tgz"
   echo "--- Tarball ready ---"
 fi
 

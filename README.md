@@ -19,7 +19,7 @@
 
 ---
 
-GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent **persistent memory across sessions**. It remembers mistakes (scars), successes (wins), and decisions — so your agent learns from experience instead of starting from scratch every time.
+GitMem is an [MCP server](https://modelcontextprotocol.io/) that gives your AI coding agent **persistent learning memory across agent sessions**. It remembers mistakes (scars), successes (wins), and decisions — so your agent learns from experience instead of starting from scratch every time.
 
 > **What's MCP?** [Model Context Protocol](https://modelcontextprotocol.io/) is how AI coding tools connect to external capabilities. GitMem is an MCP server — install it once and your agent gains persistent memory.
 

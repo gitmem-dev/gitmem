@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-02-22
+
+### Added
+- **AGENTS.md generation**: Init wizard now creates an IDE-agnostic `AGENTS.md` file alongside the client-specific instructions file. Contains tool table, core workflow, sub-agent patterns (`prepare_context`, `absorb_observations`), and example JSON tool calls. Read by Codex, Copilot, Gemini, Cursor, and other AI coding assistants for automatic project discovery.
+
 ## [1.4.0] - 2026-02-22
 
 ### Changed

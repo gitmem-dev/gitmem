@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-02-22
+
+### Fixed
+- **Archived learnings excluded from free tier search/log**: `keywordSearch` and `log` on the free tier (local JSON storage) now filter out `is_active === false` learnings, matching pro tier behavior.
+
+### Changed
+- **Removed uninstall line from init success footer**: Cleaner post-install output.
+
 ## [1.3.0] - 2026-02-22
 
 ### Added

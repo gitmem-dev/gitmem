@@ -155,7 +155,8 @@ export class LocalFileStorage {
    * Uses stemming, IDF weighting, and document length normalization.
    */
   async keywordSearch(query: string, k = 5): Promise<RelevantScar[]> {
-    const learnings = this.readCollection<Record<string, unknown>>("learnings");
+    const learnings = this.readCollection<Record<string, unknown>>("learnings")
+      .filter((l) => l.is_active !== false);
     if (learnings.length === 0) return [];
 
     // Build BM25 documents with field boosting

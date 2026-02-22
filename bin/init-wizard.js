@@ -913,8 +913,7 @@ async function main() {
     console.log("───────────────────────────────────────────────────");
     console.log("");
     console.log(`${PRODUCT} ${C.red}${C.bold}installed successfully!${C.reset}`);
-    console.log(`${C.dim}Docs:${C.reset}    ${C.red}https://gitmem.ai/docs${C.reset}`);
-    console.log(`${C.dim}Remove:${C.reset}  npx gitmem-mcp uninstall`);
+    console.log(`${C.dim}Docs:${C.reset}  ${C.red}https://gitmem.ai/docs${C.reset}`);
     console.log("");
     console.log(`${C.dim}Try asking your agent:${C.reset}`);
     console.log(`  ${C.italic}"Review the gitmem tools, test them, convince yourself"${C.reset}`);

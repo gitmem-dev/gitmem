@@ -121,7 +121,7 @@ export async function log(params: LogParams): Promise<LogResult> {
       const queryTimer = new Timer();
       const storage = getStorage();
 
-      const filters: Record<string, string> = {};
+      const filters: Record<string, string> = { is_active: "eq.true" };
       if (typeFilter) filters.learning_type = typeFilter;
       if (severityFilter) filters.severity = severityFilter;
 

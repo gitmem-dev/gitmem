@@ -143,6 +143,34 @@ export function getConfigProject(): string | null {
 }
 
 /**
+ * Check if feedback submission is enabled in .gitmem/config.json
+ */
+export function isFeedbackEnabled(): boolean {
+  try {
+    const configPath = path.join(getGitmemDir(), "config.json");
+    if (fs.existsSync(configPath)) {
+      const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      return raw.feedback_enabled === true;
+    }
+  } catch { }
+  return false;
+}
+
+/**
+ * Get the install_id from .gitmem/config.json (anonymous install identifier)
+ */
+export function getInstallId(): string | null {
+  try {
+    const configPath = path.join(getGitmemDir(), "config.json");
+    if (fs.existsSync(configPath)) {
+      const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (raw.install_id && typeof raw.install_id === "string") return raw.install_id;
+    }
+  } catch { }
+  return null;
+}
+
+/**
  * Clear the cached path (for testing)
  */
 export function clearGitmemDirCache(): void {

@@ -51,6 +51,8 @@ import { cleanupThreads } from "./tools/cleanup-threads.js";
 import type { CleanupThreadsParams } from "./tools/cleanup-threads.js";
 import { archiveLearning } from "./tools/archive-learning.js";
 import type { ArchiveLearningParams } from "./tools/archive-learning.js";
+import { contributeFeedback } from "./tools/contribute-feedback.js";
+import type { ContributeFeedbackParams } from "./schemas/contribute-feedback.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -271,6 +273,11 @@ export function createServer(): Server {
         case "gm-archive":
           result = await archiveLearning(toolArgs as unknown as ArchiveLearningParams);
           break;
+        case "contribute_feedback":
+        case "gitmem-fb":
+        case "gm-feedback":
+          result = await contributeFeedback(toolArgs as unknown as ContributeFeedbackParams);
+          break;
         case "gitmem-help": {
           const tier = getTier();
           const commands = [
@@ -296,6 +303,7 @@ export function createServer(): Server {
             { alias: "gitmem-health", full: "health", description: "Show write health for fire-and-forget operations" },
             { alias: "gitmem-al", full: "archive_learning", description: "Archive a scar/win/pattern (is_active=false)" },
             { alias: "gitmem-graph", full: "graph_traverse", description: "Traverse knowledge graph over institutional memory" },
+            { alias: "gitmem-fb", full: "contribute_feedback", description: "Submit feedback about gitmem (10/session limit)" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });

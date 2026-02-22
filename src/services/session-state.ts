@@ -29,6 +29,7 @@ interface SessionContext {
   observations: Observation[];   // v2 Phase 2: Sub-agent/teammate observations
   children: SessionChild[];      // v2 Phase 2: Child agent records
   threads: ThreadObject[];       // : Working thread state
+  feedbackSubmitCount: number;   // Rate limit counter for contribute_feedback
 }
 
 // Global session state (single active session per MCP server instance)
@@ -38,7 +39,7 @@ let currentSession: SessionContext | null = null;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads' | 'feedbackSubmitCount'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     recallCalled: false,
@@ -48,6 +49,7 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
     observations: context.observations || [],
     children: context.children || [],
     threads: context.threads || [],
+    feedbackSubmitCount: 0,
   };
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
 }
@@ -327,6 +329,21 @@ export function setThreads(threads: ThreadObject[]): void {
  */
 export function getThreads(): ThreadObject[] {
   return currentSession?.threads || [];
+}
+
+/**
+ * Get the current feedback submission count for rate limiting.
+ */
+export function getFeedbackCount(): number {
+  return currentSession?.feedbackSubmitCount ?? 0;
+}
+
+/**
+ * Increment and return the feedback submission count.
+ */
+export function incrementFeedbackCount(): number {
+  if (!currentSession) return 0;
+  return ++currentSession.feedbackSubmitCount;
 }
 
 /**

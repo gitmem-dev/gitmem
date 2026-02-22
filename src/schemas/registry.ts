@@ -24,6 +24,7 @@ import { SearchTranscriptsParamsSchema } from "./search-transcripts.js";
 import { PrepareContextParamsSchema } from "./prepare-context.js";
 import { AbsorbObservationsParamsSchema } from "./absorb-observations.js";
 import { ListThreadsParamsSchema, ResolveThreadParamsSchema } from "./thread.js";
+import { ContributeFeedbackParamsSchema } from "./contribute-feedback.js";
 
 /**
  * Map of canonical tool names → Zod schemas.
@@ -47,6 +48,7 @@ const TOOL_SCHEMAS: Record<string, ZodSchema> = {
   absorb_observations: AbsorbObservationsParamsSchema,
   list_threads: ListThreadsParamsSchema,
   resolve_thread: ResolveThreadParamsSchema,
+  contribute_feedback: ContributeFeedbackParamsSchema,
 };
 
 /**
@@ -119,6 +121,9 @@ const ALIAS_MAP: Record<string, string> = {
   // archive_learning — no schema yet
   "gitmem-al": "archive_learning",
   "gm-archive": "archive_learning",
+  // contribute_feedback
+  "gitmem-fb": "contribute_feedback",
+  "gm-feedback": "contribute_feedback",
   // graph_traverse — no schema yet
   "gitmem-graph": "graph_traverse",
   "gm-graph": "graph_traverse",

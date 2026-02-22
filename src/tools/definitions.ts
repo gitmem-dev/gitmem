@@ -2266,6 +2266,93 @@ export const TOOLS = [
       required: ["lens"],
     },
   },
+
+  // --- Contribute Feedback Tool ---
+
+  {
+    name: "contribute_feedback",
+    description: "Submit feedback about gitmem — feature requests, bug reports, friction points, or suggestions. Always saved locally to .gitmem/feedback/. If opted in, sent anonymously to improve gitmem. 10/session limit.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          enum: ["feature_request", "bug_report", "friction", "suggestion"],
+          description: "Feedback type",
+        },
+        tool: {
+          type: "string",
+          description: "Which gitmem tool this relates to (e.g., 'recall', 'session_close')",
+        },
+        description: {
+          type: "string",
+          description: "Detailed, actionable feedback. Min 20 chars.",
+        },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Impact: low=nice-to-have, medium=notable friction, high=blocking/broken",
+        },
+        suggested_fix: {
+          type: "string",
+          description: "How this could be improved",
+        },
+        context: {
+          type: "string",
+          description: "When/how this came up",
+        },
+      },
+      required: ["type", "tool", "description", "severity"],
+    },
+  },
+  {
+    name: "gitmem-fb",
+    description: "gitmem-fb (contribute_feedback) - Submit feedback about gitmem",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          enum: ["feature_request", "bug_report", "friction", "suggestion"],
+          description: "Feedback type",
+        },
+        tool: { type: "string", description: "Which gitmem tool" },
+        description: { type: "string", description: "Feedback text (min 20 chars)" },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Impact level",
+        },
+        suggested_fix: { type: "string", description: "How to improve" },
+        context: { type: "string", description: "When/how this came up" },
+      },
+      required: ["type", "tool", "description", "severity"],
+    },
+  },
+  {
+    name: "gm-feedback",
+    description: "gm-feedback (contribute_feedback) - Submit feedback about gitmem",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          enum: ["feature_request", "bug_report", "friction", "suggestion"],
+          description: "Feedback type",
+        },
+        tool: { type: "string", description: "Which gitmem tool" },
+        description: { type: "string", description: "Feedback text (min 20 chars)" },
+        severity: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Impact level",
+        },
+        suggested_fix: { type: "string", description: "How to improve" },
+        context: { type: "string", description: "When/how this came up" },
+      },
+      required: ["type", "tool", "description", "severity"],
+    },
+  },
 ];
 
 /**
@@ -2281,13 +2368,13 @@ export const ALIAS_TOOL_NAMES = new Set([
   "gitmem-search", "gitmem-log", "gitmem-analyze",
   "gitmem-pc", "gitmem-ao",
   "gitmem-lt", "gitmem-rt", "gitmem-ct", "gitmem-ps", "gitmem-ds",
-  "gitmem-cleanup", "gitmem-health", "gitmem-al", "gitmem-graph",
+  "gitmem-cleanup", "gitmem-health", "gitmem-al", "gitmem-graph", "gitmem-fb",
   // gm-* aliases
   "gm-open", "gm-confirm", "gm-reflect", "gm-refresh", "gm-close",
   "gm-scar", "gm-search", "gm-log", "gm-analyze",
   "gm-pc", "gm-absorb",
   "gm-threads", "gm-resolve", "gm-thread-new", "gm-promote", "gm-dismiss",
-  "gm-cleanup", "gm-health", "gm-archive", "gm-graph",
+  "gm-cleanup", "gm-health", "gm-archive", "gm-graph", "gm-feedback",
   "gm-stx",
   // gm-cache-* aliases (canonical names are gitmem-cache-*, tier-gated separately)
   "gm-cache-s", "gm-cache-h", "gm-cache-f",

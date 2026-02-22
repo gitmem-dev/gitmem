@@ -448,6 +448,36 @@ async function stepMemoryStore() {
     writeJson(configPath, config);
   }
 
+  // Closing payload template (prevents permission prompt on first session close)
+  const payloadPath = join(gitmemDir, "closing-payload.json");
+  if (!existsSync(payloadPath)) {
+    writeJson(payloadPath, {
+      closing_reflection: {
+        what_broke: "",
+        what_took_longer: "",
+        do_differently: "",
+        what_worked: "",
+        wrong_assumption: "",
+        scars_applied: [],
+        institutional_memory_items: "",
+        collaborative_dynamic: "",
+        rapport_notes: ""
+      },
+      task_completion: {
+        questions_displayed_at: null,
+        reflection_completed_at: null,
+        human_asked_at: null,
+        human_response_at: null,
+        human_response: null
+      },
+      human_corrections: "",
+      scars_to_record: [],
+      learnings_created: [],
+      open_threads: [],
+      decisions: []
+    });
+  }
+
   // Merge scars
   let existing = [];
   if (existsSync(learningsPath)) {

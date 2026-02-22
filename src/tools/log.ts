@@ -30,7 +30,7 @@ import type { Project, PerformanceBreakdown, PerformanceData } from "../types/in
 export interface LogParams {
   limit?: number;
   project?: Project;
-  learning_type?: "scar" | "win" | "pattern";
+  learning_type?: "scar" | "win" | "pattern" | "anti_pattern";
   severity?: "critical" | "high" | "medium" | "low";
   since?: number; // days to look back
 }

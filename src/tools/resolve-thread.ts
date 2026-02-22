@@ -62,10 +62,32 @@ export async function resolveThread(
   const session = getCurrentSession();
   const sessionId = session?.sessionId;
 
+  // Support positional #N references (e.g. "#3" resolves the 3rd thread in sorted order)
+  let effectiveThreadId = params.thread_id;
+  let effectiveTextMatch = params.text_match;
+  const posMatch = (params.thread_id || params.text_match || "").match(/^#(\d+)$/);
+  if (posMatch) {
+    const pos = parseInt(posMatch[1], 10);
+    const openThreads = threads
+      .filter(t => t.status === "open")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    if (pos < 1 || pos > openThreads.length) {
+      const latencyMs = timer.stop();
+      return {
+        success: false,
+        error: `Thread #${pos} out of range (${openThreads.length} open threads)`,
+        performance: buildPerformanceData("resolve_thread", latencyMs, 0),
+        display: wrapDisplay(`Thread #${pos} out of range (${openThreads.length} open threads)`),
+      };
+    }
+    effectiveThreadId = openThreads[pos - 1].id;
+    effectiveTextMatch = undefined;
+  }
+
   // Resolve the thread locally (in-memory / file)
   const resolved = resolveThreadInList(threads, {
-    threadId: params.thread_id,
-    textMatch: params.text_match,
+    threadId: effectiveThreadId,
+    textMatch: effectiveTextMatch,
     sessionId,
     resolutionNote: params.resolution_note,
   });

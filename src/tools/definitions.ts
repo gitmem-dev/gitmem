@@ -176,7 +176,7 @@ export const TOOLS = [
   },
   {
     name: "session_close",
-    description: "Persist session with compliance validation. IMPORTANT: Before calling this tool, write all heavy payload data (closing_reflection, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json using your file write tool — the gitmem_dir path is returned by session_start (also shown in session start display as 'Payload path'). Then call this tool with ONLY session_id and close_type. The tool reads the payload file automatically and deletes it after processing. task_completion is auto-generated from closing_reflection timestamps and human_corrections — do NOT write it to the payload. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
+    description: "Persist session with compliance validation. Two modes: (1) Write closing_reflection and other payload to {gitmem_dir}/closing-payload.json, then call with session_id + close_type. (2) Pass closing_reflection directly as a parameter (simpler). Both work — inline params override file payload. task_completion is auto-generated. DISPLAY: Output the display field verbatim.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -188,6 +188,14 @@ export const TOOLS = [
           type: "string",
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
+        },
+        closing_reflection: {
+          type: "object",
+          description: "Session reflection (alternative to writing closing-payload.json). Keys: what_broke, what_took_longer, do_differently, what_worked, wrong_assumption, scars_applied, institutional_memory_items, collaborative_dynamic, rapport_notes",
+        },
+        human_corrections: {
+          type: "string",
+          description: "Human corrections or 'none'",
         },
         linear_issue: {
           type: "string",
@@ -924,7 +932,7 @@ export const TOOLS = [
   },
   {
     name: "gitmem-sc",
-    description: "gitmem-sc (session_close) - Close session with compliance validation. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
+    description: "gitmem-sc (session_close) - Close session. Two modes: (1) Write payload to closing-payload.json first, or (2) pass closing_reflection directly as param. Both work.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -936,6 +944,14 @@ export const TOOLS = [
           type: "string",
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
+        },
+        closing_reflection: {
+          type: "object",
+          description: "Session reflection (alternative to writing closing-payload.json)",
+        },
+        human_corrections: {
+          type: "string",
+          description: "Human corrections or 'none'",
         },
         linear_issue: {
           type: "string",
@@ -1605,7 +1621,7 @@ export const TOOLS = [
   },
   {
     name: "gm-close",
-    description: "gm-close (session_close) - Close a GitMem session. IMPORTANT: Write all heavy payload data (closing_reflection, task_completion, human_corrections, scars_to_record, open_threads, decisions, learnings_created) to {gitmem_dir}/closing-payload.json BEFORE calling this tool — gitmem_dir is from session_start. Only pass session_id and close_type inline. DISPLAY: The result includes a pre-formatted 'display' field. Output the display field verbatim as your response — tool results are collapsed in the CLI.",
+    description: "gm-close (session_close) - Close session. Pass closing_reflection directly or write to closing-payload.json first.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -1617,6 +1633,14 @@ export const TOOLS = [
           type: "string",
           enum: ["standard", "quick", "autonomous"],
           description: "Type of close (standard requires full reflection)",
+        },
+        closing_reflection: {
+          type: "object",
+          description: "Session reflection (alternative to writing closing-payload.json)",
+        },
+        human_corrections: {
+          type: "string",
+          description: "Human corrections or 'none'",
         },
         linear_issue: {
           type: "string",

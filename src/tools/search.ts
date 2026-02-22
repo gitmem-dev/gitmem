@@ -48,6 +48,7 @@ export interface SearchResultEntry {
   counter_arguments?: string[];
   similarity: number;
   source_linear_issue?: string;
+  is_starter?: boolean;
 }
 
 export interface SearchResult {
@@ -90,7 +91,8 @@ function buildSearchDisplay(
     const sim = `(${r.similarity.toFixed(2)})`;
     const issue = r.source_linear_issue ? `  ${r.source_linear_issue}` : "";
     lines.push(`${te} ${se} ${t.padEnd(52)} ${sim}${issue}`);
-    lines.push(`   ${truncate(r.description, 72)}  id:${r.id.slice(0, 8)}`);
+    const starterTag = r.is_starter ? ` ${dimText("[starter]")}` : "";
+    lines.push(`   ${truncate(r.description, 72)}  id:${r.id.slice(0, 8)}${starterTag}`);
   }
   lines.push("");
   lines.push(`${total_found} results found`);
@@ -137,6 +139,7 @@ export async function search(params: SearchParams): Promise<SearchResult> {
         description: r.description || "",
         counter_arguments: r.counter_arguments || [],
         similarity: r.similarity || 0,
+        is_starter: r.is_starter || undefined,
       }));
 
       // Also search decisions

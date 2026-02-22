@@ -153,7 +153,7 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
   ];
 
   if (allStarter) {
-    lines.push(`${dimText("This is your first recall — results will get more relevant as you add your own lessons from real experience.")}`);
+    lines.push(`${dimText("No project-specific lessons yet. Use create_learning to capture your first.")}`);
     lines.push("");
   }
 
@@ -185,7 +185,8 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
   for (const scar of scars) {
     const sev = SEV[scar.severity] || "[?]";
 
-    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}`);
+    const starterTag = scar.is_starter ? ` ${dimText("[starter]")}` : "";
+    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}${starterTag}`);
 
     // Inline archival hint: scars with high dismiss rates get annotated
     if (dismissals) {

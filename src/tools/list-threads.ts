@@ -65,13 +65,15 @@ function buildThreadsDisplay(
   );
 
   // Markdown table — renders cleanly in all MCP clients
-  lines.push("| # | Thread | Active |");
-  lines.push("|---|--------|--------|");
+  // Show short thread ID so agents can reference threads by ID or #N position
+  lines.push("| # | ID | Thread | Active |");
+  lines.push("|---|-----|--------|--------|");
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i];
-    const text = truncate(t.text, 60);
+    const text = truncate(t.text, 55);
     const date = shortDate(t.last_touched_at || t.created_at);
-    lines.push(`| ${i + 1} | ${text} | ${date} |`);
+    const shortId = t.id?.slice(0, 10) || "—";
+    lines.push(`| ${i + 1} | ${shortId} | ${text} | ${date} |`);
   }
 
   return wrapDisplay(lines.join("\n"));

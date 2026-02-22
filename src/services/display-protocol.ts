@@ -46,8 +46,7 @@ const { red, yellow, green, bold, dim, reset } = ANSI;
 const DISPLAY_SUFFIX =
   "\n───────────────────────────────────────────────────\n" +
   "DISPLAY PROTOCOL: Output the content above verbatim as your response text.\n" +
-  "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.\n" +
-  "Success: You echoed the content exactly as formatted above.";
+  "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.";
 
 /**
  * Wrap formatted content with the display protocol suffix.

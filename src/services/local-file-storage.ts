@@ -182,9 +182,9 @@ export class LocalFileStorage {
     for (const r of results) {
       const l = byId.get(r.id);
       if (!l) continue;
-      // Deprioritize starter scars (0.7x multiplier)
+      // Deprioritize starter scars (0.4x multiplier — earned scars should dominate)
       const isStarter = !!(l as Record<string, unknown>).is_starter;
-      const adjustedSimilarity = isStarter ? r.similarity * 0.7 : r.similarity;
+      const adjustedSimilarity = isStarter ? r.similarity * 0.4 : r.similarity;
       mapped.push({
         id: r.id,
         title: String(l.title),

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-02-22
+
+### Changed
+- **Starter scar penalty doubled** (0.7x → 0.4x): Earned scars now decisively outrank starter scars in recall and search results. 6 community reports of starter scars drowning out project-specific lessons.
+- **Display protocol footer trimmed**: Removed the "Success: You echoed..." line from the display suffix — reduced noise without losing the echo instruction.
+- **First-recall message rewritten**: Replaced patronizing welcome text with actionable nudge: "No project-specific lessons yet. Use create_learning to capture your first."
+- **Session close description simplified**: Tool descriptions now clearly present two modes (inline params or payload file) instead of demanding the file-first approach.
+
+### Added
+- **Thread positional resolve (`#N`)**: `resolve_thread` now accepts `#3` to resolve the 3rd thread in display order. Matches the `#` column shown by `list_threads`.
+- **Thread ID column in list_threads**: Thread table now shows short IDs (e.g., `t-24aefd13`) alongside positional numbers — agents can reference by either.
+- **Provenance `[starter]` tag**: Recall and search results now annotate starter scars with a dim `[starter]` tag, so agents can distinguish earned vs bundled lessons.
+- **Inline `closing_reflection` parameter**: `session_close` schema now exposes `closing_reflection` and `human_corrections` as direct parameters — no payload file needed for simple closes.
+
+### Fixed
+- **`log` tool missing `anti_pattern` type**: TypeScript type for `learning_type` filter excluded `"anti_pattern"`, causing type errors when filtering by anti-patterns.
+
 ## [1.3.5] - 2026-02-22
 
 ### Fixed

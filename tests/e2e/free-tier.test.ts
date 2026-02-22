@@ -345,6 +345,85 @@ describe("Free Tier E2E", () => {
   });
 });
 
+describe("Free Tier - Recall → Confirm Scars Flow", () => {
+  let mcpClient: McpTestClient;
+
+  beforeAll(async () => {
+    const env = {
+      ...createTierEnv("free"),
+      GITMEM_DIR: TEST_GITMEM_DIR,
+      HOME: TEST_GITMEM_DIR,
+    };
+    mcpClient = await createMcpClient(env);
+  }, 30_000);
+
+  afterAll(async () => {
+    if (mcpClient) {
+      await mcpClient.cleanup();
+    }
+  });
+
+  it("confirm_scars accepts scars surfaced by free tier recall (regression: #t-24aefd13)", async () => {
+    // Start a session
+    await callTool(mcpClient.client, "session_start", {
+      agent_identity: "CLI",
+      force: true,
+    });
+
+    // Create a scar that recall will find
+    await callTool(mcpClient.client, "create_learning", {
+      learning_type: "scar",
+      title: "Always verify deployment works end-to-end",
+      description: "Deploy to production and verify the feature works. Merge alone is not enough.",
+      severity: "high",
+      counter_arguments: [
+        "CI handles deployment automatically — but automated does not mean verified",
+        "Monitoring will catch issues — but alert fatigue means problems slip through",
+      ],
+      keywords: ["deploy", "production", "verification"],
+    });
+
+    // Recall — should surface the scar we just created
+    const recallResult = await callTool(mcpClient.client, "recall", {
+      plan: "deploy to production and verify it works",
+    });
+    const recallText = getToolResultText(recallResult);
+
+    // Extract scar IDs from the recall display (8-char prefixes shown as id:XXXXXXXX)
+    const scarIdMatches = recallText.match(/id:([0-9a-f]{8})/gi);
+    if (!scarIdMatches || scarIdMatches.length === 0) {
+      // No scars surfaced (possible on empty install) — confirm_scars should say "no scars"
+      const confirmResult = await callTool(mcpClient.client, "confirm_scars", {
+        confirmations: [],
+      });
+      const confirmText = getToolResultText(confirmResult);
+      expect(confirmText.toLowerCase()).toContain("no recall-surfaced scars");
+      return;
+    }
+
+    // Build confirmations for all surfaced scars
+    const scarIds = scarIdMatches.map(m => m.replace("id:", ""));
+    const confirmations = scarIds.map(id => ({
+      scar_id: id,
+      decision: "N_A",
+      evidence: `This scar does not apply to the current E2E test scenario because we are testing the confirm_scars flow, not actual deployment.`,
+    }));
+
+    // Confirm — this is the bug: was returning "No recall-surfaced scars to confirm"
+    const confirmResult = await callTool(mcpClient.client, "confirm_scars", {
+      confirmations,
+    });
+    const confirmText = getToolResultText(confirmResult);
+
+    // Should NOT say "No recall-surfaced scars to confirm"
+    expect(confirmText.toLowerCase()).not.toContain("no recall-surfaced scars");
+    // Should show acceptance
+    expect(
+      confirmText.includes("ACCEPTED") || confirmText.includes("addressed")
+    ).toBe(true);
+  });
+});
+
 describe("Free Tier - Parameter Validation", () => {
   let mcpClient: McpTestClient;
 

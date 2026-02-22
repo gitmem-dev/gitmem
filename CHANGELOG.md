@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-02-22
+
+### Fixed
+- **Free tier recall→confirm_scars flow broken**: Recall on free tier returned scars to the agent but never tracked them in session state, causing confirm_scars to respond with "No recall-surfaced scars to confirm" even when valid confirmations were submitted. Reported across 3 clean room sessions.
+
+### Added
+- **E2E regression test for recall→confirm_scars**: Verifies the full free tier flow — create scar, recall it, confirm it — catches the session state tracking gap.
+
 ## [1.3.4] - 2026-02-22
 
 ### Added

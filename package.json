@@ -1,6 +1,6 @@
 {
   "name": "gitmem-mcp",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "mcpName": "io.github.gitmem-dev/gitmem",
   "description": "Persistent learning memory for AI coding agents. Memory that compounds.",
   "type": "module",

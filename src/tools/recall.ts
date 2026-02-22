@@ -333,6 +333,17 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         search_mode: "local",
       });
 
+      // Track surfaced scars for confirm_scars (same as pro tier path)
+      const recallSurfacedAt = new Date().toISOString();
+      const recallSurfacedScars: SurfacedScar[] = scars.map((scar) => ({
+        scar_id: scar.id,
+        scar_title: scar.title,
+        scar_severity: scar.severity || "medium",
+        surfaced_at: recallSurfacedAt,
+        source: "recall" as const,
+      }));
+      addSurfacedScars(recallSurfacedScars);
+
       const freeFormatted = formatResponse(scars, plan);
       return {
         activated: scars.length > 0,

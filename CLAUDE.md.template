@@ -45,6 +45,7 @@ A PreToolUse hook blocks consequential actions until all recalled scars are conf
 | `create_decision` | Log an architectural or operational decision with rationale |
 | `list_threads` | See unresolved work carrying over between sessions |
 | `create_thread` | Track something that needs follow-up in a future session |
+| `contribute_feedback` | Report bugs, friction, or feature requests about gitmem itself |
 | `help` | Show all available commands |
 
 ## Session end

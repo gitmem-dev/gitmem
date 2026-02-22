@@ -879,6 +879,51 @@ async function stepGitignore() {
   return { done: true };
 }
 
+async function stepAgentsMd() {
+  const agentsPath = join(cwd, "AGENTS.md");
+  const templatePath = join(__dirname, "..", "AGENTS.md.template");
+
+  // Already exists — don't overwrite
+  if (existsSync(agentsPath)) {
+    const content = readFileSync(agentsPath, "utf-8");
+    if (content.includes("GitMem")) {
+      log(CHECK, `AGENTS.md already includes gitmem`);
+      return { done: false };
+    }
+    // Existing AGENTS.md without gitmem — ask before appending
+    if (interactive) {
+      if (!(await confirm("Add gitmem section to existing AGENTS.md?"))) {
+        log(SKIP, "AGENTS.md skipped");
+        return { done: false };
+      }
+    }
+  }
+
+  let template;
+  try {
+    template = readFileSync(templatePath, "utf-8");
+  } catch {
+    // Template not found — skip silently
+    return { done: false };
+  }
+
+  if (dryRun) {
+    log(CHECK, `Would ${existsSync(agentsPath) ? "update" : "create"} AGENTS.md`, "[dry-run]");
+    return { done: true };
+  }
+
+  if (existsSync(agentsPath)) {
+    const existing = readFileSync(agentsPath, "utf-8");
+    writeFileSync(agentsPath, existing.trimEnd() + "\n\n" + template + "\n");
+    log(CHECK, "Updated AGENTS.md", "Added gitmem section (your existing content is preserved)");
+  } else {
+    writeFileSync(agentsPath, template + "\n");
+    log(CHECK, "Created AGENTS.md", "IDE-agnostic agent discovery file");
+  }
+
+  return { done: true };
+}
+
 async function stepFeedbackOptIn() {
   const configPath = join(gitmemDir, "config.json");
   const config = readJson(configPath) || {};
@@ -979,6 +1024,9 @@ async function main() {
 
   const r6 = await stepGitignore();
   if (r6.done) configured++;
+
+  const r6b = await stepAgentsMd();
+  if (r6b.done) configured++;
 
   const r7 = await stepFeedbackOptIn();
   if (r7.done) configured++;

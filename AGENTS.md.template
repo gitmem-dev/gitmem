@@ -1,0 +1,139 @@
+# GitMem — Persistent Memory for AI Agents
+
+This project uses [GitMem](https://gitmem.ai), an MCP server that gives agents
+persistent memory across sessions. Lessons, mistakes, wins, decisions, and open
+threads carry forward — so the same mistake never costs twice.
+
+## MCP Server
+
+GitMem is configured as an MCP server. Check `.mcp.json` or your IDE's MCP
+configuration for the server entry. All tools are prefixed `mcp__gitmem__`.
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `session_start` | Call at session start — loads context, open threads, recent decisions |
+| `session_close` | Call at session end — persists reflection and what was learned |
+| `recall` | Before any task — surfaces relevant warnings from past experience |
+| `confirm_scars` | After recall — acknowledge each lesson before proceeding |
+| `search` | Explore institutional knowledge by topic |
+| `log` | Browse recent learnings chronologically |
+| `create_learning` | Record a scar (mistake), win (success), or pattern |
+| `create_decision` | Log a decision with rationale and alternatives considered |
+| `list_threads` | View unresolved work that carries across sessions |
+| `create_thread` | Track something needing follow-up in a future session |
+| `resolve_thread` | Mark a tracked item as resolved |
+| `prepare_context` | Generate a memory payload to inject into sub-agent prompts |
+| `absorb_observations` | Ingest findings from sub-agents back into institutional memory |
+| `help` | List all available gitmem commands |
+
+## Core Workflow
+
+```
+session_start → recall (before tasks) → confirm_scars → work → session_close
+```
+
+1. **Start**: `session_start()` — loads last session context and open threads
+2. **Recall**: Before consequential actions, call `recall({ plan: "what you're about to do" })`
+3. **Confirm**: Address each surfaced scar as `APPLYING`, `N_A`, or `REFUTED`
+4. **Work**: Do the task. Create learnings for discoveries worth remembering.
+5. **Close**: `session_close({ session_id, close_type: "standard" })`
+
+## Example Tool Calls
+
+### Recall before a task
+```json
+{
+  "tool": "mcp__gitmem__recall",
+  "arguments": {
+    "plan": "refactor authentication middleware"
+  }
+}
+```
+
+### Confirm surfaced scars
+```json
+{
+  "tool": "mcp__gitmem__confirm_scars",
+  "arguments": {
+    "confirmations": [
+      {
+        "scar_id": "abc123",
+        "decision": "APPLYING",
+        "evidence": "Verified auth tokens are validated before middleware runs"
+      }
+    ]
+  }
+}
+```
+
+### Create a learning
+```json
+{
+  "tool": "mcp__gitmem__create_learning",
+  "arguments": {
+    "learning_type": "scar",
+    "title": "Rate limiter must be initialized before auth middleware",
+    "description": "If rate limiter loads after auth, unauthenticated requests bypass rate limits entirely.",
+    "severity": "high",
+    "counter_arguments": [
+      "You might think auth should come first since it's more important — but unauthenticated floods can DoS the auth service itself"
+    ]
+  }
+}
+```
+
+### Prepare context for a sub-agent
+Call before spawning any sub-agent to inject relevant institutional memory into its prompt.
+```json
+{
+  "tool": "mcp__gitmem__prepare_context",
+  "arguments": {
+    "plan": "review authentication middleware for security issues",
+    "format": "compact"
+  }
+}
+```
+The result is a text payload (~500 tokens) you inject into the sub-agent's task prompt. Formats: `compact` (default, one-line per scar), `gate` (~100 tokens, blocking scars only), `full` (rich markdown).
+
+### Absorb observations from sub-agents
+After a sub-agent returns, feed its findings back into institutional memory.
+```json
+{
+  "tool": "mcp__gitmem__absorb_observations",
+  "arguments": {
+    "observations": [
+      {
+        "source": "code-review-agent",
+        "text": "Auth middleware doesn't validate token expiry on refresh endpoints",
+        "severity": "scar_candidate"
+      },
+      {
+        "source": "code-review-agent",
+        "text": "Rate limiting is correctly applied before auth checks",
+        "severity": "info"
+      }
+    ]
+  }
+}
+```
+
+### Sub-agent workflow
+```
+prepare_context → inject into sub-agent prompt → sub-agent works → absorb_observations
+```
+
+## Constraints
+
+- **Recall before acting**: Call `recall()` before tasks that modify code, deploy, or make architectural decisions. Surfaced scars must be confirmed before proceeding.
+- **Credential safety**: Never read `.env`, API keys, or credential files in full. Use existence checks only.
+- **Session bookends**: Start and close every session. The close reflection is how institutional memory grows.
+
+## Local State
+
+GitMem stores local state in `.gitmem/` (gitignored):
+- `config.json` — project configuration
+- `sessions/` — session recordings
+- `threads.json` — open thread tracking
+- `hooks/` — automation scripts (if configured)

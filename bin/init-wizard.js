@@ -439,7 +439,7 @@ async function stepMemoryStore() {
   // Config
   const configPath = join(gitmemDir, "config.json");
   if (!existsSync(configPath)) {
-    const config = {};
+    const config = { feedback_enabled: false, telemetry_enabled: false };
     if (projectName) config.project = projectName;
     writeJson(configPath, config);
   } else if (projectName) {
@@ -849,6 +849,54 @@ async function stepGitignore() {
   return { done: true };
 }
 
+async function stepFeedbackOptIn() {
+  const configPath = join(gitmemDir, "config.json");
+  const config = readJson(configPath) || {};
+
+  // Already opted in — skip
+  if (config.feedback_enabled === true) {
+    log(CHECK, "Feedback sharing already enabled");
+    return { done: false };
+  }
+
+  // Non-interactive default install: show what's off and move on
+  if (!interactive && autoYes) {
+    log(CHECK,
+      "Anonymous feedback sharing is off",
+      "Run with --interactive to enable, or set feedback_enabled in .gitmem/config.json"
+    );
+    return { done: false };
+  }
+
+  // Ask the user
+  const accepted = await confirm(
+    "Help improve gitmem by sharing anonymous feedback? (no code, no content — just tool friction reports)",
+    false  // default No
+  );
+
+  if (!accepted) {
+    log(CHECK,
+      "Anonymous feedback sharing is off",
+      "You can enable it later in .gitmem/config.json"
+    );
+    return { done: false };
+  }
+
+  if (dryRun) {
+    log(CHECK, "Would enable feedback sharing in config.json", "[dry-run]");
+    return { done: true };
+  }
+
+  config.feedback_enabled = true;
+  writeJson(configPath, config);
+
+  log(CHECK,
+    "Anonymous feedback sharing enabled",
+    "Agents can report friction \u2014 no code or content is ever sent"
+  );
+  return { done: true };
+}
+
 // ── Main ──
 
 async function main() {
@@ -901,6 +949,9 @@ async function main() {
 
   const r6 = await stepGitignore();
   if (r6.done) configured++;
+
+  const r7 = await stepFeedbackOptIn();
+  if (r7.done) configured++;
 
   // ── Footer ──
   if (dryRun) {

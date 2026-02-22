@@ -355,15 +355,12 @@ function formatCloseDisplay(
     }
   }
 
-  // Scars applied — compact table, only if any were applied
+  // Scars applied — show titles with status indicator
   if (scarsApplied > 0) {
     lines.push("");
     for (const s of params.scars_to_record!.filter(s => s.reference_type !== "none")) {
-      const ref = s.reference_type === "explicit" ? "applied" :
-                  s.reference_type === "implicit" ? "implicit" :
-                  s.reference_type === "acknowledged" ? "ack'd" :
-                  s.reference_type === "refuted" ? `${ANSI.yellow}REFUTED${ANSI.reset}` : (s.reference_type || "?");
-      lines.push(`  ${dimText(ref.padEnd(8))} ${truncate(s.reference_context || "", 60)}`);
+      const indicator = s.reference_type === "refuted" ? `${ANSI.yellow}!${ANSI.reset}` : STATUS.pass;
+      lines.push(`  ${indicator} ${truncate(s.reference_context || s.scar_identifier || "", 70)}`);
     }
   }
 
@@ -711,11 +708,12 @@ function bridgeScarsToUsageRecords(
         if (reflection) {
           // Reflection provides definitive signal
           executionSuccessful = reflection.outcome === "OBEYED" ? true : false;
-          context = `Confirmed: ${confirmation.decision} → Reflected: ${reflection.outcome} — ${reflection.evidence.slice(0, 80)}`;
+          context = `${scar.scar_title.slice(0, 60)} (${reflection.outcome})`;
         } else {
-          // Fall back to confirmation-based default (Option A)
-          executionSuccessful = confirmation.decision === "APPLYING" ? true : undefined;
-          context = `Confirmed via confirm_scars: ${confirmation.decision} — ${confirmation.evidence.slice(0, 100)}`;
+          // Fall back to confirmation-based default
+          // APPLYING/N_A = task proceeded normally (true), REFUTED = outcome unknown (null)
+          executionSuccessful = confirmation.decision === "REFUTED" ? undefined : true;
+          context = `${scar.scar_title.slice(0, 60)} (${confirmation.decision})`;
         }
 
         autoBridgedScars.push({
@@ -752,7 +750,8 @@ function bridgeScarsToUsageRecords(
           agent: agentIdentity,
           surfaced_at: match.surfaced_at,
           reference_type: "acknowledged",
-          reference_context: `Auto-bridged from Q6 answer: "${scarApplied}"`,
+          reference_context: `${match.scar_title.slice(0, 60)} (Q6 match)`,
+          execution_successful: true,
           variant_id: match.variant_id,
         });
       }
@@ -768,7 +767,7 @@ function bridgeScarsToUsageRecords(
           agent: agentIdentity,
           surfaced_at: scar.surfaced_at,
           reference_type: "none",
-          reference_context: `Surfaced during ${scar.source} but not mentioned in closing reflection`,
+          reference_context: `${scar.scar_title.slice(0, 60)} (not addressed)`,
           execution_successful: false,
           variant_id: scar.variant_id,
         });
@@ -1213,10 +1212,9 @@ export async function sessionClose(
 
   // Auto-bridge Q6 answers to scar_usage records
   const normalizedScarsApplied = normalizeScarsApplied(params.closing_reflection?.scars_applied);
-  if (
-    (!params.scars_to_record || params.scars_to_record.length === 0) &&
-    normalizedScarsApplied.length > 0
-  ) {
+  // Auto-bridge surfaced scars to usage records whenever no explicit scars_to_record.
+  // Fires even when Q6 is empty — Pass 1 matches confirmations, Pass 3 catches ignored scars.
+  if (!params.scars_to_record || params.scars_to_record.length === 0) {
     const bridgedScars = bridgeScarsToUsageRecords(normalizedScarsApplied, sessionId, agentIdentity);
     if (bridgedScars.length > 0) {
       params = { ...params, scars_to_record: bridgedScars };

@@ -13,8 +13,10 @@
  */
 
 import fs from "fs";
+import * as os from "os";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 import { getSessionPath } from "./gitmem-dir.js";
+import { listActiveSessions } from "./active-sessions.js";
 
 interface SessionContext {
   sessionId: string;
@@ -136,7 +138,7 @@ export function getSurfacedScars(): SurfacedScar[] {
     return currentSession.surfacedScars;
   }
 
-  // Fallback: recover from per-session file if in-memory was lost (MCP restart)
+  // Fallback 1: recover from per-session file if in-memory was lost (MCP restart)
   if (currentSession?.sessionId) {
     try {
       const sessionFilePath = getSessionPath(currentSession.sessionId, "session.json");
@@ -150,6 +152,33 @@ export function getSurfacedScars(): SurfacedScar[] {
       }
     } catch (error) {
       console.warn("[session-state] Failed to recover surfaced scars from file:", error);
+    }
+  }
+
+  // Fallback 2: if currentSession is null (MCP restarted completely), find session from registry.
+  // After MCP restart the PID changes, but the active-sessions registry may still have
+  // the previous session entry (pruneStale adopts dead-PID sessions on same hostname).
+  if (!currentSession) {
+    try {
+      const hostname = os.hostname();
+      const sessions = listActiveSessions();
+      const candidates = sessions
+        .filter(s => s.hostname === hostname)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+
+      if (candidates.length > 0) {
+        const recoveredId = candidates[0].session_id;
+        const sessionFilePath = getSessionPath(recoveredId, "session.json");
+        if (fs.existsSync(sessionFilePath)) {
+          const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+          if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
+            console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from registry session ${recoveredId.slice(0, 8)}`);
+            return data.surfaced_scars;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("[session-state] Failed to recover surfaced scars from registry:", error);
     }
   }
 

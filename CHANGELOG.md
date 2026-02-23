@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-02-22
+
+### Fixed
+- **Scar usage `execution_successful` nulls eliminated**: N_A confirmations now record `true` (was null/undefined). Q6 text matches now include `execution_successful: true` (was omitted). Fixes 80% null rate in scar effectiveness data.
+- **Auto-bridge fires on all session closes**: Previously required Q6 `scars_applied` to be non-empty. Now fires whenever no explicit `scars_to_record` is provided, ensuring confirmations from `confirm_scars` always get recorded.
+- **Surfaced scars survive MCP restart**: `getSurfacedScars()` now recovers from the active-sessions registry when `currentSession` is null after MCP restart. Scars surfaced early in a session are no longer silently lost.
+- **Session close display shows scar titles**: `reference_context` now leads with the scar title instead of boilerplate. Display uses +/! indicators for applied/refuted scars.
+
 ## [1.4.1] - 2026-02-22
 
 ### Added

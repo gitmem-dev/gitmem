@@ -72,6 +72,30 @@ function countScarsApplied(scarsApplied: string | string[] | undefined | null): 
 }
 
 /**
+ * Find transcript file path: explicit param or auto-detect from Claude Code projects dir
+ */
+function findTranscriptPath(explicitPath?: string): string | null {
+  if (explicitPath) {
+    if (fs.existsSync(explicitPath)) {
+      console.error(`[session_close] Using explicit transcript path: ${explicitPath}`);
+      return explicitPath;
+    }
+    console.warn(`[session_close] Explicit transcript path does not exist: ${explicitPath}`);
+  }
+  const homeDir = os.homedir();
+  const projectsDir = path.join(homeDir, ".claude", "projects");
+  const cwd = process.cwd();
+  const projectDirName = path.basename(cwd);
+  const found = findMostRecentTranscript(projectsDir, projectDirName, cwd);
+  if (found) {
+    console.error(`[session_close] Auto-detected transcript: ${found}`);
+  } else {
+    console.error(`[session_close] No transcript file found in ${projectsDir}`);
+  }
+  return found;
+}
+
+/**
  * Find the most recently modified transcript file in Claude Code projects directory
  * Search by recency, not by filename matching (supports post-compaction)
  */
@@ -1198,15 +1222,43 @@ export async function sessionClose(
   }
 
   // Capture transcript if enabled (default true for CLI/DAC)
+  // Split into two phases: sync ID extraction (fast) + async upload (fire-and-forget)
   let transcriptStatus: TranscriptStatus | undefined;
   const shouldCaptureTranscript = params.capture_transcript !== false &&
     (agentIdentity === "cli" || agentIdentity === "desktop");
 
   if (shouldCaptureTranscript) {
-    const transcriptResult = await captureSessionTranscript(sessionId, params, existingSession, isRetroactive);
-    transcriptStatus = transcriptResult.status;
-    if (transcriptResult.claudeSessionId) {
-      sessionData.claude_code_session_id = transcriptResult.claudeSessionId;
+    // Phase 1: Find transcript and extract Claude session ID (sync, ~10ms)
+    const transcriptFilePath = findTranscriptPath(params.transcript_path);
+    if (transcriptFilePath) {
+      const transcriptContent = fs.readFileSync(transcriptFilePath, "utf-8");
+      const claudeSessionId = extractClaudeSessionId(transcriptContent, transcriptFilePath) || undefined;
+      if (claudeSessionId) {
+        sessionData.claude_code_session_id = claudeSessionId;
+        console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
+      }
+
+      // Phase 2: Upload transcript (fire-and-forget — was blocking ~500-5000ms)
+      const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
+      getEffectTracker().track("transcript", "session_close", async () => {
+        const saveResult = await saveTranscript({
+          session_id: sessionId,
+          transcript: transcriptContent,
+          format: "json",
+          project: transcriptProject,
+        });
+        if (saveResult.success && saveResult.transcript_path) {
+          console.error(`[session_close] Transcript saved: ${saveResult.transcript_path} (${saveResult.size_kb}KB)`);
+          // Process transcript for semantic search (chained fire-and-forget)
+          processTranscript(sessionId, transcriptContent, transcriptProject)
+            .then(result => {
+              if (result.success) {
+                console.error(`[session_close] Transcript processed: ${result.chunksCreated} chunks`);
+              }
+            })
+            .catch((err) => console.error("[session_close] Transcript processing failed:", err instanceof Error ? err.message : err));
+        }
+      });
     }
   }
 

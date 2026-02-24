@@ -167,20 +167,21 @@ async function loadLastSession(
   }
 
   try {
-    // Use _lite view for performance (excludes embedding)
-    // View now includes decisions/open_threads arrays
-    const sessions = await supabase.listRecords<SessionRecord>({
-      table: getTableName("sessions_lite"),
-      filters: { agent, project },
-      limit: 10, // Get several to find a closed one + aggregate threads
-      orderBy: { column: "created_at", ascending: false },
-    });
+    // Parallel load: sessions + threads are independent queries
+    // (was sequential — ~200-300ms saved by parallelizing)
+    const [sessions, supabaseThreads] = await Promise.all([
+      supabase.listRecords<SessionRecord>({
+        table: getTableName("sessions_lite"),
+        filters: { agent, project },
+        limit: 10,
+        orderBy: { column: "created_at", ascending: false },
+      }),
+      loadActiveThreadsFromSupabase(project),
+    ]);
 
-    // Try loading threads from Supabase (source of truth) first
     let aggregated_open_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];
     let threadsFromSupabase = false;
-    const supabaseThreads = await loadActiveThreadsFromSupabase(project);
 
     if (supabaseThreads !== null) {
       // Supabase is source of truth for threads

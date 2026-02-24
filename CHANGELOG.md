@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-02-24
+
+### Fixed
+- **NULL agent values in query metrics eliminated**: `recordMetrics()` now auto-detects agent via `getAgentIdentity()` when callers don't provide it. Previously 15 of 18 tools omitted the agent field, resulting in NULL values in `gitmem_query_metrics`.
+
+### Performance
+- **session_start ~200-300ms faster**: Sessions and threads queries now run in parallel (`Promise.all`) instead of sequentially inside `loadLastSession`.
+- **session_close transcript upload no longer blocks**: Transcript save moved from blocking `await` to fire-and-forget via effect tracker. Removes 500-5000ms variable cost from `latency_ms`. Claude session ID extraction remains synchronous.
+
 ## [1.4.2] - 2026-02-22
 
 ### Fixed

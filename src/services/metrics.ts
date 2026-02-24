@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as supabase from "./supabase-client.js";
 import { getEffectTracker } from "./effect-tracker.js";
 import { hasSupabase } from "./tier.js";
+import { getAgentIdentity } from "./agent-detection.js";
 
 /**
  * Tool names that can be tracked
@@ -142,10 +143,13 @@ export class Timer {
  */
 export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
   if (!hasSupabase()) return; // No-op on free tier — don't record failures
+  // Auto-detect agent if not provided by caller
+  const agent = metrics.agent || getAgentIdentity() || null;
+
   const record: Record<string, unknown> = {
     id: metrics.id,
     session_id: metrics.session_id || null,
-    agent: metrics.agent || null,
+    agent,
     tool_name: metrics.tool_name,
     query_text: metrics.query_text || null,
     tables_searched: metrics.tables_searched || null,

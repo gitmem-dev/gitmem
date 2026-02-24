@@ -56,13 +56,26 @@ import type { ThreadObject } from "../../../src/types/index.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Relative date helpers to avoid hardcoded dates aging out of aggregateThreads' maxAgeDays window */
+const today = new Date();
+const daysAgo = (n: number) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split("T")[0];
+};
+const daysAgoISO = (n: number) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
+};
+
 /** Build a minimal ThreadObject with sensible defaults */
 function makeThread(overrides: Partial<ThreadObject> = {}): ThreadObject {
   return {
     id: overrides.id ?? generateThreadId(),
     text: overrides.text ?? "Test thread text",
     status: overrides.status ?? "open",
-    created_at: overrides.created_at ?? "2026-02-09T00:00:00.000Z",
+    created_at: overrides.created_at ?? daysAgoISO(1),
     ...(overrides.resolved_at && { resolved_at: overrides.resolved_at }),
     ...(overrides.source_session && { source_session: overrides.source_session }),
     ...(overrides.resolved_by_session && { resolved_by_session: overrides.resolved_by_session }),
@@ -83,10 +96,10 @@ function makeSupabaseThreadRow(overrides: Record<string, unknown> = {}) {
     status: overrides.status ?? "active",
     thread_class: overrides.thread_class ?? "backlog",
     vitality_score: overrides.vitality_score ?? 1.0,
-    last_touched_at: overrides.last_touched_at ?? "2026-02-09T00:00:00.000Z",
+    last_touched_at: overrides.last_touched_at ?? daysAgoISO(1),
     touch_count: overrides.touch_count ?? 1,
-    created_at: overrides.created_at ?? "2026-02-09T00:00:00.000Z",
-    updated_at: overrides.updated_at ?? "2026-02-09T00:00:00.000Z",
+    created_at: overrides.created_at ?? daysAgoISO(1),
+    updated_at: overrides.updated_at ?? daysAgoISO(1),
     resolved_at: overrides.resolved_at ?? null,
     resolution_note: overrides.resolution_note ?? null,
     source_session: overrides.source_session ?? null,
@@ -379,7 +392,7 @@ describe("Cache Sync: local cache used when Supabase offline", () => {
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: localThreads,
       },
@@ -400,7 +413,7 @@ describe("Format Compat: list_threads returns same format as file-only version",
         thread_id: "t-compat01",
         text: "Compat check thread",
         status: "active",
-        created_at: "2026-02-08T12:00:00.000Z",
+        created_at: daysAgoISO(2),
       }),
     ];
 
@@ -452,7 +465,7 @@ describe("Format Compat: mixed format threads normalized before Supabase write",
       id: "t-existing",
       text: "Already a ThreadObject",
       status: "open",
-      created_at: "2026-02-09T00:00:00.000Z",
+      created_at: daysAgoISO(1),
     };
 
     const raw: (string | ThreadObject)[] = [plainString, jsonNoteFormat, threadObject];
@@ -486,7 +499,7 @@ describe("Format Compat: resolved threads stay resolved across sessions (zombie 
         id: "t-zombie01",
         text: "Was resolved",
         status: "resolved",
-        resolved_at: "2026-02-08T12:00:00.000Z",
+        resolved_at: daysAgoISO(2),
       }),
     ];
 
@@ -504,22 +517,22 @@ describe("Format Compat: resolved threads stay resolved across sessions (zombie 
 
     expect(merged).toHaveLength(1);
     expect(merged[0].status).toBe("resolved");
-    expect(merged[0].resolved_at).toBe("2026-02-08T12:00:00.000Z");
+    expect(merged[0].resolved_at).toBe(daysAgoISO(2));
   });
 
   it("should also prevent zombies via aggregateThreads deduplication", () => {
     const sessions = [
       {
         id: "s-recent",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          makeThread({ id: "t-zombie02", text: "Resolved thread", status: "resolved", resolved_at: "2026-02-09T00:00:00.000Z" }),
+          makeThread({ id: "t-zombie02", text: "Resolved thread", status: "resolved", resolved_at: daysAgoISO(1) }),
         ],
       },
       {
         id: "s-older",
-        session_date: "2026-02-08",
+        session_date: daysAgo(2),
         close_compliance: { close_type: "standard" },
         open_threads: [
           makeThread({ id: "t-zombie02", text: "Resolved thread", status: "open" }),
@@ -545,7 +558,7 @@ describe("Edge Case: concurrent create_thread with same text deduplicates", () =
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: [
           makeThread({ id: "t-dup0001", text: "Investigate auth timeout issue" }),
@@ -553,7 +566,7 @@ describe("Edge Case: concurrent create_thread with same text deduplicates", () =
       },
       {
         id: "s2",
-        session_date: "2026-02-08",
+        session_date: daysAgo(2),
         close_compliance: { close_type: "standard" },
         open_threads: [
           makeThread({ id: "t-dup0002", text: "Investigate auth timeout issue" }),
@@ -782,7 +795,7 @@ describe("Local file persistence roundtrip with Supabase-sourced data", () => {
         id: "t-round002",
         text: "Resolved roundtrip thread",
         status: "resolved",
-        resolved_at: "2026-02-09T10:00:00.000Z",
+        resolved_at: daysAgoISO(1),
         resolution_note: "Done",
         resolved_by_session: "session-rt-2",
       }),
@@ -795,7 +808,7 @@ describe("Local file persistence roundtrip with Supabase-sourced data", () => {
     expect(loaded[0].id).toBe("t-round001");
     expect(loaded[0].source_session).toBe("session-rt-1");
     expect(loaded[1].status).toBe("resolved");
-    expect(loaded[1].resolved_at).toBe("2026-02-09T10:00:00.000Z");
+    expect(loaded[1].resolved_at).toBe(daysAgoISO(1));
     expect(loaded[1].resolution_note).toBe("Done");
   });
 });

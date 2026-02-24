@@ -313,22 +313,35 @@ describe("resolveThread — duplicate cascade detection", () => {
 });
 
 describe("aggregateThreads", () => {
+  // Use relative dates so tests don't age out of the 14-day window
+  const today = new Date();
+  const daysAgo = (n: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split("T")[0];
+  };
+  const daysAgoISO = (n: number) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - n);
+    return d.toISOString();
+  };
+
   it("deduplicates threads across sessions by text", () => {
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-aaa", text: "Shared thread", status: "open" as const, created_at: "2026-02-08T00:00:00Z" },
+          { id: "t-aaa", text: "Shared thread", status: "open" as const, created_at: daysAgoISO(2) },
         ],
       },
       {
         id: "s2",
-        session_date: "2026-02-08",
+        session_date: daysAgo(2),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-bbb", text: "Shared thread", status: "open" as const, created_at: "2026-02-07T00:00:00Z" },
+          { id: "t-bbb", text: "Shared thread", status: "open" as const, created_at: daysAgoISO(3) },
         ],
       },
     ];
@@ -342,10 +355,10 @@ describe("aggregateThreads", () => {
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: null,
         open_threads: [
-          { id: "t-aaa", text: "Should be skipped", status: "open" as const, created_at: "2026-02-09T00:00:00Z" },
+          { id: "t-aaa", text: "Should be skipped", status: "open" as const, created_at: daysAgoISO(1) },
         ],
       },
     ];
@@ -357,18 +370,18 @@ describe("aggregateThreads", () => {
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-aaa", text: "Phase 2 GitMem public npm release still pending", status: "open" as const, created_at: "2026-02-08T00:00:00Z" },
+          { id: "t-aaa", text: "Phase 2 GitMem public npm release still pending", status: "open" as const, created_at: daysAgoISO(2) },
         ],
       },
       {
         id: "s2",
-        session_date: "2026-02-08",
+        session_date: daysAgo(2),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-aaa", text: "Phase 2 issues (GitMem public npm release) still ready to execute", status: "open" as const, created_at: "2026-02-07T00:00:00Z" },
+          { id: "t-aaa", text: "Phase 2 issues (GitMem public npm release) still ready to execute", status: "open" as const, created_at: daysAgoISO(3) },
         ],
       },
     ];
@@ -382,11 +395,11 @@ describe("aggregateThreads", () => {
     const sessions = [
       {
         id: "s1",
-        session_date: "2026-02-09",
+        session_date: daysAgo(1),
         close_compliance: { close_type: "standard" },
         open_threads: [
-          { id: "t-aaa", text: "Still open", status: "open" as const, created_at: "2026-02-09T00:00:00Z" },
-          { id: "t-bbb", text: "Was resolved", status: "resolved" as const, created_at: "2026-02-08T00:00:00Z" },
+          { id: "t-aaa", text: "Still open", status: "open" as const, created_at: daysAgoISO(1) },
+          { id: "t-bbb", text: "Was resolved", status: "resolved" as const, created_at: daysAgoISO(2) },
         ],
       },
     ];

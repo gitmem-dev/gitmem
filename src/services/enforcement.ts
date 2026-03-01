@@ -45,7 +45,6 @@ const SESSION_REQUIRED_TOOLS = new Set([
 const CONSEQUENTIAL_TOOLS = new Set([
   "create_learning", "gitmem-cl", "gm-scar",
   "create_decision", "gitmem-cd",
-  "create_thread", "gitmem-ct", "gm-thread-new",
   "session_close", "gitmem-sc", "gm-close",
 ]);
 

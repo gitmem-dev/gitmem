@@ -426,5 +426,49 @@ describe("ClosingReflectionSchema", () => {
       expect(result.data?.collaborative_dynamic).toBe("Directive style");
       expect(result.data?.rapport_notes).toBe("High-energy iteration");
     });
+
+    it("coerces institutional_memory_items array to joined string", () => {
+      const result = ClosingReflectionSchema.safeParse({
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: [],
+        institutional_memory_items: ["pool.map pickles args", "use globals for COW"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.institutional_memory_items).toBe(
+        "pool.map pickles args. use globals for COW"
+      );
+    });
+
+    it("coerces collaborative_dynamic array to joined string", () => {
+      const result = ClosingReflectionSchema.safeParse({
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: [],
+        collaborative_dynamic: ["Direct style", "Fast iteration"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.collaborative_dynamic).toBe("Direct style. Fast iteration");
+    });
+
+    it("coerces rapport_notes array to joined string", () => {
+      const result = ClosingReflectionSchema.safeParse({
+        what_broke: "Nothing",
+        what_took_longer: "Tests",
+        do_differently: "Plan better",
+        what_worked: "Communication",
+        wrong_assumption: "None",
+        scars_applied: [],
+        rapport_notes: ["Push-back welcomed", "High-energy"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.rapport_notes).toBe("Push-back welcomed. High-energy");
+    });
   });
 });

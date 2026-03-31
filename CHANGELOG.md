@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-03-31
+
+### Fixed
+- **Project drift on session resume eliminated**: When resuming an existing session (same hostname+PID), the stored project now overrides whatever the agent passes. Previously, context compaction could cause agents to send the wrong project (e.g., `orchestra_dev` instead of `weekend_warrior`), creating a session under the wrong project with wrong threads and decisions. The active-sessions registry already stored the correct project — it just wasn't used on resume.
+- **`closing_reflection` array coercion**: Values passed as arrays in `closing_reflection` are now coerced to strings, preventing schema validation errors on session close.
+- **`create_thread` no longer triggers false enforcement warnings**: Removed from `CONSEQUENTIAL_TOOLS` list — creating threads is lightweight and shouldn't require prior recall.
+
 ## [1.4.3] - 2026-02-24
 
 ### Fixed

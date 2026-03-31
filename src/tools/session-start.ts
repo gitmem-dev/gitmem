@@ -620,7 +620,7 @@ function readSessionFile(sessionId: string): Record<string, unknown> | null {
 function restoreSessionState(
   existing: Record<string, unknown>,
   fallbackAgent: AgentIdentity,
-): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date } {
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date; project?: Project } {
   const startedAt = existing.started_at ? new Date(existing.started_at as string) : undefined;
 
   setCurrentSession({
@@ -640,6 +640,7 @@ function restoreSessionState(
     agent: (existing.agent as AgentIdentity) || fallbackAgent,
     linearIssue: existing.linear_issue as string | undefined,
     startedAt,
+    project: existing.project as Project | undefined,
   };
 }
 
@@ -653,7 +654,7 @@ function restoreSessionState(
 function checkExistingSession(
   agent: AgentIdentity,
   force?: boolean
-): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date } | null {
+): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date; project?: Project } | null {
   if (force) {
     console.error("[session_start] force=true, skipping active session guard");
     return null;
@@ -918,11 +919,22 @@ export async function sessionStart(
   // 1. Detect agent (or use provided)
   const env = detectAgent();
   const agent = params.agent_identity || env.agent;
-  const project: Project = params.project || getConfigProject() || "default";
+  let project: Project = params.project || getConfigProject() || "default";
 
   // Check for existing active session — reuse session_id but still load full context
   const existingSession = checkExistingSession(agent, params.force);
   const isResuming = existingSession !== null;
+
+  // When resuming, prefer the stored project from the existing session.
+  // This prevents project drift after context compaction — the agent may pass
+  // the wrong project (e.g., from CLAUDE.md defaults) but the stored session
+  // knows the real project.
+  if (isResuming && existingSession?.project) {
+    if (existingSession.project !== project) {
+      console.error(`[session_start] Project override on resume: ${project} → ${existingSession.project} (from stored session)`);
+    }
+    project = existingSession.project;
+  }
 
   // t-f7c2fa01: When force:true kills an existing session, carry forward its startedAt
   // so session_close duration reflects the full conversation, not just the new session.

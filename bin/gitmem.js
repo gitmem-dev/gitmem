@@ -154,9 +154,10 @@ async function cmdInit() {
     // Merge: skip scars that already exist by id
     const existingIds = new Set(existing.map((s) => s.id));
     let added = 0;
+    const now = new Date().toISOString();
     for (const scar of starterScars) {
       if (!existingIds.has(scar.id)) {
-        existing.push(scar);
+        existing.push({ ...scar, created_at: now, source_date: now.slice(0, 10) });
         added++;
         console.log(`  + ${scar.title}`);
       } else {

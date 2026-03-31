@@ -110,9 +110,9 @@ describe("enforcement", () => {
       expect(result.warning).toContain("No recall()");
     });
 
-    it("warns when create_thread called without recall", () => {
+    it("does not warn for create_thread (not consequential)", () => {
       const result = checkEnforcement("create_thread");
-      expect(result.warning).toContain("No recall()");
+      expect(result.warning).toBeNull();
     });
 
     it("warns when session_close called without recall", () => {

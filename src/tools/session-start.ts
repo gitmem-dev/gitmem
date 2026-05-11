@@ -839,6 +839,21 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   if (result.project) parts.push(result.project);
   visual.push(dimText(parts.join(" · ")));
 
+  // Line 3: duration + surfaced scars for resumed/refreshed sessions
+  if (result.resumed || result.refreshed) {
+    const session = getCurrentSession();
+    if (session?.startedAt) {
+      const durationMs = Date.now() - session.startedAt.getTime();
+      const totalMin = Math.floor(durationMs / 60000);
+      const hours = Math.floor(totalMin / 60);
+      const mins = totalMin % 60;
+      const durationStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+      const scarCount = session.surfacedScars?.length || 0;
+      const scarSuffix = scarCount > 0 ? ` · ${scarCount} scars loaded from earlier` : "";
+      visual.push(dimText(`Session active for: ${durationStr}${scarSuffix}`));
+    }
+  }
+
   // Threads section — top 5 by vitality, truncated to 60 chars
   const hasThreads = result.open_threads && result.open_threads.length > 0;
   const hasDecisions = result.recent_decisions && result.recent_decisions.length > 0;

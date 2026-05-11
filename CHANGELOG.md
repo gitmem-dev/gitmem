@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-11
+
+### Added
+- **`index_docs` tool**: Scan a directory of markdown files, chunk them, and store in a local doc index for semantic search. Supports incremental indexing (only re-processes changed files), force re-index, and project-scoped indexes. Aliases: `gitmem-idx`.
+- **`search_docs` tool**: Search indexed repository documentation using semantic similarity (pro tier) or BM25 keyword search (free tier). Returns relevant chunks with file paths for targeted reading. Aliases: `gitmem-sd`.
+- **Citation protocol**: `recall`, `search`, and `prepare_context` now include a citation rule instructing agents to cite record IDs when referencing facts from institutional memory.
+- **Low confidence tagging**: Recall and search results with similarity below 0.55 are tagged `[low confidence]` — these matches have a 66% N/A rate historically.
+- **Session duration on resume**: `session_start` now shows elapsed session time and loaded scar count when resuming or refreshing an existing session.
+
+### Changed
+- **Quick close hard gate**: `session_close` with `close_type: "quick"` now rejects sessions over 30 minutes, requiring standard close instead.
+- **Standard close recall gate**: `session_close` with `close_type: "standard"` now requires at least one `recall()` call during the session (exemptions: quick close, autonomous agents, sessions with inline reflection).
+
 ## [1.4.4] - 2026-03-31
 
 ### Fixed

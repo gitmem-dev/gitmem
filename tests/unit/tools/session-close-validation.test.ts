@@ -43,6 +43,7 @@ vi.mock("../../../src/services/session-state.js", () => ({
   getChildren: () => [],
   getThreads: () => [],
   getSessionActivity: () => null,
+  isRecallCalled: () => true,
 }));
 
 vi.mock("../../../src/services/thread-manager.js", () => ({

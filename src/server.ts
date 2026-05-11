@@ -53,6 +53,10 @@ import { archiveLearning } from "./tools/archive-learning.js";
 import type { ArchiveLearningParams } from "./tools/archive-learning.js";
 import { contributeFeedback } from "./tools/contribute-feedback.js";
 import type { ContributeFeedbackParams } from "./schemas/contribute-feedback.js";
+import { indexDocs } from "./tools/index-docs.js";
+import type { IndexDocsParams } from "./tools/index-docs.js";
+import { searchDocsHandler } from "./tools/search-docs.js";
+import type { SearchDocsParams } from "./tools/search-docs.js";
 import type { AbsorbObservationsParams, ListThreadsParams, ResolveThreadParams } from "./types/index.js";
 import {
   getCacheStatus,
@@ -304,6 +308,8 @@ export function createServer(): Server {
             { alias: "gitmem-al", full: "archive_learning", description: "Archive a scar/win/pattern (is_active=false)" },
             { alias: "gitmem-graph", full: "graph_traverse", description: "Traverse knowledge graph over institutional memory" },
             { alias: "gitmem-fb", full: "contribute_feedback", description: "Submit feedback about gitmem (10/session limit)" },
+            { alias: "gitmem-idx", full: "index_docs", description: "Index markdown docs for semantic search" },
+            { alias: "gitmem-sd", full: "search_docs", description: "Search indexed repository docs" },
           ];
           if (hasBatchOperations()) {
             commands.push({ alias: "gitmem-rsb", full: "record_scar_usage_batch", description: "Track multiple scars (batch)" });
@@ -389,6 +395,16 @@ export function createServer(): Server {
         case "gitmem-cache-flush":
         case "gm-cache-f":
           result = await flushCache((toolArgs.project as Project) || getProject() as Project || "default");
+          break;
+
+        // Doc indexing and search
+        case "index_docs":
+        case "gitmem-idx":
+          result = await indexDocs(toolArgs as unknown as IndexDocsParams);
+          break;
+        case "search_docs":
+        case "gitmem-sd":
+          result = await searchDocsHandler(toolArgs as unknown as SearchDocsParams);
           break;
         default:
           throw new Error(`Unknown tool: ${name}`);

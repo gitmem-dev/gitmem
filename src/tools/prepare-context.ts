@@ -84,6 +84,14 @@ Proceed with caution — this may be new territory without documented lessons.`;
     "",
   ];
 
+  // Citation protocol — provenance enforcement for any downstream claims
+  // Placed BEFORE results so agents see it before processing scars
+  lines.push("───────────────────────────────────────────────────");
+  lines.push("CITATION RULE: When referencing facts from these scars, cite the record ID.");
+  lines.push("Example: \"Edge improved to 3.07 [id:48ebca14]\" — not paraphrased numbers.");
+  lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+  lines.push("");
+
   // Blocking verification requirements first
   const blockingScars = scars.filter((s) => s.required_verification?.blocking);
   if (blockingScars.length > 0) {
@@ -154,6 +162,7 @@ Proceed with caution — this may be new territory without documented lessons.`;
   }
 
   lines.push("**Acknowledge these lessons before proceeding.**");
+
   return lines.join("\n");
 }
 

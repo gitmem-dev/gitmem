@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity } from "../services/session-state.js";
+import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
@@ -993,14 +993,59 @@ export async function sessionClose(
       );
     }
 
+    // Hard gate: quick close requires session under 30 minutes
+    if (params.close_type === "quick" && activity.duration_min >= 30) {
+      return {
+        success: false,
+        session_id: params.session_id || "",
+        close_compliance: {
+          close_type: "quick",
+          agent: detectAgent().agent,
+          checklist_displayed: false,
+          questions_answered_by_agent: false,
+          human_asked_for_corrections: false,
+          learnings_stored: 0,
+          scars_applied: 0,
+        },
+        validation_errors: [
+          `Session has been active for ${Math.round(activity.duration_min)} minutes. ` +
+          `Quick close requires sessions under 30 minutes. Use close_type: "standard".`,
+        ],
+        performance: buildPerformanceData("session_close", timer.stop(), 0),
+      };
+    }
+
     if (params.close_type === "quick" && recommendedLevel === "full") {
-      // Warn but don't reject — agent chose quick on a substantive session
+      // Warn but don't reject — agent chose quick on a substantive session under 30 min
       console.error(
         `[session_close] Warning: "quick" close on substantive session ` +
         `(${Math.round(activity.duration_min)} min, ${activity.recall_count} recalls, ` +
         `${activity.observation_count} observations). Consider "standard" close.`
       );
     }
+  }
+
+  // Hard gate: standard close requires at least one recall() call
+  // Exemptions: quick (micro sessions), autonomous (CODA-1), hasReflection (agent already wrote full reflection)
+  if (params.close_type === "standard" && !isRecallCalled() && !hasReflection) {
+    return {
+      success: false,
+      session_id: params.session_id || "",
+      close_compliance: {
+        close_type: "standard",
+        agent: detectAgent().agent,
+        checklist_displayed: false,
+        questions_answered_by_agent: false,
+        human_asked_for_corrections: false,
+        learnings_stored: 0,
+        scars_applied: 0,
+      },
+      validation_errors: [
+        `No recall() was run this session. Standard close requires at least one recall. ` +
+        `Run recall("session close ceremony") first, then retry session_close.`,
+      ],
+      performance: buildPerformanceData("session_close", timer.stop(), 0),
+    };
   }
 
   // Free tier: simple local persistence, skip Supabase recovery and compliance

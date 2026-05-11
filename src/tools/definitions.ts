@@ -2377,6 +2377,92 @@ export const TOOLS = [
       required: ["type", "tool", "description", "severity"],
     },
   },
+  {
+    name: "index_docs",
+    description: "Scan a directory of markdown files, chunk them, embed them, and store them in a local doc index for semantic search. Supports incremental indexing: only re-processes changed files. Use search_docs to query the indexed docs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        directory: {
+          type: "string",
+          description: "Absolute path to directory containing .md files to index",
+        },
+        project: {
+          type: "string",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
+        },
+        exclude: {
+          type: "array",
+          items: { type: "string" },
+          description: "Directory names to exclude (default: ['_archive', 'node_modules', '.git'])",
+        },
+        force: {
+          type: "boolean",
+          description: "Force re-index all files even if unchanged (default: false)",
+        },
+        clear: {
+          type: "boolean",
+          description: "Clear the doc index for this project before indexing (default: false)",
+        },
+      },
+      required: ["directory"],
+    },
+  },
+  {
+    name: "search_docs",
+    description: "Search indexed repository documentation using semantic similarity (pro/dev tier) or BM25 keyword search (free tier). Returns relevant chunks with file paths for targeted reading. Index docs first with index_docs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language search query (e.g., 'how does authentication work', 'database schema')",
+        },
+        project: {
+          type: "string",
+          description: "Project namespace (e.g., 'my-project'). Scopes sessions and searches.",
+        },
+        category: {
+          type: "string",
+          description: "Filter results to a specific category (directory name, e.g., 'architecture', 'research')",
+        },
+        match_count: {
+          type: "number",
+          description: "Maximum number of results to return (default: 5)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "gitmem-idx",
+    description: "Alias for index_docs. Scan a directory of markdown files and index them for semantic search.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        directory: { type: "string", description: "Absolute path to directory containing .md files" },
+        project: { type: "string", description: "Project namespace" },
+        exclude: { type: "array", items: { type: "string" }, description: "Directory names to exclude" },
+        force: { type: "boolean", description: "Force re-index all files" },
+        clear: { type: "boolean", description: "Clear index before indexing" },
+      },
+      required: ["directory"],
+    },
+  },
+  {
+    name: "gitmem-sd",
+    description: "Alias for search_docs. Search indexed repository documentation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Natural language search query" },
+        project: { type: "string", description: "Project namespace" },
+        category: { type: "string", description: "Filter by category" },
+        match_count: { type: "number", description: "Max results (default: 5)" },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 /**
@@ -2393,6 +2479,7 @@ export const ALIAS_TOOL_NAMES = new Set([
   "gitmem-pc", "gitmem-ao",
   "gitmem-lt", "gitmem-rt", "gitmem-ct", "gitmem-ps", "gitmem-ds",
   "gitmem-cleanup", "gitmem-health", "gitmem-al", "gitmem-graph", "gitmem-fb",
+  "gitmem-idx", "gitmem-sd",
   // gm-* aliases
   "gm-open", "gm-confirm", "gm-reflect", "gm-refresh", "gm-close",
   "gm-scar", "gm-search", "gm-log", "gm-analyze",

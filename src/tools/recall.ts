@@ -157,6 +157,14 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     lines.push("");
   }
 
+  // Citation protocol — provenance enforcement for any downstream claims
+  // Placed BEFORE results so agents see it before processing scars
+  lines.push("───────────────────────────────────────────────────");
+  lines.push("CITATION RULE: When referencing facts from these scars, cite the record ID.");
+  lines.push("Example: \"Edge improved to 3.07 [id:48ebca14]\" — not paraphrased numbers.");
+  lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+  lines.push("");
+
   // Display blocking verification requirements FIRST and prominently
   if (scarsWithVerification.length > 0) {
     lines.push(`${ANSI.yellow}VERIFICATION REQUIRED${ANSI.reset}`);
@@ -186,7 +194,9 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     const sev = SEV[scar.severity] || "[?]";
 
     const starterTag = scar.is_starter ? ` ${dimText("[starter]")}` : "";
-    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}${starterTag}`);
+    // Confidence tier: marginal matches (< 0.55) get flagged — 66% N/A rate in this range
+    const confidenceTag = scar.similarity < 0.55 ? ` ${dimText("[low confidence]")}` : "";
+    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}${starterTag}${confidenceTag}`);
 
     // Inline archival hint: scars with high dismiss rates get annotated
     if (dismissals) {

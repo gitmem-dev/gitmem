@@ -97,6 +97,11 @@ export function formatCompact(
     included++;
   }
 
+  // Citation reminder for sub-agent context (compact — one line)
+  if (included > 0) {
+    lines.push("Cite record IDs for any factual claims from these scars.");
+  }
+
   return { payload: lines.join("\n"), included };
 }
 

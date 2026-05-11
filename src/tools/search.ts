@@ -80,6 +80,16 @@ function buildSearchDisplay(
   if (filters.learning_type) fp.push(`type=${filters.learning_type}`);
   if (fp.length > 0) lines.push(`Filters: ${fp.join(", ")}`);
   lines.push("");
+
+  // Citation protocol — provenance enforcement for any downstream claims
+  // Placed BEFORE results so agents see it before processing results
+  if (results.length > 0) {
+    lines.push("───────────────────────────────────────────────────");
+    lines.push("CITATION RULE: When referencing facts from these results, cite the record ID.");
+    lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+    lines.push("");
+  }
+
   if (results.length === 0) {
     lines.push("No results found.");
     return wrapDisplay(lines.join("\n"));
@@ -90,12 +100,15 @@ function buildSearchDisplay(
     const t = truncate(r.title, 50);
     const sim = `(${r.similarity.toFixed(2)})`;
     const issue = r.source_linear_issue ? `  ${r.source_linear_issue}` : "";
-    lines.push(`${te} ${se} ${t.padEnd(52)} ${sim}${issue}`);
+    // Confidence tier: marginal matches (< 0.55) get flagged
+    const conf = r.similarity < 0.55 ? ` ${dimText("[low confidence]")}` : "";
+    lines.push(`${te} ${se} ${t.padEnd(52)} ${sim}${issue}${conf}`);
     const starterTag = r.is_starter ? ` ${dimText("[starter]")}` : "";
     lines.push(`   ${truncate(r.description, 72)}  id:${r.id.slice(0, 8)}${starterTag}`);
   }
   lines.push("");
   lines.push(`${total_found} results found`);
+
   return wrapDisplay(lines.join("\n"));
 }
 

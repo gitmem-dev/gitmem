@@ -270,15 +270,15 @@ export const DEV_TOOLS = [
  *   TRANSCRIPT_TOOL_NAMES (dev): 4
  *   graph_traverse (pro+):     3
  *
- *   free = 73 - 6 - 3 - 2 - 4 - 3 = 55
- *   pro  = 73 - 2 - 4              = 67
- *   dev  = 31
+ *   free = 75 - 6 - 3 - 2 - 4 - 3 = 57
+ *   pro  = 75 - 2 - 4              = 69
+ *   dev  = 34
  *
  * If these numbers change, a tool was added/removed from definitions.ts.
  * Note: Aliases are hidden by default. Set GITMEM_FULL_ALIASES=1 to show all.
  */
 export const EXPECTED_TOOL_COUNTS = {
-  free: 23,
-  pro: 28,
-  dev: 32,
+  free: 25,
+  pro: 30,
+  dev: 34,
 } as const;

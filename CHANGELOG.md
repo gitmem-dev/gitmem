@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-05-13
+
+### Fixed
+- **CI smoke test tool count**: Updated `EXPECTED_TOOL_COUNTS` to reflect `index_docs` and `search_docs` additions (+2 per tier). The 1.5.0 release failed to publish because the smoke test expected 23 free-tier tools but found 25.
+
 ## [1.5.0] - 2026-05-11
 
 ### Added

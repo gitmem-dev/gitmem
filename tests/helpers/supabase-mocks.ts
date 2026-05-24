@@ -20,6 +20,7 @@ export const SUPABASE_TIER_MOCKS = {
   hasCompliance: vi.fn(() => false),
   hasEmbeddings: vi.fn(() => true),
   hasMetrics: vi.fn(() => true),
+  hasProInsights: vi.fn(() => true),
   getTier: vi.fn(() => "pro" as const),
   resetTier: vi.fn(),
   hasAdvancedAgentDetection: vi.fn(() => false),

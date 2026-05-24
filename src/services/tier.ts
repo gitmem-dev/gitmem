@@ -92,6 +92,11 @@ export function hasCacheManagement(): boolean {
   return getTier() !== "free";
 }
 
+/** Whether Pro-tier insights (decay tags, analytics snippets, blindspots) are active (pro, dev) */
+export function hasProInsights(): boolean {
+  return getTier() !== "free";
+}
+
 /** Whether detailed performance metrics recording is active (pro, dev — aligned with hasVariants) */
 export function hasMetrics(): boolean {
   return getTier() !== "free";

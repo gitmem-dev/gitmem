@@ -573,6 +573,95 @@ export function aggregateClosingReflections(
   };
 }
 
+// --- Lightweight Analytics (for session_start/session_close) ---
+
+/**
+ * Lightweight summary for session_start Pro insights.
+ * Returns a compact object with key 30-day metrics.
+ */
+export interface LightweightSummary {
+  total_sessions: number;
+  scars_surfaced: number;
+  scars_applied: number;
+  application_rate: number;
+  top_blindspot: { title: string; ignore_rate: string; times: string } | null;
+}
+
+export function computeLightweightSummary(
+  sessions: SessionRecord[],
+  usages: ScarUsageRecord[]
+): LightweightSummary {
+  const totalSessions = sessions.length;
+  const scarsSurfaced = new Set(usages.map(u => u.scar_id)).size;
+  const applied = usages.filter(u => u.reference_type !== "none").length;
+  const applicationRate = usages.length > 0 ? applied / usages.length : 0;
+
+  // Find top blindspot: most-ignored scar with >= 3 surfacings
+  const scarGroups = new Map<string, { title: string; surfaced: number; dismissed: number }>();
+  for (const u of usages) {
+    const entry = scarGroups.get(u.scar_id) || { title: u.scar_title || "Unknown", surfaced: 0, dismissed: 0 };
+    entry.surfaced++;
+    if (u.reference_type === "none") entry.dismissed++;
+    if (u.scar_title) entry.title = u.scar_title;
+    scarGroups.set(u.scar_id, entry);
+  }
+
+  let topBlindspot: LightweightSummary["top_blindspot"] = null;
+  let highestIgnoreRate = 0;
+  for (const [, stats] of scarGroups) {
+    if (stats.surfaced >= 3) {
+      const rate = stats.dismissed / stats.surfaced;
+      if (rate > highestIgnoreRate && rate > 0.5) {
+        highestIgnoreRate = rate;
+        topBlindspot = {
+          title: stats.title,
+          ignore_rate: `${Math.round(rate * 100)}%`,
+          times: `${stats.dismissed}/${stats.surfaced}`,
+        };
+      }
+    }
+  }
+
+  return {
+    total_sessions: totalSessions,
+    scars_surfaced: scarsSurfaced,
+    scars_applied: applied,
+    application_rate: applicationRate,
+    top_blindspot: topBlindspot,
+  };
+}
+
+/**
+ * Format blindspot snippet for session_close display.
+ * Returns 2-3 lines showing top 2 most-ignored scars, or null if none qualify.
+ * Threshold: ignore_rate > 50%, surfaced >= 3 times.
+ */
+export function formatBlindspotSnippet(usages: ScarUsageRecord[]): string | null {
+  const scarGroups = new Map<string, { title: string; surfaced: number; dismissed: number }>();
+  for (const u of usages) {
+    const entry = scarGroups.get(u.scar_id) || { title: u.scar_title || "Unknown", surfaced: 0, dismissed: 0 };
+    entry.surfaced++;
+    if (u.reference_type === "none") entry.dismissed++;
+    if (u.scar_title) entry.title = u.scar_title;
+    scarGroups.set(u.scar_id, entry);
+  }
+
+  const blindspots = Array.from(scarGroups.values())
+    .filter(s => s.surfaced >= 3 && (s.dismissed / s.surfaced) > 0.5)
+    .sort((a, b) => (b.dismissed / b.surfaced) - (a.dismissed / a.surfaced))
+    .slice(0, 2);
+
+  if (blindspots.length === 0) return null;
+
+  const lines: string[] = ["Blindspots (30d)"];
+  for (const b of blindspots) {
+    const pct = Math.round((b.dismissed / b.surfaced) * 100);
+    lines.push(`  "${b.title}" — ignored ${pct}% (${b.dismissed}/${b.surfaced} times)`);
+  }
+
+  return lines.join("\n");
+}
+
 // --- Formatters ---
 
 /**

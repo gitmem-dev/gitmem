@@ -17,6 +17,7 @@ vi.mock("../../../src/services/tier.js", () => ({
   getTier: () => mockTier,
   hasSupabase: () => mockTier !== "free",
   hasEmbeddings: () => mockTier !== "free",
+  hasProInsights: () => false,
 }));
 
 // We test the threshold logic by importing recall and inspecting its behavior.

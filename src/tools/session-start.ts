@@ -19,7 +19,7 @@ import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 // Scar search removed from start pipeline (loads on-demand via recall)
 import { ensureInitialized } from "../services/startup.js";
-import { hasSupabase, getTableName } from "../services/tier.js";
+import { hasSupabase, hasProInsights, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import {
   Timer,
@@ -41,6 +41,13 @@ import { formatDate } from "../services/timezone.js";
 import { productLine, dimText, boldText } from "../services/display-protocol.js";
 // Suggested threads removed from start display
 import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
+import {
+  querySessionsByDateRange,
+  queryScarUsageByDateRange,
+  enrichScarUsageTitles,
+  computeLightweightSummary,
+  type LightweightSummary,
+} from "../services/analytics.js";
 import type {
   SessionStartParams,
   SessionStartResult,
@@ -347,6 +354,36 @@ async function loadRecentDecisions(
       latency_ms: timer.stop(),
       network_call: true,
     };
+  }
+}
+
+/**
+ * Load lightweight analytics for Pro insights snippet.
+ * Reuses cached analytics queries — ~200ms on cache miss, near-instant on hit.
+ * Returns null on any error (never blocks session start).
+ */
+async function loadLightweightAnalytics(
+  project: Project
+): Promise<LightweightSummary | null> {
+  if (!hasProInsights() || !hasSupabase()) return null;
+
+  try {
+    const endDate = new Date().toISOString();
+    const startDate = new Date(Date.now() - 30 * 86400000).toISOString();
+
+    const [sessions, rawUsages] = await Promise.all([
+      querySessionsByDateRange(startDate, endDate, project),
+      queryScarUsageByDateRange(startDate, endDate, project),
+    ]);
+
+    // Skip if not enough data for meaningful insights
+    if (sessions.length < 5) return null;
+
+    const usages = await enrichScarUsageTitles(rawUsages);
+    return computeLightweightSummary(sessions, usages);
+  } catch (error) {
+    console.error("[session_start] Lightweight analytics failed (non-fatal):", error);
+    return null;
   }
 }
 
@@ -827,7 +864,7 @@ function stripThreadPrefix(text: string): string {
   return text.replace(/^t-[a-f0-9]+:\s*/i, "");
 }
 
-function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>, isFirstSession?: boolean): string {
+function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>, isFirstSession?: boolean, analytics?: LightweightSummary | null): string {
   const visual: string[] = [];
 
   // Line 1: branded product line + session state
@@ -893,6 +930,17 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   if (!hasThreads && !hasDecisions) {
     visual.push("");
     visual.push("No threads or decisions.");
+  }
+
+  // Pro insights snippet — 30-day analytics summary
+  if (analytics) {
+    visual.push("");
+    const appPct = Math.round(analytics.application_rate * 100);
+    visual.push(boldText("Pro Insights (30d)"));
+    visual.push(`  ${analytics.total_sessions} sessions · ${analytics.scars_surfaced} scars surfaced · ${appPct}% applied`);
+    if (analytics.top_blindspot) {
+      visual.push(`  Top blindspot: "${analytics.top_blindspot.title}" (ignored ${analytics.top_blindspot.times} times)`);
+    }
   }
 
   // First-session nudge — agent sees this once, internalizes to PMEM
@@ -966,12 +1014,13 @@ export async function sessionStart(
       priorSession ? { surfacedScars: forceCarrySurfacedScars, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
   }
 
-  // 2. Load last session + decisions in parallel (was sequential)
+  // 2. Load last session + decisions + analytics in parallel (was sequential)
   // Scars and wins removed from pipeline — load on-demand via recall/search
   // Rapport loading disabled — recording kept in session_close but not injected
-  const [lastSessionResult, decisionsResult] = await Promise.all([
+  const [lastSessionResult, decisionsResult, analyticsResult] = await Promise.all([
     loadLastSession(agent, project),
     loadRecentDecisions(project, 3),
+    loadLightweightAnalytics(project),
   ]);
 
   const lastSession = lastSessionResult.session;
@@ -1135,7 +1184,7 @@ export async function sessionStart(
     displayInfoMap.set(info.thread.id, info);
   }
   const isFirstSession = !isResuming && !slimLastSession;
-  result.display = formatStartDisplay(result, displayInfoMap, isFirstSession);
+  result.display = formatStartDisplay(result, displayInfoMap, isFirstSession, analyticsResult);
 
   // Write display to per-session dir
   try {

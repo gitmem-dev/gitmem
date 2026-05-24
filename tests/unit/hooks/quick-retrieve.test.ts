@@ -14,6 +14,7 @@ import * as path from "path";
 vi.mock("../../../src/services/tier.js", () => ({
   hasSupabase: vi.fn(() => false),
   getTableName: vi.fn((base: string) => `orchestra_${base}`),
+  hasProInsights: () => false,
 }));
 
 vi.mock("../../../src/services/local-vector-search.js", () => ({

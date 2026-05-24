@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS gitmem_learnings (
   embedding vector(1536),
   project TEXT DEFAULT 'default',
   source_date DATE DEFAULT CURRENT_DATE,
+  is_active BOOLEAN DEFAULT true,
+  decay_multiplier FLOAT DEFAULT 1.0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -134,6 +136,106 @@ BEGIN
     AND 1 - (l.embedding <=> query_embedding) > similarity_threshold
   ORDER BY l.embedding <=> query_embedding
   LIMIT match_count;
+END;
+$$;
+
+-- ============================================================================
+-- Scar search with temporal + behavioral decay weighting
+-- ============================================================================
+CREATE OR REPLACE FUNCTION gitmem_scar_search(
+  query_embedding vector(1536),
+  match_count INT DEFAULT 5,
+  similarity_threshold FLOAT DEFAULT 0.0
+)
+RETURNS TABLE (
+  id UUID,
+  title TEXT,
+  description TEXT,
+  severity TEXT,
+  scar_type TEXT,
+  counter_arguments TEXT[],
+  decay_multiplier FLOAT,
+  similarity FLOAT,
+  weighted_similarity FLOAT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  decay_days INT;
+  temporal_weight FLOAT;
+BEGIN
+  RETURN QUERY
+  SELECT
+    l.id,
+    l.title,
+    l.description,
+    l.severity,
+    l.scar_type,
+    l.counter_arguments,
+    COALESCE(l.decay_multiplier, 1.0) AS decay_multiplier,
+    (1 - (l.embedding <=> query_embedding))::FLOAT AS similarity,
+    -- Weighted similarity: raw * temporal_decay * behavioral_decay
+    (
+      (1 - (l.embedding <=> query_embedding)) *
+      -- Temporal decay based on scar_type
+      CASE
+        WHEN l.scar_type = 'process' THEN 1.0  -- permanent
+        WHEN l.scar_type = 'incident' THEN
+          GREATEST(0.1, 1.0 - 0.9 * (EXTRACT(EPOCH FROM (NOW() - l.created_at)) / (180.0 * 86400)))
+        WHEN l.scar_type = 'context' THEN
+          GREATEST(0.1, 1.0 - 0.9 * (EXTRACT(EPOCH FROM (NOW() - l.created_at)) / (30.0 * 86400)))
+        ELSE 1.0  -- default: no decay
+      END *
+      -- Behavioral decay multiplier
+      COALESCE(l.decay_multiplier, 1.0)
+    )::FLOAT AS weighted_similarity
+  FROM gitmem_learnings l
+  WHERE l.embedding IS NOT NULL
+    AND COALESCE(l.is_active, true) = true
+    AND (1 - (l.embedding <=> query_embedding)) > similarity_threshold
+  ORDER BY weighted_similarity DESC
+  LIMIT match_count;
+END;
+$$;
+
+-- ============================================================================
+-- Refresh behavioral decay scores from scar_usage patterns
+-- Aggregates last 90 days of usage, computes dismiss rate,
+-- updates decay_multiplier on learnings (minimum 3 surfacings required)
+-- ============================================================================
+CREATE OR REPLACE FUNCTION refresh_scar_behavioral_scores()
+RETURNS TABLE (scars_updated INT, scars_scanned INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_scanned INT := 0;
+  v_updated INT := 0;
+BEGIN
+  -- Aggregate scar_usage from last 90 days, compute dismiss rate
+  WITH usage_stats AS (
+    SELECT
+      su.scar_id,
+      COUNT(*) AS times_surfaced,
+      COUNT(*) FILTER (WHERE su.reference_type IN ('none', 'refuted')) AS times_dismissed
+    FROM gitmem_scar_usage su
+    WHERE su.surfaced_at >= NOW() - INTERVAL '90 days'
+    GROUP BY su.scar_id
+    HAVING COUNT(*) >= 3  -- minimum surfacings for meaningful signal
+  )
+  UPDATE gitmem_learnings l
+  SET decay_multiplier = GREATEST(0.1, 1.0 - (us.times_dismissed::FLOAT / us.times_surfaced::FLOAT) * 0.8),
+      updated_at = NOW()
+  FROM usage_stats us
+  WHERE l.id = us.scar_id
+    AND COALESCE(l.is_active, true) = true;
+
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+
+  SELECT COUNT(DISTINCT scar_id) INTO v_scanned
+  FROM gitmem_scar_usage
+  WHERE surfaced_at >= NOW() - INTERVAL '90 days';
+
+  RETURN QUERY SELECT v_updated, v_scanned;
 END;
 $$;
 

@@ -46,8 +46,17 @@ vi.mock("../../../src/services/tier.js", () => ({
   hasAdvancedAgentDetection: () => false,
   hasMultiProject: () => false,
   hasEnforcementFields: () => false,
+  hasProInsights: () => false,
   getTablePrefix: () => "orchestra_",
   getTableName: (base: string) => `orchestra_${base}`,
+}));
+
+vi.mock("../../../src/services/analytics.js", () => ({
+  queryScarUsageByDateRange: vi.fn().mockResolvedValue([]),
+  enrichScarUsageTitles: vi.fn().mockResolvedValue([]),
+  formatBlindspotSnippet: vi.fn().mockReturnValue(null),
+  querySessionsByDateRange: vi.fn().mockResolvedValue([]),
+  computeLightweightSummary: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("../../../src/services/storage.js", () => ({

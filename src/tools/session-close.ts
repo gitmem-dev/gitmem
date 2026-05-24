@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 import { detectAgent } from "../services/agent-detection.js";
 import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
-import { hasSupabase, getTableName } from "../services/tier.js";
+import { hasSupabase, hasProInsights, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
@@ -29,6 +29,7 @@ import {
   updateRelevanceData,
 } from "../services/metrics.js";
 import { wrapDisplay, truncate, productLine, boldText, dimText, STATUS, ANSI } from "../services/display-protocol.js";
+import { queryScarUsageByDateRange, enrichScarUsageTitles, formatBlindspotSnippet } from "../services/analytics.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
@@ -329,7 +330,8 @@ function formatCloseDisplay(
   learningsCount: number,
   success: boolean,
   errors?: string[],
-  transcriptStatus?: TranscriptStatus
+  transcriptStatus?: TranscriptStatus,
+  blindspotSnippet?: string | null,
 ): string {
   const lines: string[] = [];
 
@@ -386,6 +388,12 @@ function formatCloseDisplay(
       const indicator = s.reference_type === "refuted" ? `${ANSI.yellow}!${ANSI.reset}` : STATUS.pass;
       lines.push(`  ${indicator} ${truncate(s.reference_context || s.scar_identifier || "", 70)}`);
     }
+  }
+
+  // Pro: blindspot section
+  if (blindspotSnippet) {
+    lines.push("");
+    lines.push(blindspotSnippet);
   }
 
   // Transcript — only on failure
@@ -1318,11 +1326,30 @@ export async function sessionClose(
     }
   }
 
+  // Pro: fetch blindspot data in parallel with session persistence
+  let blindspotSnippet: string | null = null;
+  const blindspotPromise = (async () => {
+    if (!hasProInsights()) return;
+    try {
+      const endDate = new Date().toISOString();
+      const startDate = new Date(Date.now() - 30 * 86400000).toISOString();
+      const project = isRetroactive ? "default" : (existingSession?.project as string | undefined) || "default";
+      const rawUsages = await queryScarUsageByDateRange(startDate, endDate, project);
+      const usages = await enrichScarUsageTitles(rawUsages);
+      blindspotSnippet = formatBlindspotSnippet(usages);
+    } catch (error) {
+      console.error("[session_close] Blindspot fetch failed (non-fatal):", error);
+    }
+  })();
+
   // 6. Persist to Supabase (direct REST API, bypasses ww-mcp)
   try {
     // Upsert session WITHOUT embedding (fast path)
     // Embedding + thread detection run fire-and-forget after
-    await supabase.directUpsert(getTableName("sessions"), sessionData);
+    await Promise.all([
+      supabase.directUpsert(getTableName("sessions"), sessionData),
+      blindspotPromise,
+    ]);
 
     // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
@@ -1452,7 +1479,7 @@ export async function sessionClose(
       try { fs.unlinkSync(payloadPath); } catch { /* already gone */ }
     }
 
-    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined, transcriptStatus);
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined, transcriptStatus, blindspotSnippet);
 
     return {
       success: true,
@@ -1470,7 +1497,7 @@ export async function sessionClose(
     // Clear session state even on error (session is done either way)
     clearCurrentSession();
 
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet);
 
     return {
       success: false,

@@ -116,6 +116,7 @@ vi.mock("../../../src/services/tier.js", () => ({
   hasMetrics: vi.fn(() => false),
   hasEmbeddings: vi.fn(() => true),
   getTableName: vi.fn((base: string) => `orchestra_${base}`),
+  hasProInsights: () => false,
 }));
 
 vi.mock("../../../src/services/storage.js", () => ({

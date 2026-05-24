@@ -16,7 +16,7 @@
 import * as supabase from "../services/supabase-client.js";
 import type { KnowledgeTriple } from "../services/supabase-client.js";
 import { localScarSearch, isLocalSearchReady } from "../services/local-vector-search.js";
-import { hasSupabase, hasVariants, hasMetrics, getTableName } from "../services/tier.js";
+import { hasSupabase, hasVariants, hasMetrics, hasProInsights, getTableName } from "../services/tier.js";
 import { getProject } from "../services/session-state.js";
 import { getStorage } from "../services/storage.js";
 import {
@@ -196,13 +196,17 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     const starterTag = scar.is_starter ? ` ${dimText("[starter]")}` : "";
     // Confidence tier: marginal matches (< 0.55) get flagged — 66% N/A rate in this range
     const confidenceTag = scar.similarity < 0.55 ? ` ${dimText("[low confidence]")}` : "";
-    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}${starterTag}${confidenceTag}`);
+    // Pro: decay tag for scars with reduced behavioral relevance
+    const decayTag = hasProInsights() && scar.decay_multiplier !== undefined && scar.decay_multiplier < 0.8
+      ? ` ${dimText(`[decay: ${Math.round(scar.decay_multiplier * 100)}%]`)}`
+      : "";
+    lines.push(`${sev} **${scar.title}** (${scar.severity}, ${scar.similarity.toFixed(2)}) ${dimText(`id:${scar.id.slice(0, 8)}`)}${starterTag}${confidenceTag}${decayTag}`);
 
     // Inline archival hint: scars with high dismiss rates get annotated
     if (dismissals) {
       const counts = dismissals.get(scar.id);
-      if (counts && counts.surfaced >= 5 && (counts.dismissed / counts.surfaced) >= 0.7) {
-        lines.push(`  _[${counts.dismissed}x dismissed — consider archiving with gm-archive]_`);
+      if (counts && counts.surfaced >= 3 && (counts.dismissed / counts.surfaced) >= 0.6) {
+        lines.push(`  _[dismissed ${counts.dismissed}/${counts.surfaced} times — re-evaluate whether this still applies]_`);
       }
     }
 
@@ -269,6 +273,15 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
   }
 
   lines.push("**Acknowledge these lessons before proceeding.**");
+
+  // Pro: graph nudge when triples exist on any scar
+  if (hasProInsights() && scars.some(s => s.related_triples && s.related_triples.length > 0)) {
+    const firstScarWithTriples = scars.find(s => s.related_triples && s.related_triples.length > 0);
+    if (firstScarWithTriples) {
+      lines.push("");
+      lines.push(dimText(`Pro: Use graph_traverse(lens: 'connected_to', node: '${firstScarWithTriples.title}') to explore deeper connections.`));
+    }
+  }
 
   return lines.join("\n");
 }

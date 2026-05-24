@@ -27,6 +27,15 @@ vi.mock("../../../src/services/tier.js", () => ({
   hasTranscripts: () => false,
   hasCacheManagement: () => false,
   getTableName: (base: string) => `orchestra_${base}`,
+  hasProInsights: () => false,
+}));
+
+vi.mock("../../../src/services/analytics.js", () => ({
+  queryScarUsageByDateRange: vi.fn().mockResolvedValue([]),
+  enrichScarUsageTitles: vi.fn().mockResolvedValue([]),
+  formatBlindspotSnippet: vi.fn().mockReturnValue(null),
+  querySessionsByDateRange: vi.fn().mockResolvedValue([]),
+  computeLightweightSummary: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("../../../src/services/storage.js", () => ({

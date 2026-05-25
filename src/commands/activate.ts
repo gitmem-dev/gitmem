@@ -6,10 +6,10 @@
  * Steps:
  *   1. Accept key as argument or prompt for it
  *   2. Validate key against our endpoint (register device)
- *   3. Prompt for Supabase URL + service role key
- *   4. Test Supabase connection
+ *   3. Prompt for Supabase URL + service role key (with re-activation safety check)
+ *   4. Test Supabase connection (verify tables exist)
  *   5. Prompt for OpenRouter API key
- *   6. Optionally run setup SQL against their Supabase
+ *   6. Tell user to run schema setup manually if tables missing
  *   7. Write everything to ~/.gitmem/config.json
  */
 
@@ -32,6 +32,9 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
+/**
+ * Test basic Supabase connectivity via REST API
+ */
 async function testSupabaseConnection(url: string, key: string): Promise<boolean> {
   try {
     const response = await fetch(`${url}/rest/v1/`, {
@@ -45,6 +48,35 @@ async function testSupabaseConnection(url: string, key: string): Promise<boolean
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if gitmem tables exist in the user's Supabase
+ * Returns list of missing tables (empty = all present)
+ */
+async function checkSchemaExists(url: string, key: string): Promise<string[]> {
+  const requiredTables = ["gitmem_learnings", "gitmem_sessions", "gitmem_decisions", "gitmem_scar_usage"];
+  const missing: string[] = [];
+
+  for (const table of requiredTables) {
+    try {
+      const response = await fetch(`${url}/rest/v1/${table}?select=id&limit=0`, {
+        method: "GET",
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+      });
+      // 404 or 400 means table doesn't exist; 200 (even empty) means it does
+      if (!response.ok) {
+        missing.push(table);
+      }
+    } catch {
+      missing.push(table);
+    }
+  }
+
+  return missing;
 }
 
 export async function main(args: string[]): Promise<void> {
@@ -126,26 +158,62 @@ export async function main(args: string[]): Promise<void> {
 
   const rl = createReadline();
 
-  // Step 3: Supabase credentials
+  // Step 3: Supabase credentials (with re-activation safety check)
+  const existingUrl = config.supabase_url as string | undefined;
+
   console.log("Supabase Setup");
   console.log("  (Create a free project at https://database.new)");
+  if (existingUrl) {
+    console.log(`  Current: ${existingUrl}`);
+  }
   console.log("");
 
-  const supabaseUrl = await ask(rl, "  Project URL: ");
+  let supabaseUrl: string;
+  if (existingUrl) {
+    const urlInput = await ask(rl, `  Project URL [${existingUrl}]: `);
+    supabaseUrl = urlInput || existingUrl;
+
+    // Warn if changing to a different Supabase instance
+    if (urlInput && urlInput !== existingUrl) {
+      console.log("");
+      console.log("  ⚠ WARNING: You are changing your Supabase URL.");
+      console.log(`    Old: ${existingUrl}`);
+      console.log(`    New: ${urlInput}`);
+      console.log("    Your existing data in the old project will NOT be migrated.");
+      console.log("");
+      const confirm = await ask(rl, "  Continue with new URL? (y/N): ");
+      if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
+        console.log("  Keeping existing URL.");
+        supabaseUrl = existingUrl;
+      }
+    }
+  } else {
+    supabaseUrl = await ask(rl, "  Project URL: ");
+  }
+
   if (!supabaseUrl) {
     console.error("Error: Supabase URL is required for Pro tier.");
     rl.close();
     process.exit(1);
   }
 
-  const supabaseKey = await ask(rl, "  Service Role Key: ");
+  const existingKey = config.supabase_key as string | undefined;
+  let supabaseKey: string;
+  if (existingKey && supabaseUrl === existingUrl) {
+    // Same URL, offer to keep existing key
+    const keyInput = await ask(rl, "  Service Role Key [keep existing]: ");
+    supabaseKey = keyInput || existingKey;
+  } else {
+    supabaseKey = await ask(rl, "  Service Role Key: ");
+  }
+
   if (!supabaseKey) {
     console.error("Error: Service Role Key is required.");
     rl.close();
     process.exit(1);
   }
 
-  // Step 4: Test connection
+  // Step 4: Test connection and check schema
   console.log("  Testing connection...");
   const connected = await testSupabaseConnection(supabaseUrl, supabaseKey);
   if (!connected) {
@@ -154,56 +222,51 @@ export async function main(args: string[]): Promise<void> {
     process.exit(1);
   }
   console.log("  ✓ Connected to Supabase");
+
+  // Check if required tables exist
+  const missingTables = await checkSchemaExists(supabaseUrl, supabaseKey);
+  if (missingTables.length > 0) {
+    console.log("");
+    console.log("  ⚠ Missing tables: " + missingTables.join(", "));
+    console.log("  Run the schema setup in your Supabase SQL Editor:");
+    console.log("");
+    console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
+    console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
+    console.log("");
+    console.log("  Then: Supabase Dashboard → SQL Editor → New query → Paste → Run");
+    console.log("");
+  } else {
+    console.log("  ✓ Schema verified (all tables present)");
+  }
   console.log("");
 
   // Step 5: OpenRouter key
   console.log("OpenRouter Setup");
   console.log("  (Get a key at https://openrouter.ai/keys)");
+
+  const existingOpenRouter = config.openrouter_key as string | undefined;
+  if (existingOpenRouter) {
+    console.log(`  Current: ${existingOpenRouter.substring(0, 12)}...`);
+  }
   console.log("");
 
-  const openrouterKey = await ask(rl, "  API Key: ");
+  let openrouterKey: string;
+  if (existingOpenRouter) {
+    const orInput = await ask(rl, "  API Key [keep existing]: ");
+    openrouterKey = orInput || existingOpenRouter;
+  } else {
+    openrouterKey = await ask(rl, "  API Key: ");
+  }
+
   if (openrouterKey) {
     console.log("  ✓ OpenRouter configured");
   } else {
     console.log("  ⚠ Skipped (semantic search will not work without embeddings)");
   }
-  console.log("");
-
-  // Step 6: Offer to run setup SQL
-  const runSetup = await ask(rl, "Run database schema setup? (y/N): ");
-  if (runSetup.toLowerCase() === "y" || runSetup.toLowerCase() === "yes") {
-    console.log("  Running schema setup...");
-    try {
-      const sqlPath = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "..", "schema", "setup.sql");
-      const sql = fs.readFileSync(sqlPath, "utf-8");
-
-      // Execute SQL via Supabase REST API (using the pg_dump-style endpoint isn't available,
-      // but we can use the SQL query endpoint if available)
-      const response = await fetch(`${supabaseUrl}/rest/v1/rpc/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabaseKey,
-          Authorization: `Bearer ${supabaseKey}`,
-        },
-        body: JSON.stringify({ query: sql }),
-      });
-
-      if (response.ok) {
-        console.log("  ✓ Schema created");
-      } else {
-        console.log("  ⚠ Could not auto-run SQL. Please run manually:");
-        console.log("    npx gitmem-mcp setup  (copy output → Supabase SQL Editor)");
-      }
-    } catch {
-      console.log("  ⚠ Could not auto-run SQL. Please run manually:");
-      console.log("    npx gitmem-mcp setup  (copy output → Supabase SQL Editor)");
-    }
-  }
 
   rl.close();
 
-  // Step 7: Write config
+  // Step 6: Write config (preserves existing fields like project, install_id, feedback_enabled)
   config.api_key = apiKey;
   config.supabase_url = supabaseUrl;
   config.supabase_key = supabaseKey;
@@ -220,8 +283,12 @@ export async function main(args: string[]): Promise<void> {
   clearLicenseCache();
 
   console.log("");
-  console.log("───��─────────────────");
-  console.log(`Pro tier activated! Restart your editor to apply.`);
+  console.log("─────────────────────");
+  if (missingTables.length > 0) {
+    console.log("Pro tier activated! Run schema setup, then restart your editor.");
+  } else {
+    console.log("Pro tier activated! Restart your editor to apply.");
+  }
   console.log(`Config saved to ${configPath}`);
   console.log("");
 }

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-05-25
+
+### Fixed
+- **Embeddings not generated on Pro tier**: `embedding.ts`, `variant-generation.ts`, and `transcript-chunker.ts` only checked `process.env.OPENROUTER_API_KEY` — never read the key from `.gitmem/config.json` written by `activate`. Now falls back to `getProConfig()` matching how `supabase-client.ts` already resolves credentials.
+- **Lossy free→pro migration**: Migration sent all local JSON fields to PostgREST — unknown columns caused 400 rejections, silently dropping records (only first 3 errors shown). Added `KNOWN_COLUMNS` whitelist per table, type coercion for `action_protocol`/`self_check_criteria` (array→TEXT), and full error visibility (no cap).
+- **Migration log file**: `.gitmem/migration.log` now written with per-record outcomes (OK/FAIL/SKIP) for debugging.
+- **Mid-migration recovery**: `activate` now detects `.pre-migration` backup files from a previous failed upgrade and re-imports them automatically. No new command — just re-run `activate`.
+- **Credential exposure**: `activate` now auto-adds `.gitmem/` to the project's `.gitignore` when inside a git repo.
+
+### Changed
+- **E2E stress test v1.4**: Restructured from 6 to 8 simulated days. Day 0 wipes Supabase to blank slate. Day 1 seeds realistic 3+ month free-tier user data (starter scars, unknown fields, type mismatches, mixed projects) and tests full upgrade journey including mid-failure recovery and real embeddings from config.json (not env var). 178 tests total.
+
 ## [1.6.0] - 2026-05-25
 
 ### Added

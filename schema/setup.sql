@@ -38,7 +38,20 @@ CREATE TABLE IF NOT EXISTS gitmem_learnings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for faster vector search
+-- Migration: ensure all columns exist (idempotent for upgrades)
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS source_linear_issue TEXT;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS persona_name TEXT;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS why_this_matters TEXT;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS action_protocol TEXT;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS self_check_criteria TEXT;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS decay_multiplier FLOAT DEFAULT 1.0;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS repeat_mistake BOOLEAN DEFAULT false;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS related_scar_id UUID;
+ALTER TABLE gitmem_learnings ADD COLUMN IF NOT EXISTS repeat_mistake_details JSONB;
+
+-- Indexes (created after migration ensures columns exist)
 CREATE INDEX IF NOT EXISTS idx_gitmem_learnings_embedding
   ON gitmem_learnings USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 10);
@@ -71,6 +84,14 @@ CREATE TABLE IF NOT EXISTS gitmem_sessions (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Migration: ensure all columns exist
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS linear_issue TEXT;
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS recording_path TEXT;
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS transcript_path TEXT;
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS close_compliance JSONB;
+ALTER TABLE gitmem_sessions ADD COLUMN IF NOT EXISTS rapport_summary TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_gitmem_sessions_agent
   ON gitmem_sessions (agent);
 
@@ -95,6 +116,12 @@ CREATE TABLE IF NOT EXISTS gitmem_decisions (
   embedding vector(1536),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration: ensure all columns exist
+ALTER TABLE gitmem_decisions ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE gitmem_decisions ADD COLUMN IF NOT EXISTS personas_involved TEXT[] DEFAULT '{}';
+ALTER TABLE gitmem_decisions ADD COLUMN IF NOT EXISTS docs_affected TEXT[] DEFAULT '{}';
+ALTER TABLE gitmem_decisions ADD COLUMN IF NOT EXISTS linear_issue TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_gitmem_decisions_session
   ON gitmem_decisions (session_id);
@@ -124,6 +151,13 @@ CREATE INDEX IF NOT EXISTS idx_gitmem_scar_usage_scar
 
 CREATE INDEX IF NOT EXISTS idx_gitmem_scar_usage_session
   ON gitmem_scar_usage (session_id);
+
+-- Migration: add columns for older installs
+ALTER TABLE gitmem_scar_usage ADD COLUMN IF NOT EXISTS issue_id TEXT;
+ALTER TABLE gitmem_scar_usage ADD COLUMN IF NOT EXISTS issue_identifier TEXT;
+ALTER TABLE gitmem_scar_usage ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;
+ALTER TABLE gitmem_scar_usage ADD COLUMN IF NOT EXISTS referenced BOOLEAN;
+ALTER TABLE gitmem_scar_usage ADD COLUMN IF NOT EXISTS variant_id UUID;
 
 -- ============================================================================
 -- Threads table (cross-session work tracking)
@@ -397,54 +431,49 @@ ALTER TABLE gitmem_query_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scar_enforcement_variants ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access (used by the MCP server)
-CREATE POLICY "Service role full access" ON gitmem_learnings
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON gitmem_sessions
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON gitmem_decisions
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON gitmem_scar_usage
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON gitmem_threads
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON knowledge_triples
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON gitmem_query_metrics
-  FOR ALL USING (auth.role() = 'service_role');
-
-CREATE POLICY "Service role full access" ON scar_enforcement_variants
-  FOR ALL USING (auth.role() = 'service_role');
-
--- Block anonymous access
-CREATE POLICY "Block anonymous access" ON gitmem_learnings
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON gitmem_sessions
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON gitmem_decisions
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON gitmem_scar_usage
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON gitmem_threads
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON knowledge_triples
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON gitmem_query_metrics
-  FOR ALL USING (auth.role() != 'anon');
-
-CREATE POLICY "Block anonymous access" ON scar_enforcement_variants
-  FOR ALL USING (auth.role() != 'anon');
+-- Drop-then-create for idempotency (CREATE POLICY has no IF NOT EXISTS)
+DO $$ BEGIN
+  -- gitmem_learnings
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_learnings;
+  CREATE POLICY "Service role full access" ON gitmem_learnings FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_learnings;
+  CREATE POLICY "Block anonymous access" ON gitmem_learnings FOR ALL USING (auth.role() != 'anon');
+  -- gitmem_sessions
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_sessions;
+  CREATE POLICY "Service role full access" ON gitmem_sessions FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_sessions;
+  CREATE POLICY "Block anonymous access" ON gitmem_sessions FOR ALL USING (auth.role() != 'anon');
+  -- gitmem_decisions
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_decisions;
+  CREATE POLICY "Service role full access" ON gitmem_decisions FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_decisions;
+  CREATE POLICY "Block anonymous access" ON gitmem_decisions FOR ALL USING (auth.role() != 'anon');
+  -- gitmem_scar_usage
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_scar_usage;
+  CREATE POLICY "Service role full access" ON gitmem_scar_usage FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_scar_usage;
+  CREATE POLICY "Block anonymous access" ON gitmem_scar_usage FOR ALL USING (auth.role() != 'anon');
+  -- gitmem_threads
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_threads;
+  CREATE POLICY "Service role full access" ON gitmem_threads FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_threads;
+  CREATE POLICY "Block anonymous access" ON gitmem_threads FOR ALL USING (auth.role() != 'anon');
+  -- knowledge_triples
+  DROP POLICY IF EXISTS "Service role full access" ON knowledge_triples;
+  CREATE POLICY "Service role full access" ON knowledge_triples FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON knowledge_triples;
+  CREATE POLICY "Block anonymous access" ON knowledge_triples FOR ALL USING (auth.role() != 'anon');
+  -- gitmem_query_metrics
+  DROP POLICY IF EXISTS "Service role full access" ON gitmem_query_metrics;
+  CREATE POLICY "Service role full access" ON gitmem_query_metrics FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON gitmem_query_metrics;
+  CREATE POLICY "Block anonymous access" ON gitmem_query_metrics FOR ALL USING (auth.role() != 'anon');
+  -- scar_enforcement_variants
+  DROP POLICY IF EXISTS "Service role full access" ON scar_enforcement_variants;
+  CREATE POLICY "Service role full access" ON scar_enforcement_variants FOR ALL USING (auth.role() = 'service_role');
+  DROP POLICY IF EXISTS "Block anonymous access" ON scar_enforcement_variants;
+  CREATE POLICY "Block anonymous access" ON scar_enforcement_variants FOR ALL USING (auth.role() != 'anon');
+END $$;
 
 -- ============================================================================
 -- Auto-update timestamps
@@ -457,10 +486,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS gitmem_learnings_updated ON gitmem_learnings;
 CREATE TRIGGER gitmem_learnings_updated
   BEFORE UPDATE ON gitmem_learnings
   FOR EACH ROW EXECUTE FUNCTION gitmem_update_timestamp();
 
+DROP TRIGGER IF EXISTS gitmem_sessions_updated ON gitmem_sessions;
 CREATE TRIGGER gitmem_sessions_updated
   BEFORE UPDATE ON gitmem_sessions
   FOR EACH ROW EXECUTE FUNCTION gitmem_update_timestamp();

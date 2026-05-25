@@ -44,6 +44,10 @@ Usage:
   npx gitmem-mcp uninstall         Clean removal of gitmem from project
   npx gitmem-mcp uninstall --all   Also delete .gitmem/ data directory
 
+Pro Tier Activation:
+  npx gitmem-mcp activate           Activate Pro tier (license key + credentials wizard)
+  npx gitmem-mcp deactivate         Remove Pro credentials from config
+
 Other commands:
   npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)
   npx gitmem-mcp configure         Generate .mcp.json config for Claude Code / Cursor
@@ -875,6 +879,12 @@ switch (command) {
   case "init":
     // New interactive wizard (replaces old cmdInit for CLI usage)
     import("./init-wizard.js");
+    break;
+  case "activate":
+    import("../dist/commands/activate.js").then((m) => m.main(process.argv.slice(3)));
+    break;
+  case "deactivate":
+    import("../dist/commands/deactivate.js").then((m) => m.main(process.argv.slice(3)));
     break;
   case "uninstall":
     import("./uninstall.js");

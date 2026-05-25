@@ -31,6 +31,8 @@ function collectTsFiles(dir: string): string[] {
 // CLI commands run outside MCP stdio transport — console.log is correct there
 const CLI_COMMAND_ALLOWLIST = new Set([
   "src/commands/telemetry.ts",
+  "src/commands/activate.ts",
+  "src/commands/deactivate.ts",
 ]);
 
 describe("no console.log in src/", () => {

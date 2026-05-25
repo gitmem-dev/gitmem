@@ -56,9 +56,12 @@ export function escapePostgRESTValue(value: string): string {
   return value.replace(/[(),]/g, "");
 }
 
-// Configuration from environment
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
+// Configuration from environment, with config.json fallback for Pro tier
+import { getProConfig } from "./license.js";
+
+const _proConfig = getProConfig();
+const SUPABASE_URL = _proConfig.supabaseUrl;
+const SUPABASE_KEY = _proConfig.supabaseKey;
 
 // Direct REST API base URL
 const SUPABASE_REST_URL = SUPABASE_URL ? `${SUPABASE_URL}/rest/v1` : "";

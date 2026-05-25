@@ -70,11 +70,14 @@ import { getProject } from "./services/session-state.js";
 import { checkEnforcement } from "./services/enforcement.js";
 import {
   getTier,
+  setTier,
   hasSupabase,
   hasCacheManagement,
   hasBatchOperations,
   hasTranscripts,
 } from "./services/tier.js";
+import { getLicenseKey, validateLicense } from "./services/license.js";
+import { getInstallId } from "./services/gitmem-dir.js";
 import { getRegisteredTools } from "./tools/definitions.js";
 import { validateToolArgs } from "./schemas/registry.js";
 import type { Project } from "./types/index.js";
@@ -475,7 +478,7 @@ export function createServer(): Server {
 export async function runServer(): Promise<void> {
   const tier = getTier();
 
-  // Start server immediately (don't block on cache loading)
+  // Start server immediately (don't block on cache loading or license validation)
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -483,6 +486,22 @@ export async function runServer(): Promise<void> {
   const toolCount = getRegisteredTools().length;
   const storage = hasSupabase() ? "supabase" : "local";
   console.error(`[gitmem] Tier: ${tier} | Storage: ${storage} | Tools: ${toolCount}`);
+
+  // Async license validation (non-blocking)
+  const apiKey = getLicenseKey();
+  if (apiKey) {
+    const installId = getInstallId() || "unknown";
+    validateLicense(apiKey, installId).then((result) => {
+      if (!result.valid) {
+        console.error(`[gitmem:license] Validation failed: ${result.message}`);
+        setTier("free");
+      } else {
+        console.error(`[gitmem:license] Validated: ${result.tier} tier`);
+      }
+    }).catch((err) => {
+      console.error(`[gitmem:license] Validation error: ${err}`);
+    });
+  }
 
   if (hasSupabase()) {
     // Pro/Dev: Initialize local vector search in background (non-blocking)

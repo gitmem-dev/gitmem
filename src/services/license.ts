@@ -19,11 +19,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import { getGitmemDir, getInstallId } from "./gitmem-dir.js";
 
-// Hardcoded validation endpoint (our infrastructure — users never see this)
-const VALIDATION_ENDPOINT = "https://gitmem-api.supabase.co/functions/v1/gitmem-validate";
+// Hardcoded validation endpoint — calls RPC directly on our Supabase via PostgREST.
+// Users never see or configure this URL.
+const VALIDATION_URL = "https://cjptxyezuxdiinufgrrm.supabase.co/rest/v1/rpc/gitmem_validate_license";
+// Anon key for our project (safe to embed — RPC is SECURITY DEFINER, RLS blocks direct table access)
+const VALIDATION_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqcHR4eWV6dXhkaWludWZncnJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxODY3MDMsImV4cCI6MjA4MTc2MjcwM30.L0oZy3LYCMikmZ15IUU5DnfJmucM37DJ14nUkM3AreY";
 
 // Cache TTL: 72 hours
 const CACHE_TTL_MS = 72 * 60 * 60 * 1000;
@@ -159,7 +161,8 @@ export function getCachedLicenseTier(): string | null {
 }
 
 /**
- * Validate license key against the GitMem validation endpoint.
+ * Validate license key against GitMem's Supabase RPC endpoint.
+ * Calls gitmem_validate_license() via PostgREST using the anon key.
  * Returns the validation result.
  *
  * This is async and should be called non-blocking during startup.
@@ -169,10 +172,14 @@ export async function validateLicense(apiKey: string, installId: string): Promis
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-    const response = await fetch(VALIDATION_ENDPOINT, {
+    const response = await fetch(VALIDATION_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey, install_id: installId }),
+      headers: {
+        "Content-Type": "application/json",
+        apikey: VALIDATION_ANON_KEY,
+        Authorization: `Bearer ${VALIDATION_ANON_KEY}`,
+      },
+      body: JSON.stringify({ p_api_key: apiKey, p_install_id: installId }),
       signal: controller.signal,
     });
 
@@ -183,7 +190,13 @@ export async function validateLicense(apiKey: string, installId: string): Promis
       return { valid: false, tier: null, message: `HTTP ${response.status}: ${text}` };
     }
 
-    const data = await response.json() as LicenseValidationResult;
+    // PostgREST RPC returns an array of rows
+    const rows = await response.json() as LicenseValidationResult[];
+    const data = Array.isArray(rows) ? rows[0] : rows as unknown as LicenseValidationResult;
+
+    if (!data) {
+      return { valid: false, tier: null, message: "Empty validation response" };
+    }
 
     // Cache successful validation
     if (data.valid && data.tier) {
@@ -211,12 +224,8 @@ export async function validateLicense(apiKey: string, installId: string): Promis
 }
 
 /**
- * Set the validation endpoint URL (for testing)
+ * Get the validation URL (for diagnostics/testing)
  */
-let _validationEndpoint = VALIDATION_ENDPOINT;
-export function setValidationEndpoint(url: string): void {
-  _validationEndpoint = url;
-}
-export function getValidationEndpoint(): string {
-  return _validationEndpoint;
+export function getValidationUrl(): string {
+  return VALIDATION_URL;
 }

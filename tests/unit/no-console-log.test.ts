@@ -33,6 +33,7 @@ const CLI_COMMAND_ALLOWLIST = new Set([
   "src/commands/telemetry.ts",
   "src/commands/activate.ts",
   "src/commands/deactivate.ts",
+  "src/commands/migrate-local.ts",
 ]);
 
 describe("no console.log in src/", () => {

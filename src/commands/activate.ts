@@ -181,6 +181,34 @@ function loadSetupSql(): string | null {
 }
 
 /**
+ * Apply schema SQL via direct Postgres connection (pg client)
+ * Uses DATABASE_URL connection string from env/config/prompt
+ */
+async function applySchemaViaPg(
+  databaseUrl: string,
+  sql: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const pg = await import("pg");
+    const client = new pg.default.Client({
+      connectionString: databaseUrl,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 15_000,
+      statement_timeout: 30_000,
+    });
+    await client.connect();
+    await client.query(sql);
+    // Reload PostgREST schema cache
+    await client.query("NOTIFY pgrst, 'reload schema'");
+    await client.end();
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: message };
+  }
+}
+
+/**
  * Apply schema SQL to user's Supabase via Management API
  */
 async function applySchema(
@@ -397,17 +425,51 @@ export async function main(args: string[]): Promise<void> {
         } else if (!setupSql) {
           console.log("  ⚠ Could not load schema SQL file");
         } else {
-          // No access token — give clear instructions
-          console.log("  ⚠ Missing tables: " + missingTables.join(", "));
-          console.log("");
-          console.log("  To apply automatically, set SUPABASE_ACCESS_TOKEN:");
-          console.log("    npx supabase login");
-          console.log("    Then re-run: npx gitmem-mcp activate");
-          console.log("");
-          console.log("  Or apply manually:");
-          console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
-          console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
-          console.log("    Then: Supabase Dashboard → SQL Editor → Paste → Run");
+          // No access token — try DATABASE_URL as fallback
+          const dbUrlResult = await resolveCredential({
+            envVar: "DATABASE_URL",
+            configValue: config.database_url as string | undefined,
+            promptLabel: "Database URL (from Supabase Connect panel)",
+            required: false,
+            rl,
+          });
+
+          if (dbUrlResult.value) {
+            console.log("  Applying schema via direct connection...");
+            const pgResult = await applySchemaViaPg(dbUrlResult.value, setupSql);
+            if (pgResult.success) {
+              // Save DATABASE_URL to config for future use
+              config.database_url = dbUrlResult.value;
+              // Wait for PostgREST cache reload
+              await new Promise((r) => setTimeout(r, 2000));
+              const stillMissing = await checkSchemaExists(supabaseUrl, supabaseKey);
+              if (stillMissing.length === 0) {
+                console.log("  ✓ Schema applied via direct connection");
+                missingTables = [];
+              } else {
+                console.log("  ⚠ Schema applied but PostgREST cache may be stale");
+                console.log("    Try: npx gitmem-mcp check");
+                missingTables = stillMissing;
+              }
+            } else {
+              console.log("  ⚠ Direct connection failed: " + pgResult.error);
+              console.log("  Apply manually:");
+              console.log("    npx gitmem-mcp setup | pbcopy   (macOS)");
+              console.log("    Then: Supabase Dashboard → SQL Editor → Paste → Run");
+            }
+          } else {
+            // No access token AND no DATABASE_URL
+            console.log("  ⚠ Missing tables: " + missingTables.join(", "));
+            console.log("");
+            console.log("  To apply automatically, provide one of:");
+            console.log("    - DATABASE_URL (from Supabase Dashboard → Connect)");
+            console.log("    - SUPABASE_ACCESS_TOKEN (from: npx supabase login)");
+            console.log("  Then re-run: npx gitmem-mcp activate");
+            console.log("");
+            console.log("  Or apply manually:");
+            console.log("    npx gitmem-mcp setup | pbcopy   (macOS)");
+            console.log("    Then: Supabase Dashboard → SQL Editor → Paste → Run");
+          }
         }
       } else {
         console.log("  ✓ Schema verified (all tables present)");

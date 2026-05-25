@@ -9,15 +9,7 @@
 
 ## Setup
 
-### 1. Log in to Supabase CLI
-
-```bash
-npx supabase login
-```
-
-This stores an access token locally that gitmem uses to set up your database schema automatically.
-
-### 2. Set environment variables
+### 1. Set environment variables
 
 Set these in your shell profile (`.bashrc`, `.zshrc`) or `.env` file:
 
@@ -25,12 +17,14 @@ Set these in your shell profile (`.bashrc`, `.zshrc`) or `.env` file:
 export SUPABASE_URL="https://yourproject.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="eyJ..."
 export OPENROUTER_API_KEY="sk-or-v1-..."
+export DATABASE_URL="postgresql://postgres.yourref:yourpassword@aws-0-region.pooler.supabase.com:5432/postgres"
 ```
 
 **Where to find these:**
 - **SUPABASE_URL**: Supabase Dashboard → Settings → API → Project URL
 - **SUPABASE_SERVICE_ROLE_KEY**: Supabase Dashboard → Settings → API → `service_role` key (under "Project API keys")
 - **OPENROUTER_API_KEY**: [openrouter.ai/keys](https://openrouter.ai/keys) → Create Key
+- **DATABASE_URL**: Supabase Dashboard → Connect → Connection string (Session pooler or Direct)
 
 ### 3. Activate
 
@@ -197,21 +191,22 @@ This removes the device from the license server (freeing a device slot), clears 
 
 ### Schema not applied automatically
 
-If you see "Missing tables" after activation, the auto-schema needs a Supabase access token:
+Auto-schema uses either `DATABASE_URL` (direct Postgres connection) or `SUPABASE_ACCESS_TOKEN` (Management API). If neither is available, apply manually:
 
 ```bash
-npx supabase login        # stores token locally
-npx gitmem-mcp activate   # re-run, schema will auto-apply
-```
+# Option 1: Set DATABASE_URL and re-run
+export DATABASE_URL="postgresql://postgres.ref:password@pooler.supabase.com:5432/postgres"
+npx gitmem-mcp activate
 
-Or apply manually:
+# Option 2: Set SUPABASE_ACCESS_TOKEN and re-run
+npx supabase login
+npx gitmem-mcp activate
 
-```bash
+# Option 3: Apply manually
 npx gitmem-mcp setup | pbcopy    # macOS — copies SQL to clipboard
 npx gitmem-mcp setup             # prints SQL
+# Then paste into Supabase Dashboard → SQL Editor → Run
 ```
-
-Then paste into Supabase Dashboard → SQL Editor → Run.
 
 ### Device limit reached
 

@@ -24,8 +24,16 @@ CREATE TABLE IF NOT EXISTS gitmem_learnings (
   embedding vector(1536),
   project TEXT DEFAULT 'default',
   source_date DATE DEFAULT CURRENT_DATE,
+  source_linear_issue TEXT,
+  persona_name TEXT,
+  why_this_matters TEXT,
+  action_protocol TEXT,
+  self_check_criteria TEXT,
   is_active BOOLEAN DEFAULT true,
   decay_multiplier FLOAT DEFAULT 1.0,
+  repeat_mistake BOOLEAN DEFAULT false,
+  related_scar_id UUID,
+  repeat_mistake_details JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -50,9 +58,14 @@ CREATE TABLE IF NOT EXISTS gitmem_sessions (
   session_date DATE DEFAULT CURRENT_DATE,
   agent TEXT DEFAULT 'Unknown',
   project TEXT DEFAULT 'default',
+  linear_issue TEXT,
+  recording_path TEXT,
+  transcript_path TEXT,
   decisions TEXT[] DEFAULT '{}',
   open_threads TEXT[] DEFAULT '{}',
   closing_reflection JSONB,
+  close_compliance JSONB,
+  rapport_summary TEXT,
   embedding vector(1536),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -74,6 +87,9 @@ CREATE TABLE IF NOT EXISTS gitmem_decisions (
   decision TEXT NOT NULL,
   rationale TEXT NOT NULL,
   alternatives_considered TEXT[] DEFAULT '{}',
+  personas_involved TEXT[] DEFAULT '{}',
+  docs_affected TEXT[] DEFAULT '{}',
+  linear_issue TEXT,
   session_id UUID REFERENCES gitmem_sessions(id),
   project TEXT DEFAULT 'default',
   embedding vector(1536),
@@ -91,10 +107,15 @@ CREATE TABLE IF NOT EXISTS gitmem_scar_usage (
   scar_id UUID REFERENCES gitmem_learnings(id),
   session_id UUID REFERENCES gitmem_sessions(id),
   agent TEXT DEFAULT 'Unknown',
+  issue_id TEXT,
+  issue_identifier TEXT,
   reference_type TEXT CHECK (reference_type IN ('explicit', 'implicit', 'acknowledged', 'refuted', 'none')),
   reference_context TEXT,
   surfaced_at TIMESTAMPTZ,
+  acknowledged_at TIMESTAMPTZ,
+  referenced BOOLEAN,
   execution_successful BOOLEAN,
+  variant_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -103,6 +124,128 @@ CREATE INDEX IF NOT EXISTS idx_gitmem_scar_usage_scar
 
 CREATE INDEX IF NOT EXISTS idx_gitmem_scar_usage_session
   ON gitmem_scar_usage (session_id);
+
+-- ============================================================================
+-- Threads table (cross-session work tracking)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS gitmem_threads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  thread_id TEXT NOT NULL UNIQUE,
+  text TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('emerging', 'active', 'cooling', 'dormant', 'archived', 'resolved')),
+  thread_class TEXT DEFAULT 'operational' CHECK (thread_class IN ('operational', 'backlog')),
+  vitality_score FLOAT DEFAULT 1.0,
+  last_touched_at TIMESTAMPTZ DEFAULT NOW(),
+  touch_count INT DEFAULT 1,
+  resolved_at TIMESTAMPTZ,
+  resolution_note TEXT,
+  source_session UUID REFERENCES gitmem_sessions(id),
+  resolved_by_session UUID REFERENCES gitmem_sessions(id),
+  related_issues TEXT[] DEFAULT '{}',
+  domain TEXT[] DEFAULT '{}',
+  project TEXT DEFAULT 'default',
+  metadata JSONB DEFAULT '{}',
+  embedding vector(1536),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gitmem_threads_status
+  ON gitmem_threads (status);
+
+CREATE INDEX IF NOT EXISTS idx_gitmem_threads_project
+  ON gitmem_threads (project);
+
+-- ============================================================================
+-- Knowledge triples (knowledge graph)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS knowledge_triples (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject TEXT NOT NULL,
+  predicate TEXT NOT NULL CHECK (predicate IN ('created_in', 'influenced_by', 'supersedes', 'demonstrates', 'affects_doc', 'created_thread', 'resolves_thread', 'relates_to_thread')),
+  object TEXT NOT NULL,
+  event_time TIMESTAMPTZ DEFAULT NOW(),
+  decay_weight FLOAT DEFAULT 1.0,
+  half_life_days INT DEFAULT 9999,
+  decay_floor FLOAT DEFAULT 0.1,
+  source_type TEXT,
+  source_id UUID,
+  source_linear_issue TEXT,
+  domain TEXT[] DEFAULT '{}',
+  project TEXT DEFAULT 'default',
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gitmem_triples_subject
+  ON knowledge_triples (subject);
+
+CREATE INDEX IF NOT EXISTS idx_gitmem_triples_project
+  ON knowledge_triples (project);
+
+-- ============================================================================
+-- Query metrics (performance tracking)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS gitmem_query_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID REFERENCES gitmem_sessions(id),
+  agent TEXT,
+  tool_name TEXT NOT NULL,
+  query_text TEXT,
+  tables_searched TEXT[],
+  latency_ms INT,
+  result_count INT,
+  similarity_scores FLOAT[],
+  context_bytes INT,
+  phase_tag TEXT,
+  linear_issue TEXT,
+  memories_surfaced UUID[],
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- Scar enforcement variants (A/B testing)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS scar_enforcement_variants (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scar_id UUID NOT NULL REFERENCES gitmem_learnings(id),
+  variant_type TEXT NOT NULL,
+  variant_config JSONB,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- Lite views (exclude embedding columns for reduced context)
+-- ============================================================================
+CREATE OR REPLACE VIEW gitmem_learnings_lite AS
+  SELECT id, learning_type, title, description, severity, scar_type,
+         counter_arguments, problem_context, solution_approach, applies_when,
+         keywords, domain, project, source_date, source_linear_issue,
+         persona_name, is_active, decay_multiplier, created_at, updated_at
+  FROM gitmem_learnings;
+
+CREATE OR REPLACE VIEW gitmem_sessions_lite AS
+  SELECT id, session_title, session_date, agent, project, linear_issue,
+         decisions, open_threads, closing_reflection, close_compliance,
+         rapport_summary, created_at, updated_at
+  FROM gitmem_sessions;
+
+CREATE OR REPLACE VIEW gitmem_decisions_lite AS
+  SELECT id, decision_date, title, decision, rationale,
+         alternatives_considered, personas_involved, docs_affected,
+         linear_issue, session_id, project, created_at
+  FROM gitmem_decisions;
+
+CREATE OR REPLACE VIEW gitmem_threads_lite AS
+  SELECT id, thread_id, text, status, thread_class, vitality_score,
+         last_touched_at, touch_count, resolved_at, resolution_note,
+         source_session, resolved_by_session, related_issues, domain,
+         project, metadata, created_at, updated_at
+  FROM gitmem_threads;
 
 -- ============================================================================
 -- Semantic search RPC function
@@ -248,6 +391,10 @@ ALTER TABLE gitmem_learnings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gitmem_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gitmem_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gitmem_scar_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gitmem_threads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_triples ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gitmem_query_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scar_enforcement_variants ENABLE ROW LEVEL SECURITY;
 
 -- Service role has full access (used by the MCP server)
 CREATE POLICY "Service role full access" ON gitmem_learnings
@@ -262,6 +409,18 @@ CREATE POLICY "Service role full access" ON gitmem_decisions
 CREATE POLICY "Service role full access" ON gitmem_scar_usage
   FOR ALL USING (auth.role() = 'service_role');
 
+CREATE POLICY "Service role full access" ON gitmem_threads
+  FOR ALL USING (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access" ON knowledge_triples
+  FOR ALL USING (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access" ON gitmem_query_metrics
+  FOR ALL USING (auth.role() = 'service_role');
+
+CREATE POLICY "Service role full access" ON scar_enforcement_variants
+  FOR ALL USING (auth.role() = 'service_role');
+
 -- Block anonymous access
 CREATE POLICY "Block anonymous access" ON gitmem_learnings
   FOR ALL USING (auth.role() != 'anon');
@@ -273,6 +432,18 @@ CREATE POLICY "Block anonymous access" ON gitmem_decisions
   FOR ALL USING (auth.role() != 'anon');
 
 CREATE POLICY "Block anonymous access" ON gitmem_scar_usage
+  FOR ALL USING (auth.role() != 'anon');
+
+CREATE POLICY "Block anonymous access" ON gitmem_threads
+  FOR ALL USING (auth.role() != 'anon');
+
+CREATE POLICY "Block anonymous access" ON knowledge_triples
+  FOR ALL USING (auth.role() != 'anon');
+
+CREATE POLICY "Block anonymous access" ON gitmem_query_metrics
+  FOR ALL USING (auth.role() != 'anon');
+
+CREATE POLICY "Block anonymous access" ON scar_enforcement_variants
   FOR ALL USING (auth.role() != 'anon');
 
 -- ============================================================================

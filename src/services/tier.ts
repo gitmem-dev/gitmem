@@ -151,7 +151,8 @@ export function hasEnforcementFields(): boolean {
  */
 export function getTablePrefix(): string {
   // Default prefix for all tiers. Override with GITMEM_TABLE_PREFIX env var.
-  return process.env.GITMEM_TABLE_PREFIX || "orchestra_";
+  // User schema uses gitmem_ prefix. Orchestra infra uses orchestra_ (set via env var).
+  return process.env.GITMEM_TABLE_PREFIX || "gitmem_";
 }
 
 /**

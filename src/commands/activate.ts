@@ -23,7 +23,7 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import { getGitmemDir, getInstallId } from "../services/gitmem-dir.js";
 import { validateLicense, clearLicenseCache } from "../services/license.js";
-import { hasLocalData, migrateLocalToSupabase, archiveLocalData } from "./migrate-local.js";
+import { hasLocalData, hasPreMigrationData, migrateLocalToSupabase, reimportFromBackups, archiveLocalData } from "./migrate-local.js";
 
 function createReadline(): readline.Interface {
   return readline.createInterface({
@@ -536,62 +536,106 @@ export async function main(args: string[]): Promise<void> {
   // Clear any stale license cache
   clearLicenseCache();
 
-  // Step 7: Migrate local data to Supabase (free → pro upgrade)
-  if (supabaseUrl && supabaseKey && missingTables.length === 0 && hasLocalData(gitmemDir)) {
-    console.log("Migrating Local Data");
-    console.log("  Found existing local data from free tier...");
-    console.log("");
-
-    const migrationResult = await migrateLocalToSupabase({
-      supabaseUrl,
-      supabaseKey,
-      gitmemDir,
-      onProgress: (msg) => console.log(msg),
-    });
-
-    // Report results
-    const collections = Object.keys(migrationResult.migrated);
-    let totalMigrated = 0;
-    let totalSkipped = 0;
-    let totalErrors = 0;
-
-    for (const col of collections) {
-      const m = migrationResult.migrated[col];
-      const s = migrationResult.skipped[col];
-      const e = migrationResult.errors[col]?.length || 0;
-      totalMigrated += m;
-      totalSkipped += s;
-      totalErrors += e;
-      if (m > 0) {
-        console.log(`  ✓ ${col}: ${m} records migrated${s > 0 ? ` (${s} skipped)` : ""}`);
+  // Ensure .gitmem/ is in .gitignore (prevents credential exposure)
+  try {
+    const projectRoot = process.cwd();
+    const gitignorePath = path.join(projectRoot, ".gitignore");
+    if (fs.existsSync(path.join(projectRoot, ".git"))) {
+      let gitignore = "";
+      if (fs.existsSync(gitignorePath)) {
+        gitignore = fs.readFileSync(gitignorePath, "utf-8");
+      }
+      if (!gitignore.split("\n").some(line => line.trim() === ".gitmem/" || line.trim() === ".gitmem")) {
+        const separator = gitignore.length > 0 && !gitignore.endsWith("\n") ? "\n" : "";
+        fs.appendFileSync(gitignorePath, `${separator}\n# GitMem local data (contains credentials)\n.gitmem/\n`);
+        console.log("  ✓ Added .gitmem/ to .gitignore");
       }
     }
+  } catch {
+    // Non-fatal — warn but don't block activation
+    console.log("  ⚠ Could not update .gitignore — manually add .gitmem/ to prevent credential exposure");
+  }
 
-    // Show errors if any
-    if (totalErrors > 0) {
+  // Step 7: Migrate local data to Supabase (free → pro upgrade)
+  // Handles three scenarios:
+  //   A) Fresh upgrade: .json files exist → migrate and archive
+  //   B) Re-activation after failed migration: .pre-migration backups exist → reimport
+  //   C) Already migrated: neither exists → skip
+  if (supabaseUrl && supabaseKey && missingTables.length === 0) {
+    const hasLive = hasLocalData(gitmemDir);
+    const hasBackups = hasPreMigrationData(gitmemDir);
+
+    if (hasLive || hasBackups) {
+      if (hasLive) {
+        console.log("Migrating Local Data");
+        console.log("  Found existing local data from free tier...");
+      } else {
+        console.log("Re-importing From Backups");
+        console.log("  Found .pre-migration backup files from a previous upgrade...");
+      }
       console.log("");
+
+      const migrationResult = hasLive
+        ? await migrateLocalToSupabase({
+            supabaseUrl,
+            supabaseKey,
+            gitmemDir,
+            onProgress: (msg) => console.log(msg),
+          })
+        : await reimportFromBackups({
+            supabaseUrl,
+            supabaseKey,
+            gitmemDir,
+            onProgress: (msg) => console.log(msg),
+          });
+
+      // Report results
+      const collections = Object.keys(migrationResult.migrated);
+      let totalMigrated = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+
       for (const col of collections) {
-        for (const err of migrationResult.errors[col] || []) {
-          console.log(`  ⚠ ${col}: ${err}`);
+        const m = migrationResult.migrated[col];
+        const s = migrationResult.skipped[col];
+        const e = migrationResult.errors[col]?.length || 0;
+        totalMigrated += m;
+        totalSkipped += s;
+        totalErrors += e;
+        if (m > 0 || s > 0) {
+          console.log(`  ${m > 0 ? "✓" : "⚠"} ${col}: ${m} migrated${s > 0 ? `, ${s} failed` : ""}`);
         }
       }
-    }
 
-    if (totalMigrated > 0) {
-      console.log("");
-      console.log(`  ✓ Migrated ${totalMigrated} records to Supabase`);
-
-      // Archive local files so they aren't re-read
-      const archived = archiveLocalData(gitmemDir);
-      if (archived.length > 0) {
-        console.log(`  ✓ Local files archived (${archived.join(", ")}.json → .pre-migration)`);
+      // Show ALL errors
+      if (totalErrors > 0) {
+        console.log("");
+        for (const col of collections) {
+          for (const err of migrationResult.errors[col] || []) {
+            console.log(`  ⚠ ${col}: ${err}`);
+          }
+        }
       }
-    } else if (migrationResult.hasLocalData) {
-      console.log("  ⚠ Migration encountered errors. Local data preserved.");
-      console.log("    Re-run activate after resolving issues.");
-    }
 
-    console.log("");
+      if (totalMigrated > 0) {
+        console.log("");
+        console.log(`  ✓ Migrated ${totalMigrated} records to Supabase`);
+
+        if (hasLive) {
+          // Archive local files so they aren't re-read
+          const archived = archiveLocalData(gitmemDir);
+          if (archived.length > 0) {
+            console.log(`  ✓ Local files archived (${archived.join(", ")}.json → .pre-migration)`);
+          }
+        }
+      } else if (migrationResult.hasLocalData) {
+        console.log("  ⚠ Migration encountered errors. Local data preserved.");
+        console.log("    Check .gitmem/migration.log for details.");
+        console.log("    Fix issues and re-run: npx gitmem-mcp activate");
+      }
+
+      console.log("");
+    }
   }
 
   // Summary

@@ -18,6 +18,7 @@
  */
 
 import * as supabase from "./supabase-client.js";
+import { getProConfig } from "./license.js";
 
 // --- Pipeline versioning ---
 // Bump PIPELINE_VERSION when changing the prompt, model, or generation logic.
@@ -128,9 +129,9 @@ function buildUserPrompt(scar: ScarData): string {
  * Returns parsed output or null on failure.
  */
 async function generateWithLLM(scar: ScarData): Promise<LLMVariantOutput | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY || getProConfig().openrouterKey;
   if (!apiKey) {
-    console.error("[variant-generation] No OPENROUTER_API_KEY — falling back to deterministic");
+    console.error("[variant-generation] No OpenRouter key (env or config.json) — falling back to deterministic");
     return null;
   }
 

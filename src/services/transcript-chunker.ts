@@ -9,6 +9,7 @@
 
 import * as supabase from "./supabase-client.js";
 import { getTableName } from "./tier.js";
+import { getProConfig } from "./license.js";
 import type { Project } from "../types/index.js";
 
 // OpenRouter API configuration (same as local-vector-search)
@@ -62,9 +63,9 @@ function normalize(vec: number[]): number[] {
  * Generate embedding using OpenRouter API
  */
 async function generateEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY || getProConfig().openrouterKey;
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY not configured");
+    throw new Error("No OpenRouter key configured (set OPENROUTER_API_KEY env var or run: npx gitmem-mcp activate)");
   }
 
   const response = await fetch(OPENROUTER_API_URL, {

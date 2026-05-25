@@ -15,6 +15,8 @@
  * but won't appear in semantic search results.
  */
 
+import { getProConfig } from "./license.js";
+
 // Default embedding dimensions per provider
 const OPENAI_EMBEDDING_DIM = 1536;
 const OLLAMA_DEFAULT_DIM = 768;
@@ -54,10 +56,24 @@ function normalize(vec: number[]): number[] {
 }
 
 /**
- * Detect the best available embedding provider from environment
+ * Detect the best available embedding provider from environment.
+ *
+ * Resolution chain for OpenRouter key:
+ *   1. process.env.OPENROUTER_API_KEY (env var)
+ *   2. .gitmem/config.json → openrouter_key (written by `activate`)
+ *
+ * This matches how supabase-client.ts resolves credentials via getProConfig().
  */
 export function detectProvider(): EmbeddingConfig {
   const forced = process.env.GITMEM_EMBEDDING_PROVIDER?.toLowerCase();
+
+  // Resolve OpenRouter key from env var OR config.json (same as supabase-client)
+  const resolveOpenRouterKey = (): string | undefined => {
+    if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
+    const config = getProConfig();
+    if (config.openrouterKey) return config.openrouterKey;
+    return undefined;
+  };
 
   // Forced provider
   if (forced && forced !== "auto") {
@@ -77,9 +93,9 @@ export function detectProvider(): EmbeddingConfig {
         };
       }
       case "openrouter": {
-        const key = process.env.OPENROUTER_API_KEY;
+        const key = resolveOpenRouterKey();
         if (!key) {
-          console.warn("[embedding] GITMEM_EMBEDDING_PROVIDER=openrouter but OPENROUTER_API_KEY not set");
+          console.warn("[embedding] GITMEM_EMBEDDING_PROVIDER=openrouter but no OpenRouter key found (env or config.json)");
           return { provider: "none", apiUrl: "", apiKey: "", model: "", expectedDim: 0 };
         }
         return {
@@ -117,11 +133,13 @@ export function detectProvider(): EmbeddingConfig {
     };
   }
 
-  if (process.env.OPENROUTER_API_KEY) {
+  // Check env var AND config.json for OpenRouter key
+  const openrouterKey = resolveOpenRouterKey();
+  if (openrouterKey) {
     return {
       provider: "openrouter",
       apiUrl: OPENROUTER_API_URL,
-      apiKey: process.env.OPENROUTER_API_KEY,
+      apiKey: openrouterKey,
       model: OPENROUTER_EMBEDDING_MODEL,
       expectedDim: OPENAI_EMBEDDING_DIM,
     };

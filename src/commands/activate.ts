@@ -3,14 +3,18 @@
  *
  * Usage: npx gitmem-mcp activate [license-key]
  *
+ * Credential resolution (priority order):
+ *   1. Environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY)
+ *   2. Existing values in .gitmem/config.json (re-activation)
+ *   3. Interactive prompt (TTY only)
+ *
  * Steps:
  *   1. Accept key as argument or prompt for it
  *   2. Validate key against our endpoint (register device)
- *   3. Prompt for Supabase URL + service role key (with re-activation safety check)
+ *   3. Resolve Supabase URL + service role key (env → config → prompt)
  *   4. Test Supabase connection (verify tables exist)
- *   5. Prompt for OpenRouter API key
- *   6. Tell user to run schema setup manually if tables missing
- *   7. Write everything to ~/.gitmem/config.json
+ *   5. Resolve OpenRouter API key (env → config → prompt)
+ *   6. Write everything to ~/.gitmem/config.json
  */
 
 import * as fs from "fs";
@@ -30,6 +34,47 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(question, (answer) => resolve(answer.trim()));
   });
+}
+
+/**
+ * Resolve a credential value using the priority chain:
+ *   1. Environment variable
+ *   2. Existing config value
+ *   3. Interactive prompt (if TTY available)
+ *
+ * Returns the resolved value or empty string.
+ */
+async function resolveCredential(opts: {
+  envVar: string;
+  configValue: string | undefined;
+  promptLabel: string;
+  required: boolean;
+  rl: readline.Interface | null;
+  existingHint?: string;
+}): Promise<{ value: string; source: "env" | "config" | "prompt" | "none" }> {
+  // 1. Environment variable
+  const envValue = process.env[opts.envVar];
+  if (envValue) {
+    return { value: envValue, source: "env" };
+  }
+
+  // 2. Existing config value
+  if (opts.configValue) {
+    return { value: opts.configValue, source: "config" };
+  }
+
+  // 3. Interactive prompt
+  if (opts.rl) {
+    const prompt = opts.existingHint
+      ? `  ${opts.promptLabel} [${opts.existingHint}]: `
+      : `  ${opts.promptLabel}: `;
+    const input = await ask(opts.rl, prompt);
+    if (input) {
+      return { value: input, source: "prompt" };
+    }
+  }
+
+  return { value: "", source: "none" };
 }
 
 /**
@@ -67,7 +112,6 @@ async function checkSchemaExists(url: string, key: string): Promise<string[]> {
           Authorization: `Bearer ${key}`,
         },
       });
-      // 404 or 400 means table doesn't exist; 200 (even empty) means it does
       if (!response.ok) {
         missing.push(table);
       }
@@ -106,13 +150,13 @@ export async function main(args: string[]): Promise<void> {
     config.install_id = installId;
   }
 
-  // Step 1: Get license key
-  let apiKey = args[0] || "";
+  // Step 1: Get license key (arg → env → prompt)
+  let apiKey = args[0] || process.env.GITMEM_API_KEY || (config.api_key as string) || "";
 
   if (!apiKey) {
-    // Check if non-interactive (piped stdin)
     if (!process.stdin.isTTY) {
       console.error("Error: License key required. Usage: npx gitmem-mcp activate <key>");
+      console.error("  Or set GITMEM_API_KEY environment variable.");
       process.exit(1);
     }
 
@@ -144,135 +188,150 @@ export async function main(args: string[]): Promise<void> {
   console.log(`✓ Key validated (${result.tier} tier)`);
   console.log("");
 
-  // Interactive mode for credentials
-  if (!process.stdin.isTTY) {
-    // Non-interactive: just save the key
-    config.api_key = apiKey;
-    if (!fs.existsSync(gitmemDir)) {
-      fs.mkdirSync(gitmemDir, { recursive: true });
-    }
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log("License key saved. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars for Supabase.");
-    return;
-  }
+  // Create readline only if TTY is available
+  const rl = process.stdin.isTTY ? createReadline() : null;
 
-  const rl = createReadline();
-
-  // Step 3: Supabase credentials (with re-activation safety check)
+  // Step 3: Resolve Supabase credentials (env → config → prompt)
   const existingUrl = config.supabase_url as string | undefined;
+  const existingKey = config.supabase_key as string | undefined;
 
-  console.log("Supabase Setup");
-  console.log("  (Create a free project at https://database.new)");
-  if (existingUrl) {
-    console.log(`  Current: ${existingUrl}`);
+  if (rl) {
+    console.log("Supabase Setup");
+    console.log("  (Create a free project at https://database.new)");
+    if (existingUrl) {
+      console.log(`  Current: ${existingUrl}`);
+    }
+    console.log("");
   }
-  console.log("");
 
-  let supabaseUrl: string;
-  if (existingUrl) {
-    const urlInput = await ask(rl, `  Project URL [${existingUrl}]: `);
-    supabaseUrl = urlInput || existingUrl;
+  const supabaseUrlResult = await resolveCredential({
+    envVar: "SUPABASE_URL",
+    configValue: existingUrl,
+    promptLabel: "Project URL",
+    required: true,
+    rl,
+  });
 
-    // Warn if changing to a different Supabase instance
-    if (urlInput && urlInput !== existingUrl) {
-      console.log("");
-      console.log("  ⚠ WARNING: You are changing your Supabase URL.");
-      console.log(`    Old: ${existingUrl}`);
-      console.log(`    New: ${urlInput}`);
-      console.log("    Your existing data in the old project will NOT be migrated.");
-      console.log("");
-      const confirm = await ask(rl, "  Continue with new URL? (y/N): ");
-      if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
-        console.log("  Keeping existing URL.");
-        supabaseUrl = existingUrl;
+  const supabaseUrl = supabaseUrlResult.value;
+
+  // Re-activation safety: warn if changing URL interactively
+  if (rl && existingUrl && supabaseUrl !== existingUrl && supabaseUrlResult.source === "prompt") {
+    console.log("");
+    console.log("  ⚠ WARNING: You are changing your Supabase URL.");
+    console.log(`    Old: ${existingUrl}`);
+    console.log(`    New: ${supabaseUrl}`);
+    console.log("    Your existing data in the old project will NOT be migrated.");
+    console.log("");
+    const confirm = await ask(rl, "  Continue with new URL? (y/N): ");
+    if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
+      console.log("  Keeping existing URL.");
+      // Fall back handled below by using existingUrl
+    }
+  }
+
+  // Resolve service role key — if same URL, offer to keep existing
+  const supabaseKeyResult = await resolveCredential({
+    envVar: "SUPABASE_SERVICE_ROLE_KEY",
+    configValue: (supabaseUrl === existingUrl) ? existingKey : undefined,
+    promptLabel: "Service Role Key",
+    required: true,
+    rl,
+    existingHint: (existingKey && supabaseUrl === existingUrl) ? "keep existing" : undefined,
+  });
+
+  const supabaseKey = supabaseKeyResult.value;
+
+  // Step 4: Test connection if we have credentials
+  let missingTables: string[] = [];
+  let connectionFailed = false;
+  if (supabaseUrl && supabaseKey) {
+    if (supabaseUrlResult.source !== "config" || supabaseKeyResult.source !== "config") {
+      // Only test if credentials are new (not just re-read from config)
+      console.log("  Testing connection...");
+      const connected = await testSupabaseConnection(supabaseUrl, supabaseKey);
+      if (!connected) {
+        connectionFailed = true;
+        if (rl) {
+          // Interactive: hard failure — user can re-enter
+          console.error("  ✗ Could not connect to Supabase. Check your URL and key.");
+          rl.close();
+          process.exit(1);
+        } else {
+          // Non-interactive: warn but save credentials anyway
+          console.log("  ⚠ Could not connect to Supabase (credentials saved anyway).");
+          console.log("    Verify your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are correct.");
+        }
+      } else {
+        console.log("  ✓ Connected to Supabase");
       }
     }
-  } else {
-    supabaseUrl = await ask(rl, "  Project URL: ");
-  }
 
-  if (!supabaseUrl) {
-    console.error("Error: Supabase URL is required for Pro tier.");
-    rl.close();
-    process.exit(1);
-  }
-
-  const existingKey = config.supabase_key as string | undefined;
-  let supabaseKey: string;
-  if (existingKey && supabaseUrl === existingUrl) {
-    // Same URL, offer to keep existing key
-    const keyInput = await ask(rl, "  Service Role Key [keep existing]: ");
-    supabaseKey = keyInput || existingKey;
-  } else {
-    supabaseKey = await ask(rl, "  Service Role Key: ");
-  }
-
-  if (!supabaseKey) {
-    console.error("Error: Service Role Key is required.");
-    rl.close();
-    process.exit(1);
-  }
-
-  // Step 4: Test connection and check schema
-  console.log("  Testing connection...");
-  const connected = await testSupabaseConnection(supabaseUrl, supabaseKey);
-  if (!connected) {
-    console.error("  ✗ Could not connect to Supabase. Check your URL and key.");
-    rl.close();
-    process.exit(1);
-  }
-  console.log("  ✓ Connected to Supabase");
-
-  // Check if required tables exist
-  const missingTables = await checkSchemaExists(supabaseUrl, supabaseKey);
-  if (missingTables.length > 0) {
+    if (!connectionFailed) {
+      missingTables = await checkSchemaExists(supabaseUrl, supabaseKey);
+      if (missingTables.length > 0) {
+        console.log("");
+        console.log("  ⚠ Missing tables: " + missingTables.join(", "));
+        console.log("  Run the schema setup in your Supabase SQL Editor:");
+        console.log("");
+        console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
+        console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
+        console.log("");
+        console.log("  Then: Supabase Dashboard → SQL Editor → New query → Paste → Run");
+      } else {
+        console.log("  ✓ Schema verified (all tables present)");
+      }
+    }
     console.log("");
-    console.log("  ⚠ Missing tables: " + missingTables.join(", "));
-    console.log("  Run the schema setup in your Supabase SQL Editor:");
+  } else if (!supabaseUrl || !supabaseKey) {
+    console.log("  ⚠ Supabase credentials not provided.");
+    console.log("    Pro features require Supabase. Set via:");
+    console.log("      - Environment: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    console.log("      - Config: edit .gitmem/config.json (supabase_url, supabase_key)");
+    console.log("      - Re-run: npx gitmem-mcp activate (interactive)");
     console.log("");
-    console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
-    console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
+  }
+
+  // Step 5: Resolve OpenRouter key (env → config → prompt)
+  if (rl) {
+    console.log("OpenRouter Setup");
+    console.log("  (Get a key at https://openrouter.ai/keys)");
+    const existingOpenRouter = config.openrouter_key as string | undefined;
+    if (existingOpenRouter) {
+      console.log(`  Current: ${existingOpenRouter.substring(0, 12)}...`);
+    }
     console.log("");
-    console.log("  Then: Supabase Dashboard → SQL Editor → New query → Paste → Run");
-    console.log("");
-  } else {
-    console.log("  ✓ Schema verified (all tables present)");
   }
-  console.log("");
 
-  // Step 5: OpenRouter key
-  console.log("OpenRouter Setup");
-  console.log("  (Get a key at https://openrouter.ai/keys)");
+  const openrouterResult = await resolveCredential({
+    envVar: "OPENROUTER_API_KEY",
+    configValue: config.openrouter_key as string | undefined,
+    promptLabel: "API Key",
+    required: false,
+    rl,
+    existingHint: (config.openrouter_key as string) ? "keep existing" : undefined,
+  });
 
-  const existingOpenRouter = config.openrouter_key as string | undefined;
-  if (existingOpenRouter) {
-    console.log(`  Current: ${existingOpenRouter.substring(0, 12)}...`);
-  }
-  console.log("");
-
-  let openrouterKey: string;
-  if (existingOpenRouter) {
-    const orInput = await ask(rl, "  API Key [keep existing]: ");
-    openrouterKey = orInput || existingOpenRouter;
-  } else {
-    openrouterKey = await ask(rl, "  API Key: ");
-  }
+  const openrouterKey = openrouterResult.value;
 
   if (openrouterKey) {
-    console.log("  ✓ OpenRouter configured");
-  } else {
+    if (openrouterResult.source === "env") {
+      console.log("  ✓ OpenRouter configured (from env)");
+    } else if (openrouterResult.source === "config") {
+      // Silent — already configured
+    } else {
+      console.log("  ✓ OpenRouter configured");
+    }
+  } else if (rl) {
     console.log("  ⚠ Skipped (semantic search will not work without embeddings)");
   }
 
-  rl.close();
+  if (rl) rl.close();
 
   // Step 6: Write config (preserves existing fields like project, install_id, feedback_enabled)
   config.api_key = apiKey;
-  config.supabase_url = supabaseUrl;
-  config.supabase_key = supabaseKey;
-  if (openrouterKey) {
-    config.openrouter_key = openrouterKey;
-  }
+  if (supabaseUrl) config.supabase_url = supabaseUrl;
+  if (supabaseKey) config.supabase_key = supabaseKey;
+  if (openrouterKey) config.openrouter_key = openrouterKey;
 
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
@@ -282,13 +341,25 @@ export async function main(args: string[]): Promise<void> {
   // Clear any stale license cache
   clearLicenseCache();
 
+  // Summary
   console.log("");
   console.log("─────────────────────");
-  if (missingTables.length > 0) {
+
+  const sources: string[] = [];
+  if (supabaseUrl) sources.push(`Supabase (${supabaseUrlResult.source})`);
+  if (openrouterKey) sources.push(`OpenRouter (${openrouterResult.source})`);
+
+  if (!supabaseUrl) {
+    console.log("License key activated. Supabase credentials still needed for Pro features.");
+  } else if (missingTables.length > 0) {
     console.log("Pro tier activated! Run schema setup, then restart your editor.");
   } else {
     console.log("Pro tier activated! Restart your editor to apply.");
   }
-  console.log(`Config saved to ${configPath}`);
+
+  if (sources.length > 0) {
+    console.log(`  Credentials: ${sources.join(", ")}`);
+  }
+  console.log(`  Config: ${configPath}`);
   console.log("");
 }

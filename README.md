@@ -124,11 +124,16 @@ Add this to your MCP client's config file:
 | `npx gitmem-mcp init --client <name>` | Setup for specific client (`claude`, `cursor`, `vscode`, `windsurf`, `generic`) |
 | `npx gitmem-mcp init --yes` | Non-interactive setup |
 | `npx gitmem-mcp init --dry-run` | Preview changes |
+| `npx gitmem-mcp activate <key>` | Activate Pro tier (auto-applies schema) |
+| `npx gitmem-mcp deactivate` | Remove Pro credentials, free device slot |
+| `npx gitmem-mcp setup` | Output schema SQL (for manual Supabase setup) |
 | `npx gitmem-mcp uninstall` | Clean removal (preserves `.gitmem/` data) |
 | `npx gitmem-mcp uninstall --all` | Full removal including data |
 | `npx gitmem-mcp check` | Diagnostic health check |
 
-## Pro Tier — Coming Soon
+## Pro Tier
+
+Self-hosted on your own Supabase. You bring the infrastructure, gitmem sets it up.
 
 | What you get | Why your agent cares |
 |-------------|---------------------|
@@ -136,11 +141,23 @@ Add this to your MCP client's config file:
 | **Session analytics** | Spot patterns in what keeps going wrong |
 | **Sub-agent briefing** | Hand institutional context to sub-agents automatically |
 | **Cloud persistence** | Memory survives machine changes, shareable across team |
-| **A/B testing analytics** | Measure which scar phrasings actually change agent behavior (free tier includes `GITMEM_NUDGE_VARIANT` for manual testing) |
+| **A/B testing analytics** | Measure which scar phrasings actually change agent behavior |
+
+### Quick start
+
+```bash
+npx supabase login                                          # one time
+export SUPABASE_URL="https://yourproject.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="eyJ..."
+export OPENROUTER_API_KEY="sk-or-v1-..."
+npx gitmem-mcp activate <your-license-key>
+```
+
+The activate command creates all tables, views, RPC functions, and indexes automatically. No manual SQL needed.
+
+See **[docs/pro-setup-guide.md](docs/pro-setup-guide.md)** for the full guide.
 
 The free tier gives you everything for solo projects. Pro makes recall smarter and memory portable.
-
-[Join the mailing list](https://gitmem.ai) to get notified.
 
 ## GitMem + MEMORY.md
 

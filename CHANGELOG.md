@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-05-25
+
+### Added
+- **Free→Pro migration**: Running `activate` with existing local `.gitmem/` data automatically migrates learnings, sessions, decisions, and scar usage to Supabase. Local files are archived with `.pre-migration` suffix.
+- **Schema auto-apply via DATABASE_URL**: `activate` now falls back to direct Postgres connection when `SUPABASE_ACCESS_TOKEN` is unavailable, using `DATABASE_URL` from env, config, or interactive prompt.
+
+### Fixed
+- **Idempotent schema SQL**: `setup.sql` now uses `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE`, and `DO $$ ... END $$` guards throughout — safe to re-run for upgrades without errors.
+
 ## [1.5.1] - 2026-05-13
 
 ### Fixed

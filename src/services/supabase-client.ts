@@ -189,27 +189,54 @@ export async function upsertRecord<T = unknown>(
 
 /**
  * Semantic search across tables
+ *
+ * Generates an embedding for the query, then calls the gitmem_semantic_search
+ * RPC function directly via PostgREST.
  */
 export async function semanticSearch<T = unknown>(
   options: SupabaseSearchOptions
 ): Promise<T[]> {
-  const { query, tables, match_count = 10, project } = options;
-
-  const args: Record<string, unknown> = {
-    query,
-    match_count,
-  };
-
-  if (tables && tables.length > 0) {
-    args.tables = tables;
+  if (!isConfigured()) {
+    throw new Error("Supabase not configured");
   }
 
-  if (project) {
-    args.project = project;
+  const { query, match_count = 10 } = options;
+
+  // Generate embedding for the query
+  const { embed } = await import("./embedding.js");
+  const embedding = await embed(query);
+
+  if (!embedding) {
+    console.error("[semantic-search] No embedding provider configured — cannot run semantic search");
+    return [];
   }
 
-  const result = await callMcp<{ results: T[] }>("semantic_search", args);
-  return result.results || [];
+  // Call the RPC function directly via PostgREST
+  const rpcName = `${getTableName("").replace(/_$/, "")}_semantic_search`;
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({
+      query_embedding: `[${embedding.join(",")}]`,
+      match_count,
+      similarity_threshold: 0.0,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase RPC error: ${response.status} - ${text.slice(0, 200)}`);
+  }
+
+  const rows = (await response.json()) as T[];
+  return rows || [];
 }
 
 // ============================================================================
@@ -551,23 +578,54 @@ export async function loadScarsWithEmbeddings<T = unknown>(
 
 /**
  * Scar search with severity weighting
+ *
+ * Generates an embedding for the query, then calls the gitmem_scar_search
+ * RPC function directly via PostgREST. No Edge Function required.
  */
 export async function scarSearch<T = unknown>(
   query: string,
   matchCount = 5,
   project?: Project
 ): Promise<T[]> {
-  const args: Record<string, unknown> = {
-    query,
-    match_count: matchCount,
-  };
-
-  if (project) {
-    args.project = project;
+  if (!isConfigured()) {
+    throw new Error("Supabase not configured");
   }
 
-  const result = await callMcp<{ results: T[] }>("scar_search", args);
-  return result.results || [];
+  // Generate embedding for the query
+  const { embed } = await import("./embedding.js");
+  const embedding = await embed(query);
+
+  if (!embedding) {
+    console.error("[scar-search] No embedding provider configured — cannot run semantic search");
+    return [];
+  }
+
+  // Call the RPC function directly via PostgREST
+  const rpcName = `${getTableName("").replace(/_$/, "")}_scar_search`;
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({
+      query_embedding: `[${embedding.join(",")}]`,
+      match_count: matchCount,
+      similarity_threshold: 0.0,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase RPC error: ${response.status} - ${text.slice(0, 200)}`);
+  }
+
+  const rows = (await response.json()) as T[];
+  return rows || [];
 }
 
 /**

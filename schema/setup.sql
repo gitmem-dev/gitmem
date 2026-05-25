@@ -414,3 +414,42 @@ BEGIN
   RETURN QUERY SELECT v_tier, true, 'Valid'::TEXT;
 END;
 $$;
+
+-- ============================================================================
+-- Device Deactivation RPC
+-- Removes a device activation for a license key + install_id pair.
+-- Called by `gitmem-mcp deactivate` to free up a device slot.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION gitmem_deactivate_device(p_api_key TEXT, p_install_id TEXT)
+RETURNS TABLE(success BOOLEAN, message TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_license_id UUID;
+  v_deleted INTEGER;
+BEGIN
+  -- Look up the license
+  SELECT l.id INTO v_license_id
+  FROM gitmem_licenses l
+  WHERE l.api_key = p_api_key;
+
+  IF v_license_id IS NULL THEN
+    RETURN QUERY SELECT false, 'Invalid license key'::TEXT;
+    RETURN;
+  END IF;
+
+  -- Delete the activation for this install_id
+  DELETE FROM gitmem_license_activations a
+  WHERE a.license_id = v_license_id
+    AND a.install_id = p_install_id;
+
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  IF v_deleted > 0 THEN
+    RETURN QUERY SELECT true, 'Device deactivated'::TEXT;
+  ELSE
+    RETURN QUERY SELECT true, 'Device was not registered (already deactivated)'::TEXT;
+  END IF;
+END;
+$$;

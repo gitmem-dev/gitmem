@@ -20,6 +20,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { fileURLToPath } from "url";
 import { getGitmemDir, getInstallId } from "../services/gitmem-dir.js";
 import { validateLicense, clearLicenseCache } from "../services/license.js";
 
@@ -121,6 +122,96 @@ async function checkSchemaExists(url: string, key: string): Promise<string[]> {
   }
 
   return missing;
+}
+
+/**
+ * Get the Supabase access token for Management API
+ * Priority: SUPABASE_ACCESS_TOKEN env var → ~/.supabase/access-token file
+ */
+function getSupabaseAccessToken(): string | null {
+  const envToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (envToken) return envToken;
+
+  try {
+    const tokenPath = path.join(
+      process.env.HOME || process.env.USERPROFILE || "",
+      ".supabase",
+      "access-token"
+    );
+    if (fs.existsSync(tokenPath)) {
+      return fs.readFileSync(tokenPath, "utf-8").trim();
+    }
+  } catch {
+    // No stored token
+  }
+  return null;
+}
+
+/**
+ * Extract project ref from Supabase URL
+ * e.g., "https://abcdef.supabase.co" → "abcdef"
+ */
+function extractProjectRef(url: string): string | null {
+  const match = url.match(/https?:\/\/([^.]+)\.supabase\.co/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Load the setup SQL from the schema file bundled with the package
+ * Strips the license management section (not for user's Supabase)
+ */
+function loadSetupSql(): string | null {
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const sqlPath = path.join(__dirname, "..", "..", "schema", "setup.sql");
+    if (!fs.existsSync(sqlPath)) return null;
+
+    let sql = fs.readFileSync(sqlPath, "utf-8");
+
+    // Strip license management tables (they belong on our infra, not user's)
+    const licenseIdx = sql.indexOf("-- License Management Tables");
+    if (licenseIdx > 0) {
+      sql = sql.substring(0, licenseIdx);
+    }
+
+    return sql;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Apply schema SQL to user's Supabase via Management API
+ */
+async function applySchema(
+  projectRef: string,
+  accessToken: string,
+  sql: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ query: sql }),
+        signal: AbortSignal.timeout(30_000),
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { success: false, error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: message };
+  }
 }
 
 export async function main(args: string[]): Promise<void> {
@@ -269,14 +360,55 @@ export async function main(args: string[]): Promise<void> {
     if (!connectionFailed) {
       missingTables = await checkSchemaExists(supabaseUrl, supabaseKey);
       if (missingTables.length > 0) {
-        console.log("");
-        console.log("  ⚠ Missing tables: " + missingTables.join(", "));
-        console.log("  Run the schema setup in your Supabase SQL Editor:");
-        console.log("");
-        console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
-        console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
-        console.log("");
-        console.log("  Then: Supabase Dashboard → SQL Editor → New query → Paste → Run");
+        console.log("  Setting up schema...");
+
+        const projectRef = extractProjectRef(supabaseUrl);
+        const accessToken = getSupabaseAccessToken();
+        const setupSql = loadSetupSql();
+
+        if (projectRef && accessToken && setupSql) {
+          // Auto-apply schema via Management API
+          const result = await applySchema(projectRef, accessToken, setupSql);
+          if (result.success) {
+            // Reload PostgREST schema cache so new tables are visible via REST API
+            await applySchema(projectRef, accessToken, "NOTIFY pgrst, 'reload schema'");
+            // Brief wait for PostgREST to pick up the notification
+            await new Promise((r) => setTimeout(r, 2000));
+
+            // Verify tables now exist
+            const stillMissing = await checkSchemaExists(supabaseUrl, supabaseKey);
+            if (stillMissing.length === 0) {
+              console.log("  ✓ Schema applied automatically");
+              missingTables = [];
+            } else {
+              console.log("  ⚠ Schema applied but some tables still missing: " + stillMissing.join(", "));
+              console.log("    PostgREST may need a moment to reload. Try: npx gitmem-mcp check");
+              missingTables = stillMissing;
+            }
+          } else {
+            console.log("  ⚠ Auto-schema failed: " + result.error);
+            console.log("  Apply manually:");
+            console.log("");
+            console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
+            console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
+            console.log("");
+            console.log("  Then: Supabase Dashboard → SQL Editor → New query → Paste → Run");
+          }
+        } else if (!setupSql) {
+          console.log("  ⚠ Could not load schema SQL file");
+        } else {
+          // No access token — give clear instructions
+          console.log("  ⚠ Missing tables: " + missingTables.join(", "));
+          console.log("");
+          console.log("  To apply automatically, set SUPABASE_ACCESS_TOKEN:");
+          console.log("    npx supabase login");
+          console.log("    Then re-run: npx gitmem-mcp activate");
+          console.log("");
+          console.log("  Or apply manually:");
+          console.log("    npx gitmem-mcp setup | pbcopy   (macOS — copies SQL to clipboard)");
+          console.log("    npx gitmem-mcp setup            (prints SQL to paste manually)");
+          console.log("    Then: Supabase Dashboard → SQL Editor → Paste → Run");
+        }
       } else {
         console.log("  ✓ Schema verified (all tables present)");
       }

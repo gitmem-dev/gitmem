@@ -23,6 +23,7 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import { getGitmemDir, getInstallId } from "../services/gitmem-dir.js";
 import { validateLicense, clearLicenseCache } from "../services/license.js";
+import { hasLocalData, migrateLocalToSupabase, archiveLocalData } from "./migrate-local.js";
 
 function createReadline(): readline.Interface {
   return readline.createInterface({
@@ -534,6 +535,64 @@ export async function main(args: string[]): Promise<void> {
 
   // Clear any stale license cache
   clearLicenseCache();
+
+  // Step 7: Migrate local data to Supabase (free → pro upgrade)
+  if (supabaseUrl && supabaseKey && missingTables.length === 0 && hasLocalData(gitmemDir)) {
+    console.log("Migrating Local Data");
+    console.log("  Found existing local data from free tier...");
+    console.log("");
+
+    const migrationResult = await migrateLocalToSupabase({
+      supabaseUrl,
+      supabaseKey,
+      gitmemDir,
+      onProgress: (msg) => console.log(msg),
+    });
+
+    // Report results
+    const collections = Object.keys(migrationResult.migrated);
+    let totalMigrated = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+
+    for (const col of collections) {
+      const m = migrationResult.migrated[col];
+      const s = migrationResult.skipped[col];
+      const e = migrationResult.errors[col]?.length || 0;
+      totalMigrated += m;
+      totalSkipped += s;
+      totalErrors += e;
+      if (m > 0) {
+        console.log(`  ✓ ${col}: ${m} records migrated${s > 0 ? ` (${s} skipped)` : ""}`);
+      }
+    }
+
+    // Show errors if any
+    if (totalErrors > 0) {
+      console.log("");
+      for (const col of collections) {
+        for (const err of migrationResult.errors[col] || []) {
+          console.log(`  ⚠ ${col}: ${err}`);
+        }
+      }
+    }
+
+    if (totalMigrated > 0) {
+      console.log("");
+      console.log(`  ✓ Migrated ${totalMigrated} records to Supabase`);
+
+      // Archive local files so they aren't re-read
+      const archived = archiveLocalData(gitmemDir);
+      if (archived.length > 0) {
+        console.log(`  ✓ Local files archived (${archived.join(", ")}.json → .pre-migration)`);
+      }
+    } else if (migrationResult.hasLocalData) {
+      console.log("  ⚠ Migration encountered errors. Local data preserved.");
+      console.log("    Re-run activate after resolving issues.");
+    }
+
+    console.log("");
+  }
 
   // Summary
   console.log("");

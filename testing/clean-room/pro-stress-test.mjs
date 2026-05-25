@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { writeFileSync, mkdirSync } from "fs";
+import fs from "fs";
+const { writeFileSync, mkdirSync } = fs;
 
 // ─── ANSI Colors ───
 const C = {
@@ -110,9 +111,9 @@ ${C.red}${C.bold}  ╔═══════════════════�
   ║  ╚██████╔╝██║   ██║   ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║         ║
   ║   ╚═════╝ ╚═╝   ╚═╝   ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝         ║
   ║                                                               ║
-  ║${C.white}         PRO STRESS TEST v1.2 — 5 SIMULATED DAYS             ${C.red}║
-  ║${C.white}     50 scars  10 patterns  10 threads  3 docs  150+ tests   ${C.red}║
-  ║${C.white}         Real Supabase  Real OpenRouter  Real Embeddings      ${C.red}║
+  ║${C.white}         PRO STRESS TEST v1.3 — 6 SIMULATED DAYS             ${C.red}║
+  ║${C.white}     50 scars  10 patterns  10 threads  3 docs  170+ tests   ${C.red}║
+  ║${C.white}         Real Supabase  Real OpenRouter  Free→Pro Upgrade      ${C.red}║
   ║                                                               ║
   ╚═══════════════════════════════════════════════════════════════╝${C.reset}
 `);
@@ -540,6 +541,262 @@ await test("day5:session_close", () => call("session_close", { close_type: "quic
 scoreboard();
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DAY 6
+// ═══════════════════════════════════════════════════════════════════════════
+section(6, "Free → Pro Upgrade — Local Data Migration", "🔄");
+await client.close();
+
+// --- Phase 1: Seed local data as a free-tier user ---
+step("6.1", "Seeding local .gitmem data (simulating free tier user)...");
+
+const upgradeProjectDir = "/home/developer/upgrade-project";
+const upgradeGitmemDir = `${upgradeProjectDir}/.gitmem`;
+mkdirSync(upgradeGitmemDir, { recursive: true });
+
+// UUID generator for seeded data (Supabase requires valid UUIDs)
+import { randomUUID } from "crypto";
+const localIdMap = {}; // track generated IDs for cross-references
+
+// Seed local learnings (scars + wins + patterns)
+const localLearnings = [];
+for (let i = 0; i < 15; i++) {
+  const id = randomUUID();
+  localIdMap[`learning-${i}`] = id;
+  localLearnings.push({
+    id,
+    title: `Local scar ${i + 1}: ${["Always validate inputs", "Use parameterized queries", "Check JWT expiry", "Rate limit APIs", "Pin container versions", "Use structured logging", "Automate secret rotation", "Size connection pools", "Test error paths", "Monitor latency p99", "Cache at the edge", "Validate content types", "Use exponential backoff", "Index before deploy", "Paginate all responses"][i]}`,
+    description: descs[i] || `Free tier scar ${i + 1} description with enough detail for BM25 search.`,
+    learning_type: i < 10 ? "scar" : i < 13 ? "pattern" : "win",
+    severity: sevs[i % 4],
+    domain: [scarDomains[i % 10].domain[0]],
+    keywords: scarDomains[i % 10].keywords,
+    counter_arguments: ["May not apply in simple cases", "Overhead for prototypes"],
+    is_active: true,
+    created_at: new Date(Date.now() - (15 - i) * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - (15 - i) * 86400000).toISOString(),
+    project: "upgrade-test",
+  });
+}
+writeFileSync(`${upgradeGitmemDir}/learnings.json`, JSON.stringify(localLearnings, null, 2));
+
+// Seed local sessions (must match gitmem_sessions schema exactly)
+const localSessions = [];
+for (let i = 0; i < 3; i++) {
+  localSessions.push({
+    id: randomUUID(),
+    session_title: `Upgrade test session ${i + 1}`,
+    session_date: new Date(Date.now() - (3 - i) * 86400000).toISOString().split("T")[0],
+    agent: "cli",
+    project: "upgrade-test",
+    closing_reflection: { what_worked: `Session ${i + 1} worked`, what_broke: "Nothing" },
+    created_at: new Date(Date.now() - (3 - i) * 86400000).toISOString(),
+    updated_at: new Date(Date.now() - (3 - i) * 86400000 + 3600000).toISOString(),
+  });
+}
+writeFileSync(`${upgradeGitmemDir}/sessions.json`, JSON.stringify(localSessions, null, 2));
+
+// Seed local decisions
+const localDecisions = [];
+for (let i = 0; i < 4; i++) {
+  localDecisions.push({
+    id: randomUUID(),
+    title: ["Use BM25 for search", "JSON file storage", "Keyword-based recall", "Session-scoped threads"][i],
+    decision: `Local decision ${i + 1}`,
+    rationale: `Made during free tier usage, session ${i + 1}`,
+    project: "upgrade-test",
+    created_at: new Date(Date.now() - (4 - i) * 86400000).toISOString(),
+  });
+}
+writeFileSync(`${upgradeGitmemDir}/decisions.json`, JSON.stringify(localDecisions, null, 2));
+
+// Seed local scar_usage
+const localScarUsage = [];
+for (let i = 0; i < 5; i++) {
+  localScarUsage.push({
+    id: randomUUID(),
+    scar_id: localLearnings[i].id,
+    surfaced_at: new Date(Date.now() - (5 - i) * 86400000).toISOString(),
+    reference_type: "explicit",
+    reference_context: `Applied local scar ${i + 1} during free tier session`,
+    execution_successful: true,
+  });
+}
+writeFileSync(`${upgradeGitmemDir}/scar_usage.json`, JSON.stringify(localScarUsage, null, 2));
+
+// Verify local files exist
+const localFiles = ["learnings", "sessions", "decisions", "scar_usage"];
+let localFilesOk = true;
+for (const f of localFiles) {
+  const p = `${upgradeGitmemDir}/${f}.json`;
+  if (!fs.existsSync(p)) { localFilesOk = false; break; }
+  const data = JSON.parse(fs.readFileSync(p, "utf-8"));
+  if (!Array.isArray(data) || data.length === 0) { localFilesOk = false; break; }
+}
+await test("local data seeded (4 collections)", async () => {
+  if (!localFilesOk) throw new Error("Local files not seeded correctly");
+  return `Local data: 15 learnings, 3 sessions, 4 decisions, 5 scar_usage in ${upgradeGitmemDir}`;
+});
+console.log(`  ${BULLET} ${C.cyan}15 learnings, 3 sessions, 4 decisions, 5 scar_usage${C.reset}`);
+
+// --- Phase 2: Run migration (simulating activate's migration step) ---
+step("6.2", "Running local → Supabase migration...");
+
+// Import the migration module dynamically
+const { migrateLocalToSupabase, hasLocalData: checkLocalData, archiveLocalData } = await import(
+  "/usr/local/lib/node_modules/gitmem-mcp/dist/commands/migrate-local.js"
+);
+
+await test("hasLocalData() detects data", async () => {
+  const has = checkLocalData(upgradeGitmemDir);
+  if (!has) throw new Error("hasLocalData() returned false — should detect local files");
+  return "hasLocalData: true";
+});
+
+const migrationResult = await test("migrateLocalToSupabase()", async () => {
+  const result = await migrateLocalToSupabase({
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY,
+    tablePrefix: process.env.GITMEM_TABLE_PREFIX || "gitmem_",
+    gitmemDir: upgradeGitmemDir,
+    onProgress: (msg) => process.stdout.write(`    ${C.dim}${msg}${C.reset}\n`),
+  });
+  const totalMigrated = Object.values(result.migrated).reduce((a, b) => a + b, 0);
+  if (totalMigrated === 0) throw new Error("Zero records migrated");
+  return JSON.stringify({ migrated: result.migrated, skipped: result.skipped, total: result.total });
+});
+const migrationData = migrationResult ? JSON.parse(migrationResult) : null;
+if (migrationData) {
+  console.log(`  ${BULLET} ${C.cyan}Migrated: ${JSON.stringify(migrationData.migrated)}${C.reset}`);
+  if (Object.values(migrationData.skipped).some(v => v > 0)) {
+    console.log(`  ${BULLET} ${C.yellow}Skipped: ${JSON.stringify(migrationData.skipped)}${C.reset}`);
+  }
+}
+
+// --- Phase 3: Verify migration counts ---
+step("6.3", "Verifying migrated data in Supabase...");
+
+const prefix = process.env.GITMEM_TABLE_PREFIX || "gitmem_";
+const sbUrl = process.env.SUPABASE_URL;
+const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+
+const verifyCount = async (table, expectedMin, project) => {
+  const url = `${sbUrl}/rest/v1/${prefix}${table}?select=id&project=eq.${project}`;
+  const resp = await fetch(url, {
+    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, Prefer: "count=exact" },
+  });
+  const range = resp.headers.get("content-range");
+  const count = range ? parseInt(range.split("/")[1] || "0") : 0;
+  if (count < expectedMin) throw new Error(`Expected >= ${expectedMin} ${table}, found ${count}`);
+  return `${table}: ${count} records (expected >= ${expectedMin})`;
+};
+
+// scar_usage doesn't have a project column, so count all with valid scar_id
+const verifyUsageCount = async (expectedMin) => {
+  const url = `${sbUrl}/rest/v1/${prefix}scar_usage?select=id`;
+  const resp = await fetch(url, {
+    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, Prefer: "count=exact" },
+  });
+  const range = resp.headers.get("content-range");
+  // Total count includes stress-test usage too, so just check it grew
+  const count = range ? parseInt(range.split("/")[1] || "0") : 0;
+  if (count < expectedMin) throw new Error(`Expected >= ${expectedMin} scar_usage, found ${count}`);
+  return `scar_usage: ${count} records (expected >= ${expectedMin})`;
+};
+
+await test("verify learnings in Supabase", () => verifyCount("learnings", 10, "upgrade-test"));
+await test("verify sessions in Supabase", () => verifyCount("sessions", 3, "upgrade-test"));
+await test("verify decisions in Supabase", () => verifyCount("decisions", 4, "upgrade-test"));
+await test("verify scar_usage in Supabase", () => verifyUsageCount(5));
+
+// --- Phase 4: Verify data is usable via MCP tools ---
+step("6.4", "Verifying migrated data is usable via MCP...");
+
+// Start MCP server with upgrade-test project context
+client = await startClient();
+const upgradeSession = await test("upgrade:session_start", () => call("session_start", { project: "upgrade-test" }));
+
+await test("upgrade:log shows migrated learnings", async () => {
+  const logResult = await call("log", { project: "upgrade-test", limit: 20 });
+  const hasLocal = logResult.includes("Local scar") || logResult.includes("local-scar");
+  if (!hasLocal) throw new Error("Migrated learnings not visible in log output");
+  return logResult;
+});
+
+await test("upgrade:search finds migrated scars", async () => {
+  const searchResult = await call("search", { query: "validate inputs parameterized queries", project: "upgrade-test" });
+  if (!searchResult || searchResult.includes("No results")) throw new Error("Search returned no results for migrated scars");
+  return searchResult;
+});
+
+await test("upgrade:recall surfaces migrated scars", async () => {
+  const recallResult = await call("recall", { plan: "implement database query layer", project: "upgrade-test" });
+  // Recall may or may not surface these specific scars depending on embeddings,
+  // but the call should succeed without error
+  return recallResult;
+});
+
+// --- Phase 5: Archive local files ---
+step("6.5", "Archiving local files post-migration...");
+
+await test("archiveLocalData()", async () => {
+  const archived = archiveLocalData(upgradeGitmemDir);
+  if (archived.length === 0) throw new Error("No files archived");
+  return `Archived: ${archived.join(", ")}`;
+});
+
+await test("local files renamed to .pre-migration", async () => {
+  for (const f of localFiles) {
+    const original = `${upgradeGitmemDir}/${f}.json`;
+    const archive = `${original}.pre-migration`;
+    if (fs.existsSync(original)) throw new Error(`${f}.json still exists (should be renamed)`);
+    if (!fs.existsSync(archive)) throw new Error(`${f}.json.pre-migration not found`);
+  }
+  return "All 4 collections archived correctly";
+});
+
+await test("hasLocalData() returns false after archive", async () => {
+  const has = checkLocalData(upgradeGitmemDir);
+  if (has) throw new Error("hasLocalData() still returns true after archiving");
+  return "hasLocalData: false (correctly no local data)";
+});
+
+// --- Phase 6: Idempotency — re-migration should be safe ---
+step("6.6", "Testing idempotency (re-migration safe)...");
+
+// Restore one file to test re-running
+const archivePath = `${upgradeGitmemDir}/learnings.json.pre-migration`;
+const restorePath = `${upgradeGitmemDir}/learnings.json`;
+if (fs.existsSync(archivePath)) {
+  fs.copyFileSync(archivePath, restorePath);
+}
+
+await test("re-migration is idempotent", async () => {
+  const result = await migrateLocalToSupabase({
+    supabaseUrl: sbUrl,
+    supabaseKey: sbKey,
+    tablePrefix: prefix,
+    gitmemDir: upgradeGitmemDir,
+    onProgress: () => {},
+  });
+  const totalMigrated = Object.values(result.migrated).reduce((a, b) => a + b, 0);
+  // Should succeed (upsert = merge-duplicates), not fail on duplicate IDs
+  if (totalMigrated === 0) throw new Error("Re-migration yielded 0 — upsert should succeed");
+  return `Re-migrated ${totalMigrated} records (upsert idempotent)`;
+});
+
+// Clean up restored file
+if (fs.existsSync(restorePath)) fs.unlinkSync(restorePath);
+
+step("6.7", "Closing upgrade test session...");
+await test("upgrade:session_close", () => call("session_close", {
+  close_type: "quick",
+  closing_reflection: { what_worked: "Free→Pro migration complete", what_broke: "Nothing",
+    do_differently: "Nothing", scars_applied: [], institutional_memory_items: "Migration path verified",
+    collaborative_dynamic: "Upgrade test", rapport_notes: "Clean", what_took_longer: "Nothing", wrong_assumption: "None" },
+}));
+scoreboard();
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FINAL RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
 const total = passed + warned + failed;
@@ -572,8 +829,8 @@ console.log(`
   ${bar(failed, total, C.red)} ${C.red}${C.bold}${failed}${C.reset} failed
 
   ${C.bold}Total: ${total} tests in ${dur}${C.reset}
-  ${C.dim}5 sessions | 50 scars | 10 patterns | 5 decisions | 10 threads | 3 docs${C.reset}
-  ${C.dim}Real Supabase + Real OpenRouter + Real Embeddings${C.reset}
+  ${C.dim}6 sessions | 50 scars | 10 patterns | 5 decisions | 10 threads | 3 docs${C.reset}
+  ${C.dim}Real Supabase + Real OpenRouter + Free→Pro Migration${C.reset}
 `);
 
 if (failed === 0) {

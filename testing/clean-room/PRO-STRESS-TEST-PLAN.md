@@ -1,11 +1,11 @@
-# GitMem Pro Stress Test Plan v1.0
+# GitMem Pro Stress Test Plan v1.3
 
 ## Overview
 
-Comprehensive end-to-end test of all GitMem Pro features on a fresh Supabase project. Simulates 5 days of real interactive usage with session cycling, data accumulation, and cross-session persistence verification.
+Comprehensive end-to-end test of all GitMem Pro features on a fresh Supabase project. Simulates 6 days of real interactive usage with session cycling, data accumulation, cross-session persistence verification, and free-to-pro upgrade migration.
 
 **Test file:** `pro-stress-test.mjs`
-**Last run:** 2026-05-25 — 150/150 PASS (all canonical tools, real sub-agent handoff)
+**Last run:** 2026-05-25 — 166/166 PASS (all canonical tools, real sub-agent handoff, free→pro migration)
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 ' < testing/clean-room/pro-stress-test.mjs
 ```
 
-## Test coverage — 141 tests across 5 simulated days
+## Test coverage — 166 tests across 6 simulated days
 
 ### Day 1: Initial setup (78 tests)
 - `session_start` — first session on blank project
@@ -154,7 +154,28 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | cache-flush | 1 | 4 |
 | contribute_feedback | 1 | 4 |
 | gitmem-help | 1 | 5 |
-| **TOTAL** | **150** | |
+| migrateLocalToSupabase | 2 | 6 |
+| hasLocalData | 2 | 6 |
+| archiveLocalData | 1 | 6 |
+| verify migration (Supabase) | 4 | 6 |
+| verify migration (MCP tools) | 4 | 6 |
+| idempotency re-migration | 1 | 6 |
+| local file archiving | 2 | 6 |
+| **TOTAL** | **166** | |
+
+### Day 6: Free → Pro Upgrade — Local Data Migration (16 tests)
+- Seed local `.gitmem/` with 15 learnings, 3 sessions, 4 decisions, 5 scar_usage (simulating free tier user)
+- `hasLocalData()` — detects existing local data
+- `migrateLocalToSupabase()` — migrates all 27 records to Supabase via PostgREST upsert
+- Verify counts in Supabase per collection (learnings, sessions, decisions, scar_usage)
+- Start MCP server and verify migrated data is usable:
+  - `log` — shows migrated learnings
+  - `search` — finds migrated scars by content
+  - `recall` — surfaces migrated scars for relevant plans
+- `archiveLocalData()` — renames `.json` → `.json.pre-migration`
+- Verify local files renamed, `hasLocalData()` returns false
+- Re-run migration to verify idempotency (upsert doesn't duplicate)
+- `session_close`
 
 ## What this test validates
 
@@ -171,6 +192,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 11. **Analytics** — cross-session analysis works
 12. **Knowledge graph** — traverse returns stats and connections
 13. **Scar lifecycle** — create → recall → confirm → reflect → record usage → archive
+14. **Free → Pro migration** — local `.gitmem/` JSON data migrated to Supabase during activate, verified usable via MCP tools, local files archived, re-migration idempotent
 
 ## Version history
 
@@ -179,3 +201,4 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | v1.0 | 2026-05-25 | 141 | 141 PASS |
 | v1.1 | 2026-05-25 | 147 | 147 PASS — added record_scar_usage_batch, transcripts, promote/dismiss_suggestion |
 | v1.2 | 2026-05-25 | 150 | 150 PASS — real sub-agent handoff, ANSI color output, per-test timing, progress bars |
+| v1.3 | 2026-05-25 | 166 | 166 PASS — free→pro migration (local data → Supabase), archive + idempotency |

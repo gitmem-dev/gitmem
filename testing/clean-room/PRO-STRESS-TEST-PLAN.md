@@ -5,7 +5,7 @@
 Comprehensive end-to-end test of all GitMem Pro features on a fresh Supabase project. Simulates 5 days of real interactive usage with session cycling, data accumulation, and cross-session persistence verification.
 
 **Test file:** `pro-stress-test.mjs`
-**Last run:** 2026-05-25 — 147/147 PASS (all canonical tools covered)
+**Last run:** 2026-05-25 — 150/150 PASS (all canonical tools, real sub-agent handoff)
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 - `session_refresh` — re-surface context mid-session
 - `session_close`
 
-### Day 3: Docs, search, graph, analytics, transcripts (26 tests)
+### Day 3: Docs, search, graph, sub-agent handoff, transcripts (27 tests)
 - `session_start` — loads 2 days of history
 - Write 3 markdown docs (architecture, deployment, API reference — 1000+ words total)
 - `index_docs` — embed and index the docs
@@ -77,7 +77,13 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 - 2x `graph_traverse` — stats and connected_to lenses
 - `analyze` — session analytics summary
 - 3x `prepare_context` — compact, gate, and full sub-agent briefings
-- `absorb_observations` — capture sub-agent findings (4 observations)
+- **Real sub-agent handoff:**
+  - Spawn second MCP server instance as sub-agent
+  - Sub-agent runs `session_start` with same project
+  - Sub-agent runs `recall` on auth middleware (finds scars from day 1)
+  - Sub-agent runs `search` for JWT token patterns
+  - Sub-agent session closed
+- `absorb_observations` — absorb 4 findings from sub-agent (2 scar candidates, 2 info)
 - `save_transcript` — save session conversation
 - `get_transcript` — retrieve saved transcript
 - `search_transcripts` — semantic search over transcript chunks
@@ -134,6 +140,9 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | graph_traverse | 2 | 3 |
 | analyze | 2 | 3, 5 |
 | prepare_context | 3 | 3 |
+| sub-agent:session_start | 1 | 3 |
+| sub-agent:recall | 1 | 3 |
+| sub-agent:search | 1 | 3 |
 | absorb_observations | 1 | 3 |
 | save_transcript | 1 | 3 |
 | get_transcript | 1 | 3 |
@@ -145,7 +154,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | cache-flush | 1 | 4 |
 | contribute_feedback | 1 | 4 |
 | gitmem-help | 1 | 5 |
-| **TOTAL** | **147** | |
+| **TOTAL** | **150** | |
 
 ## What this test validates
 
@@ -157,7 +166,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 6. **Thread deduplication** — similar threads detected and deduplicated
 7. **Document indexing** — markdown files indexed and searchable
 8. **Session continuity** — each new session loads previous context
-9. **Multi-agent tools** — prepare_context generates briefings, absorb_observations captures findings
+9. **Multi-agent handoff** — prepare_context generates briefing, second MCP server spawned as sub-agent, sub-agent runs recall + search, findings absorbed back via absorb_observations
 10. **Cache management** — status → flush → verify reload
 11. **Analytics** — cross-session analysis works
 12. **Knowledge graph** — traverse returns stats and connections
@@ -169,3 +178,4 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 |---------|------|-------|--------|
 | v1.0 | 2026-05-25 | 141 | 141 PASS |
 | v1.1 | 2026-05-25 | 147 | 147 PASS — added record_scar_usage_batch, transcripts, promote/dismiss_suggestion |
+| v1.2 | 2026-05-25 | 150 | 150 PASS — real sub-agent handoff, ANSI color output, per-test timing, progress bars |

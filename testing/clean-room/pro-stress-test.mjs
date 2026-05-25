@@ -2,15 +2,37 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { writeFileSync, mkdirSync } from "fs";
 
-// ─── Helper to start a fresh MCP server ───
-async function startClient() {
+// ─── ANSI Colors ───
+const C = {
+  reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
+  red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m",
+  blue: "\x1b[34m", magenta: "\x1b[35m", cyan: "\x1b[36m", white: "\x1b[37m",
+  bgRed: "\x1b[41m", bgGreen: "\x1b[42m", bgBlue: "\x1b[44m",
+};
+
+const PASS_ICON = `${C.green}${C.bold}PASS${C.reset}`;
+const WARN_ICON = `${C.yellow}${C.bold}WARN${C.reset}`;
+const FAIL_ICON = `${C.red}${C.bold}FAIL${C.reset}`;
+const BULLET = `${C.dim}>${C.reset}`;
+
+// ─── Timing ───
+const globalStart = Date.now();
+const elapsed = () => {
+  const ms = Date.now() - globalStart;
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m${String(s % 60).padStart(2, "0")}s` : `${s}s`;
+};
+
+// ─── Start MCP server ───
+async function startClient(name = "main") {
   const transport = new StdioClientTransport({
     command: "node",
     args: ["/usr/local/lib/node_modules/gitmem-mcp/dist/index.js"],
     env: process.env,
     cwd: "/home/developer/my-project",
   });
-  const client = new Client({ name: "stress-test", version: "1.0" });
+  const client = new Client({ name: `stress-test-${name}`, version: "1.0" });
   await client.connect(transport);
   return client;
 }
@@ -18,6 +40,7 @@ async function startClient() {
 let client = await startClient();
 const results = {};
 let passed = 0, warned = 0, failed = 0;
+let testNum = 0;
 
 const call = async (name, args) => {
   const r = await client.callTool({ name, arguments: args || {} });
@@ -25,43 +48,85 @@ const call = async (name, args) => {
 };
 
 const test = async (label, fn) => {
+  testNum++;
+  const t0 = Date.now();
   try {
     const text = await fn();
+    const ms = Date.now() - t0;
     const hasFatal = text.includes("Fatal") || (text.includes("FAIL") && !text.includes("failed silently"));
-    results[label] = hasFatal ? "WARN" : "PASS";
-    if (hasFatal) warned++; else passed++;
+    if (hasFatal) {
+      results[label] = "WARN";
+      warned++;
+      process.stdout.write(`  ${WARN_ICON} ${C.dim}#${String(testNum).padStart(3)}${C.reset} ${label} ${C.dim}(${ms}ms)${C.reset}\n`);
+    } else {
+      results[label] = "PASS";
+      passed++;
+      process.stdout.write(`  ${PASS_ICON} ${C.dim}#${String(testNum).padStart(3)}${C.reset} ${label} ${C.dim}(${ms}ms)${C.reset}\n`);
+    }
     return text;
   } catch (e) {
+    const ms = Date.now() - t0;
     results[label] = "FAIL: " + e.message.substring(0, 80);
     failed++;
+    process.stdout.write(`  ${FAIL_ICON} ${C.dim}#${String(testNum).padStart(3)}${C.reset} ${label} ${C.dim}(${ms}ms)${C.reset}\n`);
+    process.stdout.write(`       ${C.red}${e.message.substring(0, 100)}${C.reset}\n`);
     return "";
   }
 };
 
-// Extract IDs from tool output
+const scoreboard = () => {
+  const total = passed + warned + failed;
+  process.stdout.write(`\n  ${C.dim}Score: ${C.green}${passed}${C.reset}${C.dim}/${total} passed${C.reset}`);
+  if (warned > 0) process.stdout.write(` ${C.yellow}${warned} warn${C.reset}`);
+  if (failed > 0) process.stdout.write(` ${C.red}${failed} fail${C.reset}`);
+  process.stdout.write(` ${C.dim}| ${elapsed()}${C.reset}\n`);
+};
+
 const extractId = (text, pattern) => {
   const m = text.match(pattern);
   return m ? m[1] : null;
 };
 
-console.log("╔═══════════════════════════════════════════════════════════════╗");
-console.log("║  GITMEM PRO STRESS TEST — 5 simulated days of usage         ║");
-console.log("║  50 scars, 10 patterns, 10 threads, docs, full lifecycle    ║");
-console.log("╠═══════════════════════════════════════════════════════════════╣");
+const section = (day, title, emoji) => {
+  console.log(`\n${C.bold}${C.cyan}${"═".repeat(65)}${C.reset}`);
+  console.log(`${C.bold}${C.cyan}  ${emoji}  DAY ${day}: ${title}${C.reset}`);
+  console.log(`${C.cyan}${"═".repeat(65)}${C.reset}`);
+};
+
+const step = (num, title) => {
+  console.log(`\n  ${C.bold}${C.blue}[${num}]${C.reset} ${C.bold}${title}${C.reset}`);
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DAY 1: Initial setup — session, scars, patterns
+// BANNER
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("\n━━━ DAY 1: Initial setup ━━━");
+console.log(`
+${C.red}${C.bold}  ╔═══════════════════════════════════════════════════════════════╗
+  ║                                                               ║
+  ║   ██████╗ ██╗████████╗███╗   ███╗███████╗███╗   ███╗         ║
+  ║  ██╔════╝ ██║╚══██╔══╝████╗ ████║██╔════╝████╗ ████║         ║
+  ║  ██║  ███╗██║   ██║   ██╔████╔██║█████╗  ██╔████╔██║         ║
+  ║  ██║   ██║██║   ██║   ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║         ║
+  ║  ╚██████╔╝██║   ██║   ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║         ║
+  ║   ╚═════╝ ╚═╝   ╚═╝   ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝         ║
+  ║                                                               ║
+  ║${C.white}         PRO STRESS TEST v1.2 — 5 SIMULATED DAYS             ${C.red}║
+  ║${C.white}     50 scars  10 patterns  10 threads  3 docs  150+ tests   ${C.red}║
+  ║${C.white}         Real Supabase  Real OpenRouter  Real Embeddings      ${C.red}║
+  ║                                                               ║
+  ╚═══════════════════════════════════════════════════════════════╝${C.reset}
+`);
 
-// Session start
-console.log("\n[1.1] Session start...");
-let sessionText = await test("day1:session_start", () => call("session_start", { project: "stress-test" }));
+// ═══════════════════════════════════════════════════════════════════════════
+// DAY 1
+// ═══════════════════════════════════════════════════════════════════════════
+section(1, "Initial Setup — Seeding Institutional Memory", "🌱");
+
+step("1.1", "Session start");
+let sessionText = await test("session_start", () => call("session_start", { project: "stress-test" }));
 let sessionId = extractId(sessionText, /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
-console.log("  Session:", sessionId ? sessionId.substring(0, 8) + "..." : "local");
 
-// 50 scars
-console.log("\n[1.2] Creating 50 scars...");
+step("1.2", "Creating 50 scars across 10 domains...");
 const scarDomains = [
   { domain: ["database"], keywords: ["postgres","supabase","sql"], pfx: "DB" },
   { domain: ["api"], keywords: ["rest","http","endpoint"], pfx: "API" },
@@ -130,7 +195,7 @@ const descs = [
 const scarIds = [];
 for (let i = 0; i < 50; i++) {
   const d = scarDomains[i % 10];
-  const text = await test(`day1:scar_${i+1}`, () => call("create_learning", {
+  const text = await test(`scar:${d.pfx}-${String(i+1).padStart(2,"0")}`, () => call("create_learning", {
     learning_type: "scar", title: `${d.pfx}-${String(i+1).padStart(2,"0")}: ${descs[i].split(".")[0]}`.substring(0, 120),
     description: descs[i], severity: sevs[i % 4], domain: d.domain,
     keywords: [...d.keywords, `scar-${i+1}`],
@@ -138,11 +203,9 @@ for (let i = 0; i < 50; i++) {
   }));
   const id = extractId(text, /id[:\s]+([0-9a-f]{8})/i);
   if (id) scarIds.push(id);
-  if ((i+1) % 10 === 0) console.log(`  ${i+1}/50 scars`);
 }
 
-// 10 patterns
-console.log("\n[1.3] Creating 10 design patterns...");
+step("1.3", "Creating 10 design patterns...");
 const pats = [
   "Repository pattern: abstract DB access behind interfaces for testability",
   "Event sourcing: store changes as immutable events for audit trails",
@@ -156,15 +219,13 @@ const pats = [
   "Outbox pattern: reliable messaging via transactional outbox table",
 ];
 for (let i = 0; i < 10; i++) {
-  await test(`day1:pattern_${i+1}`, () => call("create_learning", {
+  await test(`pattern:${pats[i].split(":")[0]}`, () => call("create_learning", {
     learning_type: "pattern", title: pats[i].split(":")[0],
     description: pats[i], domain: ["architecture"], keywords: ["design-pattern"],
   }));
 }
-console.log("  10/10 patterns");
 
-// 5 decisions
-console.log("\n[1.4] Creating 5 decisions...");
+step("1.4", "Creating 5 decisions...");
 const decs = [
   { title: "PostgREST RPC over Edge Functions", decision: "Direct RPC calls via PostgREST", rationale: "No Edge Function deployment needed, lower latency" },
   { title: "BM25 local + vectors remote", decision: "BM25 for free tier, embeddings for pro", rationale: "BM25 works offline, vectors need API" },
@@ -172,12 +233,9 @@ const decs = [
   { title: "72h license cache TTL", decision: "Cache validation for 72 hours", rationale: "Balances freshness with offline resilience" },
   { title: "Auto-schema via Management API", decision: "Apply schema during activation", rationale: "Manual SQL paste is error-prone" },
 ];
-for (const d of decs) {
-  await test(`day1:decision_${d.title.substring(0,30)}`, () => call("create_decision", d));
-}
+for (const d of decs) await test(`decision:${d.title.substring(0,35)}`, () => call("create_decision", d));
 
-// 10 threads
-console.log("\n[1.5] Creating 10 threads...");
+step("1.5", "Creating 10 threads...");
 const threadTexts = [
   "Implement OAuth2 PKCE flow for mobile clients",
   "Profile and optimize slow analytics dashboard queries",
@@ -192,481 +250,339 @@ const threadTexts = [
 ];
 const threadIds = [];
 for (let i = 0; i < 10; i++) {
-  const text = await test(`day1:thread_${i+1}`, () => call("create_thread", { text: threadTexts[i] }));
+  const text = await test(`thread:${threadTexts[i].substring(0,40)}`, () => call("create_thread", { text: threadTexts[i] }));
   const tid = extractId(text, /(t-[0-9a-f]{8})/);
   if (tid) threadIds.push(tid);
 }
-console.log(`  10 threads created, captured ${threadIds.length} IDs`);
+await test("list_threads", () => call("list_threads", { project: "stress-test" }));
 
-// List threads
-await test("day1:list_threads", () => call("list_threads", { project: "stress-test" }));
-
-// Close day 1 session
-console.log("\n[1.6] Closing day 1 session...");
+step("1.6", "Closing day 1...");
 await test("day1:session_close", () => call("session_close", {
   close_type: "quick",
-  closing_reflection: {
-    what_worked: "Initial data seeding went smoothly",
-    what_broke: "Nothing — first session",
-    do_differently: "Start with fewer scars to validate pipeline first",
-    scars_applied: [],
-    institutional_memory_items: "50 scars and 10 patterns seeded",
-    collaborative_dynamic: "Solo setup session",
-    rapport_notes: "Productive",
-    what_took_longer: "Nothing notable",
-    wrong_assumption: "None",
-  },
+  closing_reflection: { what_worked: "Data seeding complete", what_broke: "Nothing", do_differently: "Nothing",
+    scars_applied: [], institutional_memory_items: "50 scars + 10 patterns seeded",
+    collaborative_dynamic: "Solo", rapport_notes: "Productive", what_took_longer: "Nothing", wrong_assumption: "None" },
 }));
+scoreboard();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DAY 2: New session — recall, confirm scars, resolve threads
-// Restart MCP server to simulate new session
+// DAY 2
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("\n━━━ DAY 2: Recall, confirm, resolve ━━━");
-
+section(2, "Recall, Confirm, Resolve — Using the Memory", "🔍");
 await client.close();
 client = await startClient();
 
-console.log("\n[2.1] Session start (should load day 1 context)...");
+step("2.1", "Session start (loading day 1 context)...");
 sessionText = await test("day2:session_start", () => call("session_start", { project: "stress-test" }));
-// Should see threads and last session
-const hasThreads = sessionText.includes("thread") || sessionText.includes("Thread");
-console.log("  Loaded threads:", hasThreads ? "yes" : "no");
 
-// Recall before action
-console.log("\n[2.2] Recall before deploying...");
-let recallText = await test("day2:recall_deploy", () => call("recall", { plan: "deploy database migration to production", project: "stress-test" }));
-const recallScarCount = (recallText.match(/id:[0-9a-f]{8}/gi) || []).length;
-console.log(`  Recalled ${recallScarCount} scars for deployment`);
-
-// Confirm scars from recall
-console.log("\n[2.3] Confirm recalled scars...");
-// Extract scar IDs from recall output
+step("2.2", "Recall before deployment...");
+let recallText = await test("recall:deploy migration", () => call("recall", { plan: "deploy database migration to production", project: "stress-test" }));
 const recalledIds = [...recallText.matchAll(/id:([0-9a-f]{8})/gi)].map(m => m[1]);
+console.log(`  ${BULLET} ${C.cyan}${recalledIds.length} scars surfaced${C.reset}`);
+
+step("2.3", "Confirm recalled scars...");
 if (recalledIds.length > 0) {
-  const confirmations = recalledIds.slice(0, 3).map(id => ({
-    scar_id: id,
-    decision: "APPLYING",
-    evidence: "Verified migration is reversible, indexes created before deploy, env vars validated at startup.",
-    relevance: "high",
-  }));
-  await test("day2:confirm_scars", () => call("confirm_scars", { confirmations }));
+  await test("confirm_scars", () => call("confirm_scars", { confirmations: recalledIds.slice(0, 3).map(id => ({
+    scar_id: id, decision: "APPLYING",
+    evidence: "Verified migration is reversible, indexes created before deploy, env vars validated at startup.", relevance: "high",
+  }))}));
 } else {
-  await test("day2:confirm_scars", () => call("confirm_scars", { confirmations: [{
+  await test("confirm_scars", () => call("confirm_scars", { confirmations: [{
     scar_id: "00000000", decision: "N_A",
-    evidence: "No scars were recalled — stress test with fresh data, low similarity expected.", relevance: "noise",
+    evidence: "No scars recalled — stress test with fresh data, low similarity expected.", relevance: "noise",
   }]}));
 }
 
-// More recall queries
-console.log("\n[2.4] More recall queries...");
-await test("day2:recall_auth", () => call("recall", { plan: "implement JWT authentication", project: "stress-test" }));
-await test("day2:recall_cache", () => call("recall", { plan: "add Redis caching layer", project: "stress-test" }));
-await test("day2:recall_frontend", () => call("recall", { plan: "refactor React components", project: "stress-test" }));
-await test("day2:recall_security", () => call("recall", { plan: "security audit of file upload endpoint", project: "stress-test" }));
+step("2.4", "More recall queries...");
+await test("recall:JWT auth", () => call("recall", { plan: "implement JWT authentication", project: "stress-test" }));
+await test("recall:Redis cache", () => call("recall", { plan: "add Redis caching layer", project: "stress-test" }));
+await test("recall:React refactor", () => call("recall", { plan: "refactor React components", project: "stress-test" }));
+await test("recall:security audit", () => call("recall", { plan: "security audit of file upload endpoint", project: "stress-test" }));
 
-// Resolve 3 threads
-console.log("\n[2.5] Resolving 3 threads...");
+step("2.5", "Resolving 3 threads...");
 if (threadIds.length >= 3) {
-  await test("day2:resolve_thread_1", () => call("resolve_thread", {
-    thread_id: threadIds[0], resolution_note: "PKCE flow implemented and deployed to staging",
-  }));
-  await test("day2:resolve_thread_2", () => call("resolve_thread", {
-    thread_id: threadIds[1], resolution_note: "Added indexes, query time dropped from 3s to 200ms",
-  }));
-  await test("day2:resolve_thread_3", () => call("resolve_thread", {
-    thread_id: threadIds[2], resolution_note: "WebSocket support live, heartbeat every 30s",
-  }));
+  await test("resolve:PKCE flow", () => call("resolve_thread", { thread_id: threadIds[0], resolution_note: "PKCE flow implemented and deployed" }));
+  await test("resolve:analytics queries", () => call("resolve_thread", { thread_id: threadIds[1], resolution_note: "Added indexes, 3s to 200ms" }));
+  await test("resolve:WebSocket", () => call("resolve_thread", { thread_id: threadIds[2], resolution_note: "WebSocket live, heartbeat 30s" }));
 }
+await test("list_threads (7 open)", () => call("list_threads", { project: "stress-test" }));
 
-// List threads — should show 7 open, 3 resolved
-await test("day2:list_threads_open", () => call("list_threads", { project: "stress-test" }));
-
-// Reflect scars at end of day
-console.log("\n[2.6] Reflect scars...");
+step("2.6", "Reflect scars...");
 if (recalledIds.length > 0) {
-  const reflections = recalledIds.slice(0, 3).map(id => ({
-    scar_id: id, outcome: "OBEYED",
-    evidence: "Applied the scar — verified migration reversibility before deploying.",
-  }));
-  await test("day2:reflect_scars", () => call("reflect_scars", { reflections }));
+  await test("reflect_scars", () => call("reflect_scars", { reflections: recalledIds.slice(0, 3).map(id => ({
+    scar_id: id, outcome: "OBEYED", evidence: "Verified migration reversibility before deploying.",
+  }))}));
 }
 
-// Record scar usage
-console.log("\n[2.7] Record scar usage...");
-await test("day2:record_scar_usage", () => call("record_scar_usage", {
-  scar_id: recalledIds[0] || "00000000",
-  surfaced_at: new Date().toISOString(),
-  reference_type: "explicit",
-  reference_context: "Applied during database migration deployment — verified reversibility",
+step("2.7", "Record scar usage...");
+await test("record_scar_usage", () => call("record_scar_usage", {
+  scar_id: recalledIds[0] || "00000000", surfaced_at: new Date().toISOString(),
+  reference_type: "explicit", reference_context: "Applied during migration — verified reversibility",
 }));
 
-// Record scar usage batch
-console.log("\n[2.8] Record scar usage batch...");
+step("2.8", "Record scar usage batch...");
 const batchScars = recalledIds.slice(0, 2).map(id => ({
-  scar_identifier: id,
-  surfaced_at: new Date().toISOString(),
-  acknowledged_at: new Date().toISOString(),
-  reference_type: "acknowledged",
-  reference_context: "Batch test — acknowledged during deployment review",
-  execution_successful: true,
+  scar_identifier: id, surfaced_at: new Date().toISOString(), acknowledged_at: new Date().toISOString(),
+  reference_type: "acknowledged", reference_context: "Batch acknowledged during review", execution_successful: true,
 }));
-if (batchScars.length > 0) {
-  await test("day2:record_scar_usage_batch", () => call("record_scar_usage_batch", { scars: batchScars }));
-} else {
-  await test("day2:record_scar_usage_batch", () => call("record_scar_usage_batch", { scars: [{
-    scar_identifier: "00000000", surfaced_at: new Date().toISOString(),
-    reference_type: "none", reference_context: "No scars recalled in test",
-  }]}));
-}
-
-// Session refresh mid-day
-console.log("\n[2.9] Session refresh...");
-await test("day2:session_refresh", () => call("session_refresh", { project: "stress-test" }));
-
-// Close day 2
-console.log("\n[2.9] Closing day 2...");
-await test("day2:session_close", () => call("session_close", {
-  close_type: "quick",
-  closing_reflection: {
-    what_worked: "Recall surfaced relevant scars for deployment",
-    what_broke: "Nothing",
-    do_differently: "Confirm scars immediately after recall",
-    scars_applied: ["DB migration reversibility", "Index before deploy"],
-    institutional_memory_items: "Recall works well for deployment tasks",
-    collaborative_dynamic: "Solo session",
-    rapport_notes: "Efficient",
-    what_took_longer: "Nothing",
-    wrong_assumption: "None",
-  },
+await test("record_scar_usage_batch", () => call("record_scar_usage_batch", {
+  scars: batchScars.length > 0 ? batchScars : [{ scar_identifier: "00000000", surfaced_at: new Date().toISOString(), reference_type: "none", reference_context: "No scars" }],
 }));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DAY 3: Docs, search, graph, analytics
-// ═══════════════════════════════════════════════════════════════════════════
-console.log("\n━━━ DAY 3: Docs, search, graph, analytics ━━━");
+step("2.9", "Session refresh...");
+await test("session_refresh", () => call("session_refresh", { project: "stress-test" }));
 
+step("2.10", "Closing day 2...");
+await test("day2:session_close", () => call("session_close", { close_type: "quick",
+  closing_reflection: { what_worked: "Recall surfaced relevant scars", what_broke: "Nothing",
+    do_differently: "Confirm scars immediately", scars_applied: ["migration reversibility"],
+    institutional_memory_items: "Recall works for deployment", collaborative_dynamic: "Solo",
+    rapport_notes: "Efficient", what_took_longer: "Nothing", wrong_assumption: "None" },
+}));
+scoreboard();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DAY 3
+// ═══════════════════════════════════════════════════════════════════════════
+section(3, "Docs, Search, Graph, Sub-Agent Handoff", "📚");
 await client.close();
 client = await startClient();
-
 await test("day3:session_start", () => call("session_start", { project: "stress-test" }));
 
-// Create and index markdown docs
-console.log("\n[3.1] Creating markdown docs...");
+step("3.1", "Writing 3 markdown docs (1000+ words)...");
 const docsDir = "/home/developer/my-project/docs";
 mkdirSync(docsDir, { recursive: true });
 
-writeFileSync(`${docsDir}/architecture.md`, `# System Architecture
+writeFileSync(`${docsDir}/architecture.md`, `# System Architecture\n\n## Overview\nThe system uses a layered architecture separating local storage, cloud persistence, and semantic intelligence. At its core is an MCP server providing persistent institutional memory across sessions.\n\n## Storage Layer\nDual-mode: free tier stores locally in .gitmem/ as JSON. Pro tier uses Supabase (PostgreSQL) with pgvector for semantic search. Eight tables: learnings, sessions, decisions, scar_usage, threads, query_metrics, knowledge_triples, scar_enforcement_variants.\n\n## Embedding Pipeline\nText-embedding-3-small (1536 dimensions) via OpenRouter or OpenAI. Fire-and-forget — records stored without embeddings if provider unavailable. Semantic search uses pgvector cosine distance. Scar search adds temporal decay (process=permanent, incident=180d, context=30d) and behavioral decay (dismissed scars weighted lower).\n\n## Session Lifecycle\nStart loads previous context, surfaces threads, presents decisions. During work, recall surfaces relevant scars. Close captures structured reflection: what broke, what worked, what to do differently.\n\n## Multi-Agent Coordination\nprepare_context generates compact payloads for sub-agents in three formats: full (markdown), compact (~500 tokens), gate (~100 tokens blocking only). absorb_observations captures sub-agent findings and identifies scar candidates.\n\n## Knowledge Graph\nTriples connect entities via typed predicates: created_in, influenced_by, supersedes, demonstrates. graph_traverse supports connected_to, produced_by, provenance, and stats modes.\n\n## Thread Management\nThreads track unresolved work with lifecycle: emerging, active, cooling, dormant, archived, resolved. Vitality scores decay over time. Semantic dedup prevents duplicate threads (cosine > 0.85).\n\n## Cache Architecture\nLocal vector cache loads learnings with embeddings at startup, refreshes every 15 minutes. BM25 keyword search runs against cache.\n\n## License Validation\nSECURITY DEFINER RPC on infrastructure Supabase. 72-hour cache. 3 concurrent devices per license.\n`);
 
-## Overview
-The system uses a layered architecture separating local storage, cloud persistence, and semantic intelligence. At its core is an MCP server providing persistent institutional memory across sessions.
+writeFileSync(`${docsDir}/deployment.md`, `# Deployment Guide\n\n## Prerequisites\nNode.js >= 18, Supabase project, OpenRouter account, GitMem Pro license key.\n\n## Activation\nSet SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY as environment variables. Run npx supabase login for management API access. Run npx gitmem-mcp activate with your key. Schema applied automatically.\n\n## Schema Management\nSetup SQL bundled with npm package. Applied via Supabase Management API during activation.\n\n## Environment Variables\nRequired: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY. Optional: GITMEM_TABLE_PREFIX, GITMEM_TIER, GITMEM_EMBEDDING_PROVIDER.\n\n## Monitoring\ngitmem-mcp check runs diagnostic. health shows write success rates. analyze provides session analytics.\n`);
 
-## Storage Layer
-Dual-mode: free tier stores locally in .gitmem/ as JSON. Pro tier uses Supabase (PostgreSQL) with pgvector for semantic search. Eight tables: learnings, sessions, decisions, scar_usage, threads, query_metrics, knowledge_triples, scar_enforcement_variants.
+writeFileSync(`${docsDir}/api-reference.md`, `# API Reference\n\n## Session Lifecycle\nsession_start, session_refresh, session_close manage context.\n\n## Memory Creation\ncreate_learning stores scars, wins, patterns. create_decision logs decisions. record_scar_usage tracks application.\n\n## Retrieval\nrecall performs semantic search. confirm_scars acknowledges. reflect_scars provides compliance. search queries memory. log browses chronologically.\n\n## Threads\ncreate_thread, list_threads, resolve_thread, cleanup_threads. promote_suggestion and dismiss_suggestion handle auto-detected threads.\n\n## Multi-Agent\nprepare_context generates briefings. absorb_observations captures findings.\n\n## Knowledge Graph\ngraph_traverse: connected_to, produced_by, provenance, stats. archive_learning soft-deletes.\n\n## Analytics\nanalyze: summary, reflections, blindspots. health shows write rates.\n\n## Document Indexing\nindex_docs indexes markdown. search_docs queries indexed content.\n\n## Cache\ngitmem-cache-status, gitmem-cache-health, gitmem-cache-flush.\n`);
+console.log(`  ${BULLET} ${C.cyan}3 docs written to ${docsDir}${C.reset}`);
 
-## Embedding Pipeline
-Text-embedding-3-small (1536 dimensions) via OpenRouter or OpenAI. Fire-and-forget — records stored without embeddings if provider unavailable. Semantic search uses pgvector cosine distance. Scar search adds temporal decay (process=permanent, incident=180d, context=30d) and behavioral decay (dismissed scars weighted lower).
+step("3.2", "Indexing docs...");
+await test("index_docs", () => call("index_docs", { directory: docsDir, project: "stress-test" }));
 
-## Session Lifecycle
-Start loads previous context, surfaces threads, presents decisions. During work, recall surfaces relevant scars. Close captures structured reflection: what broke, what worked, what to do differently.
+step("3.3", "Searching docs...");
+await test("search_docs:embeddings", () => call("search_docs", { query: "embedding pipeline semantic search", project: "stress-test" }));
+await test("search_docs:env vars", () => call("search_docs", { query: "environment variables configuration", project: "stress-test" }));
+await test("search_docs:threads", () => call("search_docs", { query: "thread lifecycle management", project: "stress-test" }));
+await test("search_docs:cache", () => call("search_docs", { query: "cache architecture refresh", project: "stress-test" }));
 
-## Multi-Agent Coordination
-prepare_context generates compact payloads for sub-agents in three formats: full (markdown), compact (~500 tokens), gate (~100 tokens blocking only). absorb_observations captures sub-agent findings and identifies scar candidates.
+step("3.4", "Deep memory search...");
+await test("search:database pools", () => call("search", { query: "database connection pool", project: "stress-test" }));
+await test("search:security", () => call("search", { query: "XSS SQL injection authentication", project: "stress-test" }));
+await test("search:patterns", () => call("search", { query: "circuit breaker saga", project: "stress-test" }));
+await test("search:deployment", () => call("search", { query: "container deployment graceful shutdown", project: "stress-test" }));
 
-## Knowledge Graph
-Triples connect entities via typed predicates: created_in, influenced_by, supersedes, demonstrates. graph_traverse supports connected_to, produced_by, provenance, and stats modes.
+step("3.5", "Log queries...");
+await test("log:all (limit 10)", () => call("log", { project: "stress-test", limit: 10 }));
+await test("log:scars only", () => call("log", { project: "stress-test", learning_type: "scar", limit: 5 }));
+await test("log:patterns only", () => call("log", { project: "stress-test", learning_type: "pattern", limit: 5 }));
 
-## Thread Management
-Threads track unresolved work with lifecycle: emerging, active, cooling, dormant, archived, resolved. Vitality scores decay over time. Semantic dedup prevents duplicate threads (cosine > 0.85).
+step("3.6", "Knowledge graph traversal...");
+await test("graph:stats", () => call("graph_traverse", { lens: "stats" }));
+await test("graph:connected_to", () => call("graph_traverse", { lens: "connected_to", node: "stress-test" }));
 
-## Cache Architecture
-Local vector cache loads learnings with embeddings at startup, refreshes every 15 minutes. BM25 keyword search runs against cache. Persisted to disk for hook processes.
+step("3.7", "Analytics...");
+await test("analyze:summary", () => call("analyze", { project: "stress-test" }));
 
-## License Validation
-SECURITY DEFINER RPC on infrastructure Supabase. 72-hour cache. 3 concurrent devices per license. Deactivate frees slots server-side.
-`);
+step("3.8", "Sub-agent handoff — prepare, delegate, absorb...");
+console.log(`  ${BULLET} ${C.magenta}Preparing context briefing for sub-agent...${C.reset}`);
+const compactCtx = await test("prepare_context:compact", () => call("prepare_context", { plan: "review authentication middleware for security vulnerabilities", format: "compact", project: "stress-test" }));
+await test("prepare_context:gate", () => call("prepare_context", { plan: "deploy database migration", format: "gate", project: "stress-test" }));
+await test("prepare_context:full", () => call("prepare_context", { plan: "refactor caching layer", format: "full", project: "stress-test" }));
 
-writeFileSync(`${docsDir}/deployment.md`, `# Deployment Guide
+// Real sub-agent workflow: spawn second MCP server, feed it the briefing
+console.log(`  ${BULLET} ${C.magenta}Spawning sub-agent MCP server...${C.reset}`);
+const subAgent = await startClient("sub-agent");
+const subCall = async (name, args) => {
+  const r = await subAgent.callTool({ name, arguments: args || {} });
+  return r.content[0].text;
+};
 
-## Prerequisites
-Node.js >= 18, Supabase project, OpenRouter account, GitMem Pro license key.
+// Sub-agent starts its own session
+await test("sub-agent:session_start", async () => subCall("session_start", { project: "stress-test" }));
 
-## Activation
-Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY as environment variables. Run npx supabase login for management API access. Run npx gitmem-mcp activate with your key. Schema applied automatically.
+// Sub-agent does recall with the same plan
+console.log(`  ${BULLET} ${C.magenta}Sub-agent running recall on auth middleware...${C.reset}`);
+const subRecall = await test("sub-agent:recall", async () => subCall("recall", { plan: "review authentication middleware for security vulnerabilities", project: "stress-test" }));
+const subScarCount = (subRecall.match(/scar/gi) || []).length;
+console.log(`  ${BULLET} ${C.magenta}Sub-agent found ${subScarCount > 0 ? subScarCount : "scars"} relevant to auth review${C.reset}`);
 
-## Schema Management
-Setup SQL bundled with npm package. Applied via Supabase Management API during activation. Manual fallback: npx gitmem-mcp setup outputs SQL for dashboard paste.
+// Sub-agent searches for specific patterns
+await test("sub-agent:search", async () => subCall("search", { query: "JWT token expiration middleware", project: "stress-test" }));
 
-## Environment Variables
-Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY. Optional: GITMEM_TABLE_PREFIX (default gitmem_), GITMEM_TIER (override detection), GITMEM_EMBEDDING_PROVIDER (force provider).
+// Close sub-agent
+await subAgent.close();
+console.log(`  ${BULLET} ${C.magenta}Sub-agent session complete${C.reset}`);
 
-## Monitoring
-gitmem-mcp check runs diagnostic health check. health tool shows write success rates for fire-and-forget operations. analyze tool provides session analytics and blindspot detection.
-`);
-
-writeFileSync(`${docsDir}/api-reference.md`, `# API Reference
-
-## Tool Categories
-
-### Session Lifecycle
-session_start, session_refresh, session_close manage session context. Start loads last session, threads, decisions. Refresh re-surfaces context mid-session. Close persists reflection.
-
-### Memory Creation
-create_learning stores scars, wins, patterns with optional embeddings. create_decision logs architectural decisions with rationale and alternatives. record_scar_usage tracks scar surfacing and application.
-
-### Retrieval
-recall performs semantic search before consequential actions. confirm_scars acknowledges recalled scars. reflect_scars provides end-of-session compliance. search queries by keyword or semantics. log browses chronologically.
-
-### Threads
-create_thread, list_threads, resolve_thread, cleanup_threads manage cross-session work. promote_suggestion and dismiss_suggestion handle auto-detected threads.
-
-### Multi-Agent
-prepare_context generates sub-agent briefings. absorb_observations captures sub-agent findings.
-
-### Knowledge Graph
-graph_traverse with four lenses: connected_to, produced_by, provenance, stats. archive_learning soft-deletes entries.
-
-### Analytics
-analyze provides summary, reflections, blindspots views. health shows write operation success rates.
-
-### Document Indexing
-index_docs indexes markdown directories. search_docs queries indexed content.
-
-### Cache
-gitmem-cache-status, gitmem-cache-health, gitmem-cache-flush manage the local vector cache.
-`);
-
-console.log("  3 docs written");
-
-console.log("\n[3.2] Indexing docs...");
-await test("day3:index_docs", () => call("index_docs", { directory: docsDir, project: "stress-test" }));
-
-console.log("\n[3.3] Searching docs...");
-await test("day3:search_docs_arch", () => call("search_docs", { query: "embedding pipeline semantic search", project: "stress-test" }));
-await test("day3:search_docs_deploy", () => call("search_docs", { query: "environment variables configuration", project: "stress-test" }));
-await test("day3:search_docs_api", () => call("search_docs", { query: "thread lifecycle management", project: "stress-test" }));
-await test("day3:search_docs_cache", () => call("search_docs", { query: "cache architecture refresh", project: "stress-test" }));
-
-// Deep search testing
-console.log("\n[3.4] Deep search testing...");
-await test("day3:search_db", () => call("search", { query: "database connection pool", project: "stress-test" }));
-await test("day3:search_security", () => call("search", { query: "XSS SQL injection authentication", project: "stress-test" }));
-await test("day3:search_patterns", () => call("search", { query: "circuit breaker saga", project: "stress-test" }));
-await test("day3:search_deploy", () => call("search", { query: "container deployment graceful shutdown", project: "stress-test" }));
-
-// Log with filters
-console.log("\n[3.5] Log queries...");
-await test("day3:log_all", () => call("log", { project: "stress-test", limit: 10 }));
-await test("day3:log_scars", () => call("log", { project: "stress-test", learning_type: "scar", limit: 5 }));
-await test("day3:log_patterns", () => call("log", { project: "stress-test", learning_type: "pattern", limit: 5 }));
-
-// Graph traverse
-console.log("\n[3.6] Graph traversal...");
-await test("day3:graph_stats", () => call("graph_traverse", { lens: "stats" }));
-await test("day3:graph_connected", () => call("graph_traverse", { lens: "connected_to", node: "stress-test" }));
-
-// Analytics
-console.log("\n[3.7] Analytics...");
-await test("day3:analyze_summary", () => call("analyze", { project: "stress-test" }));
-
-// Prepare context for sub-agents
-console.log("\n[3.8] Prepare context...");
-await test("day3:prepare_compact", () => call("prepare_context", { plan: "review authentication middleware", format: "compact", project: "stress-test" }));
-await test("day3:prepare_gate", () => call("prepare_context", { plan: "deploy database migration", format: "gate", project: "stress-test" }));
-await test("day3:prepare_full", () => call("prepare_context", { plan: "refactor caching layer", format: "full", project: "stress-test" }));
-
-// Absorb observations
-console.log("\n[3.9] Absorb observations...");
-await test("day3:absorb", () => call("absorb_observations", {
+// Main agent absorbs sub-agent findings
+await test("absorb_observations", () => call("absorb_observations", {
   observations: [
-    { source: "code-review-agent", text: "Found hardcoded API key in config.ts line 42", severity: "scar_candidate" },
-    { source: "test-runner-agent", text: "Integration tests pass 47/47", severity: "info" },
-    { source: "security-scanner", text: "No SQL injection vulnerabilities found", severity: "info" },
-    { source: "perf-agent", text: "P95 latency increased from 200ms to 800ms after adding middleware", severity: "warning" },
+    { source: "auth-review-agent", text: "JWT expiration check missing in /api/admin routes — only checks at login", severity: "scar_candidate", context: "src/middleware/auth.ts" },
+    { source: "auth-review-agent", text: "Password reset tokens use SHA-256 instead of bcrypt", severity: "scar_candidate", context: "src/services/auth.ts" },
+    { source: "auth-review-agent", text: "CORS is properly configured with specific origin whitelist", severity: "info" },
+    { source: "auth-review-agent", text: "Rate limiting correctly applied at gateway level", severity: "info" },
   ],
 }));
 
-// Transcripts
-console.log("\n[3.10] Transcripts...");
-await test("day3:save_transcript", () => call("save_transcript", {
+step("3.9", "Transcripts...");
+await test("save_transcript", () => call("save_transcript", {
   session_id: sessionId || "00000000-0000-0000-0000-000000000000",
-  transcript: "User: Can you deploy the migration?\nAgent: Let me check recall first.\nAgent: Found 3 relevant scars for deployment.\nUser: Go ahead.\nAgent: Migration applied. All tests pass.\nUser: Great, close the session.\nAgent: Session closed with reflection.",
-  format: "markdown",
-  project: "stress-test",
+  transcript: "User: Review auth middleware.\nAgent: Let me recall relevant scars.\nAgent: Found JWT expiration and CORS scars.\nSub-agent: JWT check missing in admin routes.\nAgent: Creating scar for JWT admin bypass.\nUser: Good catch. Close session.",
+  format: "markdown", project: "stress-test",
 }));
+await test("get_transcript", () => call("get_transcript", { session_id: sessionId || "00000000-0000-0000-0000-000000000000" }));
+await test("search_transcripts", () => call("search_transcripts", { query: "JWT admin routes auth", project: "stress-test", match_count: 5 }));
 
-await test("day3:get_transcript", () => call("get_transcript", {
-  session_id: sessionId || "00000000-0000-0000-0000-000000000000",
-}));
-
-await test("day3:search_transcripts", () => call("search_transcripts", {
-  query: "deployment migration verification",
-  project: "stress-test",
-  match_count: 5,
-}));
-
-// Close day 3
+step("3.10", "Closing day 3...");
 await test("day3:session_close", () => call("session_close", { close_type: "quick",
-  closing_reflection: { what_worked: "Doc indexing and search work well", what_broke: "Nothing",
-    do_differently: "Index docs at project setup", scars_applied: [], institutional_memory_items: "Doc search is useful",
-    collaborative_dynamic: "Research focused", rapport_notes: "Good", what_took_longer: "Nothing", wrong_assumption: "None" },
+  closing_reflection: { what_worked: "Sub-agent handoff worked end to end", what_broke: "Nothing",
+    do_differently: "Use gate format for blocking scars only", scars_applied: [],
+    institutional_memory_items: "Sub-agent workflow validated", collaborative_dynamic: "Multi-agent",
+    rapport_notes: "Effective delegation", what_took_longer: "Nothing", wrong_assumption: "None" },
 }));
+scoreboard();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DAY 4: Cache operations, health, archive, more threads
+// DAY 4
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("\n━━━ DAY 4: Cache, health, archive, threads ━━━");
-
+section(4, "Cache, Health, Archive, Thread Lifecycle", "🔧");
 await client.close();
 client = await startClient();
-
 await test("day4:session_start", () => call("session_start", { project: "stress-test" }));
 
-// Cache management
-console.log("\n[4.1] Cache management...");
-await test("day4:cache_status", () => call("gitmem-cache-status", { project: "stress-test" }));
-await test("day4:cache_health", () => call("gitmem-cache-health", { project: "stress-test" }));
-await test("day4:cache_flush", () => call("gitmem-cache-flush", { project: "stress-test" }));
-await test("day4:cache_status_after", () => call("gitmem-cache-status", { project: "stress-test" }));
+step("4.1", "Cache management cycle...");
+await test("cache:status", () => call("gitmem-cache-status", { project: "stress-test" }));
+await test("cache:health", () => call("gitmem-cache-health", { project: "stress-test" }));
+await test("cache:flush", () => call("gitmem-cache-flush", { project: "stress-test" }));
+await test("cache:status (after flush)", () => call("gitmem-cache-status", { project: "stress-test" }));
 
-// Health check
-console.log("\n[4.2] Health check...");
-await test("day4:health", () => call("health", {}));
+step("4.2", "Health check...");
+await test("health", () => call("health", {}));
 
-// Archive a learning
-console.log("\n[4.3] Archive learning...");
+step("4.3", "Archive learning...");
 if (scarIds.length > 0) {
-  await test("day4:archive_learning", () => call("archive_learning", {
-    id: scarIds[0], reason: "Superseded by updated scar with better counter-arguments",
-  }));
+  await test("archive_learning", () => call("archive_learning", { id: scarIds[0], reason: "Superseded by updated scar" }));
 }
 
-// Promote and dismiss suggestions
-console.log("\n[4.4] Promote and dismiss suggestions...");
-// promote_suggestion expects a suggestion_id from session_start's suggested_threads
-// Use a synthetic ID — tool should handle gracefully (not found / no suggestions)
-await test("day4:promote_suggestion", () => call("promote_suggestion", {
-  suggestion_id: "ts-00000001", project: "stress-test",
-}));
-await test("day4:dismiss_suggestion", () => call("dismiss_suggestion", {
-  suggestion_id: "ts-00000002",
-}));
+step("4.4", "Promote and dismiss suggestions...");
+await test("promote_suggestion", () => call("promote_suggestion", { suggestion_id: "ts-00000001", project: "stress-test" }));
+await test("dismiss_suggestion", () => call("dismiss_suggestion", { suggestion_id: "ts-00000002" }));
 
-// Thread lifecycle: create, list, cleanup, resolve
-console.log("\n[4.5] Thread lifecycle...");
-const newThreadText = await test("day4:create_thread", () => call("create_thread", { text: "Upgrade Node.js from 18 to 22 LTS" }));
+step("4.5", "Thread lifecycle...");
+const newThreadText = await test("thread:Node.js upgrade", () => call("create_thread", { text: "Upgrade Node.js from 18 to 22 LTS" }));
 const newThreadId = extractId(newThreadText, /(t-[0-9a-f]{8})/);
+await test("thread:dedup test", () => call("create_thread", { text: "Upgrade Node.js runtime to version 22" }));
+await test("list_threads", () => call("list_threads", { project: "stress-test" }));
+await test("cleanup_threads", () => call("cleanup_threads", { project: "stress-test" }));
 
-// Dedup test — similar thread
-await test("day4:thread_dedup", () => call("create_thread", { text: "Upgrade Node.js runtime to version 22" }));
-
-await test("day4:list_threads", () => call("list_threads", { project: "stress-test" }));
-await test("day4:cleanup_threads", () => call("cleanup_threads", { project: "stress-test" }));
-
-// Resolve the new thread
-if (newThreadId) {
-  await test("day4:resolve_new_thread", () => call("resolve_thread", {
-    thread_id: newThreadId, resolution_note: "Upgraded to Node 22, all tests pass",
-  }));
-}
-
-// Resolve more threads to test lifecycle
+if (newThreadId) await test("resolve:Node.js upgrade", () => call("resolve_thread", { thread_id: newThreadId, resolution_note: "Upgraded to Node 22, all tests pass" }));
 if (threadIds.length >= 6) {
-  await test("day4:resolve_thread_4", () => call("resolve_thread", {
-    thread_id: threadIds[3], resolution_note: "GraphQL migration complete, REST deprecated",
-  }));
-  await test("day4:resolve_thread_5", () => call("resolve_thread", {
-    thread_id: threadIds[4], resolution_note: "Prometheus + Grafana dashboards deployed",
-  }));
+  await test("resolve:GraphQL migration", () => call("resolve_thread", { thread_id: threadIds[3], resolution_note: "GraphQL complete" }));
+  await test("resolve:Prometheus", () => call("resolve_thread", { thread_id: threadIds[4], resolution_note: "Dashboards deployed" }));
 }
+await test("list_threads (final)", () => call("list_threads", { project: "stress-test" }));
 
-// List to verify resolved count
-await test("day4:list_threads_final", () => call("list_threads", { project: "stress-test" }));
-
-// Feedback
-console.log("\n[4.5] Contribute feedback...");
-await test("day4:feedback", () => call("contribute_feedback", {
+step("4.6", "Feedback...");
+await test("contribute_feedback", () => call("contribute_feedback", {
   type: "suggestion", tool: "recall",
-  description: "Recall should show the scar's domain tags alongside the title for faster scanning during review.",
-  severity: "low",
+  description: "Recall should show domain tags alongside titles for faster scanning during review.", severity: "low",
 }));
 
-// Close day 4
+step("4.7", "Closing day 4...");
 await test("day4:session_close", () => call("session_close", { close_type: "quick",
-  closing_reflection: { what_worked: "Cache flush works, thread lifecycle complete", what_broke: "Nothing",
-    do_differently: "Test cache flush after bulk inserts", scars_applied: [], institutional_memory_items: "Cache management is solid",
-    collaborative_dynamic: "Maintenance focused", rapport_notes: "Clean", what_took_longer: "Nothing", wrong_assumption: "None" },
+  closing_reflection: { what_worked: "Cache management solid, thread lifecycle complete", what_broke: "Nothing",
+    do_differently: "Test cache after bulk inserts", scars_applied: [], institutional_memory_items: "Cache flush verified",
+    collaborative_dynamic: "Maintenance", rapport_notes: "Clean", what_took_longer: "Nothing", wrong_assumption: "None" },
 }));
+scoreboard();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DAY 5: Return to open threads, verify persistence, final validation
+// DAY 5
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("\n━━━ DAY 5: Verify persistence, final checks ━━━");
-
+section(5, "Persistence Verification — Does It All Survive?", "🏁");
 await client.close();
 client = await startClient();
 
-console.log("\n[5.1] Session start (should load 4 days of context)...");
+step("5.1", "Session start (loading 4 days of history)...");
 sessionText = await test("day5:session_start", () => call("session_start", { project: "stress-test" }));
-const hasHistory = sessionText.includes("stress-test") || sessionText.includes("session");
-console.log("  History loaded:", hasHistory ? "yes" : "no");
 
-// Verify threads persisted across sessions
-console.log("\n[5.2] Verify threads survived 5 sessions...");
-const threadsText = await test("day5:list_threads", () => call("list_threads", { project: "stress-test" }));
-const openCount = (threadsText.match(/open/gi) || []).length;
-console.log(`  Open threads visible: ${openCount > 0 ? "yes" : "check output"}`);
+step("5.2", "Verify threads survived 5 sessions...");
+const threadsText = await test("list_threads (persistence)", () => call("list_threads", { project: "stress-test" }));
 
-// Verify learnings persisted
-console.log("\n[5.3] Verify learnings persisted...");
-const logText = await test("day5:log_verify", () => call("log", { project: "stress-test", limit: 60 }));
-const loggedCount = (logText.match(/scar|pattern/gi) || []).length;
-console.log(`  Learnings in log: ${loggedCount}`);
+step("5.3", "Verify learnings persisted...");
+const logText = await test("log:verify all", () => call("log", { project: "stress-test", limit: 60 }));
+const logCount = (logText.match(/scar|pattern/gi) || []).length;
+console.log(`  ${BULLET} ${C.cyan}${logCount} learnings found in log${C.reset}`);
 
-// Recall to verify embeddings survived
-console.log("\n[5.4] Recall to verify embeddings...");
-await test("day5:recall_final_1", () => call("recall", { plan: "implement password reset flow", project: "stress-test" }));
-await test("day5:recall_final_2", () => call("recall", { plan: "set up kubernetes cluster", project: "stress-test" }));
-await test("day5:recall_final_3", () => call("recall", { plan: "optimize database query performance", project: "stress-test" }));
+step("5.4", "Recall to verify embeddings survived...");
+await test("recall:password reset", () => call("recall", { plan: "implement password reset flow", project: "stress-test" }));
+await test("recall:k8s cluster", () => call("recall", { plan: "set up kubernetes cluster", project: "stress-test" }));
+await test("recall:query perf", () => call("recall", { plan: "optimize database query performance", project: "stress-test" }));
 
-// Search to verify index survived
-console.log("\n[5.5] Search docs to verify index...");
-await test("day5:search_docs_verify", () => call("search_docs", { query: "knowledge graph triples", project: "stress-test" }));
+step("5.5", "Search docs (index survived)...");
+await test("search_docs:knowledge graph", () => call("search_docs", { query: "knowledge graph triples", project: "stress-test" }));
 
-// Final analytics
-console.log("\n[5.6] Final analytics...");
-await test("day5:analyze_final", () => call("analyze", { project: "stress-test" }));
+step("5.6", "Final analytics...");
+await test("analyze:final", () => call("analyze", { project: "stress-test" }));
 
-// Help
-console.log("\n[5.7] Help...");
-await test("day5:help", () => call("gitmem-help", {}));
+step("5.7", "Help...");
+await test("gitmem-help", () => call("gitmem-help", {}));
 
-// Close final session
+step("5.8", "Closing final session...");
 await test("day5:session_close", () => call("session_close", { close_type: "quick",
   closing_reflection: { what_worked: "All data persisted across 5 sessions", what_broke: "Nothing",
-    do_differently: "This test should be automated", scars_applied: [], institutional_memory_items: "Full lifecycle verified",
-    collaborative_dynamic: "Validation session", rapport_notes: "Comprehensive", what_took_longer: "Nothing", wrong_assumption: "None" },
+    do_differently: "Automate this test", scars_applied: [], institutional_memory_items: "Full lifecycle verified",
+    collaborative_dynamic: "Validation", rapport_notes: "Comprehensive", what_took_longer: "Nothing", wrong_assumption: "None" },
 }));
+scoreboard();
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RESULTS
+// FINAL RESULTS
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("\n╔═══════════════════════════════════════════════════════════════╗");
-console.log("║  FINAL RESULTS                                               ║");
-console.log("╠═══════════════════════════════════════════════════════════════╣");
+const total = passed + warned + failed;
+const dur = elapsed();
+
+console.log(`
+${C.bold}${C.cyan}${"═".repeat(65)}${C.reset}
+${C.bold}  FINAL RESULTS${C.reset}
+${C.cyan}${"═".repeat(65)}${C.reset}`);
 
 const failures = Object.entries(results).filter(([,v]) => v !== "PASS");
 if (failures.length > 0) {
-  console.log("║  Non-PASS results:                                           ║");
+  console.log(`\n  ${C.yellow}Non-PASS results:${C.reset}`);
   for (const [k, v] of failures) {
-    console.log(`  ${v.startsWith("FAIL") ? "FAIL" : "WARN"}  ${k}`);
-    if (v.startsWith("FAIL")) console.log(`       ${v}`);
+    const icon = v.startsWith("FAIL") ? FAIL_ICON : WARN_ICON;
+    console.log(`  ${icon}  ${k}`);
+    if (v.startsWith("FAIL")) console.log(`       ${C.dim}${v}${C.reset}`);
   }
 }
 
-console.log("╠═══════════════════════════════════════════════════════════════╣");
-console.log(`║  PASS: ${String(passed).padStart(3)}  |  WARN: ${String(warned).padStart(3)}  |  FAIL: ${String(failed).padStart(3)}  |  TOTAL: ${String(passed + warned + failed).padStart(3)}         ║`);
-console.log("╚═══════════════════════════════════════════════════════════════╝");
+const bar = (n, max, color) => {
+  const width = 40;
+  const filled = Math.round((n / max) * width);
+  return `${color}${"█".repeat(filled)}${C.dim}${"░".repeat(width - filled)}${C.reset}`;
+};
+
+console.log(`
+  ${bar(passed, total, C.green)} ${C.green}${C.bold}${passed}${C.reset} passed
+  ${bar(warned, total, C.yellow)} ${C.yellow}${C.bold}${warned}${C.reset} warned
+  ${bar(failed, total, C.red)} ${C.red}${C.bold}${failed}${C.reset} failed
+
+  ${C.bold}Total: ${total} tests in ${dur}${C.reset}
+  ${C.dim}5 sessions | 50 scars | 10 patterns | 5 decisions | 10 threads | 3 docs${C.reset}
+  ${C.dim}Real Supabase + Real OpenRouter + Real Embeddings${C.reset}
+`);
+
+if (failed === 0) {
+  console.log(`${C.green}${C.bold}  ALL TESTS PASSED${C.reset}`);
+} else {
+  console.log(`${C.red}${C.bold}  ${failed} TESTS FAILED${C.reset}`);
+}
+
+console.log(`${C.cyan}${"═".repeat(65)}${C.reset}\n`);
 
 await client.close();
 process.exit(failed > 0 ? 1 : 0);

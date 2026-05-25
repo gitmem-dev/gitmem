@@ -99,20 +99,91 @@ All tables have Row Level Security enabled with service role access only.
 
 ## Pro tools
 
-With pro activated, these tools persist to Supabase with semantic search:
+All tools work in both free and pro tiers. In free tier, data is stored locally in `.gitmem/`. In pro tier, data persists to Supabase with semantic vector search via embeddings.
+
+### Session lifecycle
 
 | Tool | What it does |
 |------|-------------|
-| `session_start` | Loads context from last session, open threads, recent decisions |
-| `session_close` | Persists session reflection and learnings |
+| `session_start` | Loads last session context, open threads, recent decisions |
+| `session_refresh` | Re-surface institutional context mid-session (after compaction) |
+| `session_close` | Persists session reflection, learnings, and compliance |
+
+### Memory creation
+
+| Tool | What it does |
+|------|-------------|
+| `create_learning` | Store a scar, win, or pattern (with embedding in pro) |
+| `create_decision` | Log a decision with rationale and alternatives |
+| `record_scar_usage` | Track when a scar was surfaced and how it was applied |
+
+### Retrieval
+
+| Tool | What it does |
+|------|-------------|
 | `recall` | Semantic search for relevant scars before taking action |
-| `create_learning` | Store a scar, win, or pattern with embedding |
-| `create_decision` | Log a decision with rationale |
+| `confirm_scars` | Acknowledge recalled scars as APPLYING, N_A, or REFUTED |
+| `reflect_scars` | End-of-session scar reflection (how each was handled) |
 | `search` | Search institutional memory by keyword or semantics |
 | `log` | Browse recent learnings chronologically |
+
+### Threads
+
+| Tool | What it does |
+|------|-------------|
 | `create_thread` | Track unresolved work across sessions |
 | `list_threads` | View open threads |
-| `confirm_scars` | Acknowledge recalled scars before proceeding |
+| `resolve_thread` | Mark a thread as resolved |
+| `promote_suggestion` | Promote a suggested thread to an open thread |
+| `dismiss_suggestion` | Dismiss a suggested thread |
+| `cleanup_threads` | Triage threads by lifecycle health (active/cooling/dormant) |
+
+### Multi-agent coordination
+
+| Tool | What it does |
+|------|-------------|
+| `prepare_context` | Generate compact memory payload for sub-agent injection |
+| `absorb_observations` | Capture and persist findings from sub-agents |
+
+### Knowledge graph
+
+| Tool | What it does |
+|------|-------------|
+| `graph_traverse` | Traverse knowledge graph connections (connected_to, produced_by, provenance, stats) |
+| `archive_learning` | Archive a scar/win/pattern (excluded from recall, preserved for audit) |
+
+### Analytics and diagnostics
+
+| Tool | What it does |
+|------|-------------|
+| `analyze` | Session analytics and insights (summary, reflections, blindspots) |
+| `health` | Show write health for the current session |
+| `contribute_feedback` | Submit feedback about gitmem |
+
+### Document indexing
+
+| Tool | What it does |
+|------|-------------|
+| `index_docs` | Index a directory of markdown files for semantic search |
+| `search_docs` | Search indexed documentation |
+
+### Transcripts (pro only)
+
+| Tool | What it does |
+|------|-------------|
+| `save_transcript` | Save a session transcript |
+| `get_transcript` | Retrieve a saved transcript |
+| `search_transcripts` | Search across saved transcripts |
+
+### Cache management
+
+| Tool | What it does |
+|------|-------------|
+| `gitmem-cache-status` | Show local search cache status |
+| `gitmem-cache-health` | Compare local cache against remote Supabase |
+| `gitmem-cache-flush` | Force reload cache from Supabase |
+
+Most tools also have short aliases (`gm-scar`, `gm-search`, `gm-threads`, etc.) for faster invocation.
 
 ## Deactivation
 

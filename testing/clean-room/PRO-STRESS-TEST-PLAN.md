@@ -5,7 +5,7 @@
 Comprehensive end-to-end test of all GitMem Pro features on a fresh Supabase project. Simulates 5 days of real interactive usage with session cycling, data accumulation, and cross-session persistence verification.
 
 **Test file:** `pro-stress-test.mjs`
-**Last run:** 2026-05-25 — 141/141 PASS
+**Last run:** 2026-05-25 — 147/147 PASS (all canonical tools covered)
 
 ## Prerequisites
 
@@ -55,7 +55,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 - `list_threads` — verify all 10 visible
 - `session_close` — with closing reflection
 
-### Day 2: Recall, confirm, resolve (18 tests)
+### Day 2: Recall, confirm, resolve (19 tests)
 - `session_start` — loads day 1 context, verifies threads carry over
 - 5x `recall` — diverse queries (deploy, auth, cache, frontend, security)
 - `confirm_scars` — acknowledge recalled scars with APPLYING/N_A decisions
@@ -63,10 +63,11 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 - `list_threads` — verify 7 open, 3 resolved
 - `reflect_scars` — end-of-session scar reflection
 - `record_scar_usage` — track scar application
+- `record_scar_usage_batch` — batch scar tracking
 - `session_refresh` — re-surface context mid-session
 - `session_close`
 
-### Day 3: Docs, search, graph, analytics (23 tests)
+### Day 3: Docs, search, graph, analytics, transcripts (26 tests)
 - `session_start` — loads 2 days of history
 - Write 3 markdown docs (architecture, deployment, API reference — 1000+ words total)
 - `index_docs` — embed and index the docs
@@ -77,13 +78,18 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 - `analyze` — session analytics summary
 - 3x `prepare_context` — compact, gate, and full sub-agent briefings
 - `absorb_observations` — capture sub-agent findings (4 observations)
+- `save_transcript` — save session conversation
+- `get_transcript` — retrieve saved transcript
+- `search_transcripts` — semantic search over transcript chunks
 - `session_close`
 
-### Day 4: Cache, health, archive, threads (15 tests)
+### Day 4: Cache, health, archive, suggestions, threads (17 tests)
 - `session_start`
 - 4x cache management — status, health, flush, status-after
 - `health` — write operation success rates
 - `archive_learning` — soft-delete a scar
+- `promote_suggestion` — promote a suggested thread
+- `dismiss_suggestion` — dismiss a suggested thread
 - `create_thread` + dedup test (similar text → returns existing)
 - `list_threads`, `cleanup_threads`
 - 3x `resolve_thread` — close more work items
@@ -114,18 +120,24 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | confirm_scars | 1 | 2 |
 | reflect_scars | 1 | 2 |
 | record_scar_usage | 1 | 2 |
+| record_scar_usage_batch | 1 | 2 |
 | search | 4 | 3 |
 | log | 4 | 3, 5 |
 | create_thread | 12 | 1, 4 |
 | list_threads | 5 | 1-5 |
 | resolve_thread | 6 | 2, 4 |
 | cleanup_threads | 1 | 4 |
+| promote_suggestion | 1 | 4 |
+| dismiss_suggestion | 1 | 4 |
 | index_docs | 1 | 3 |
 | search_docs | 5 | 3, 5 |
 | graph_traverse | 2 | 3 |
 | analyze | 2 | 3, 5 |
 | prepare_context | 3 | 3 |
 | absorb_observations | 1 | 3 |
+| save_transcript | 1 | 3 |
+| get_transcript | 1 | 3 |
+| search_transcripts | 1 | 3 |
 | archive_learning | 1 | 4 |
 | health | 1 | 4 |
 | cache-status | 2 | 4 |
@@ -133,7 +145,7 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | cache-flush | 1 | 4 |
 | contribute_feedback | 1 | 4 |
 | gitmem-help | 1 | 5 |
-| **TOTAL** | **141** | |
+| **TOTAL** | **147** | |
 
 ## What this test validates
 
@@ -156,3 +168,4 @@ su developer -c "cd /home/developer/my-project && node /tmp/test-harness/stress-
 | Version | Date | Tests | Result |
 |---------|------|-------|--------|
 | v1.0 | 2026-05-25 | 141 | 141 PASS |
+| v1.1 | 2026-05-25 | 147 | 147 PASS — added record_scar_usage_batch, transcripts, promote/dismiss_suggestion |

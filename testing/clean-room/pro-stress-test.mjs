@@ -301,8 +301,27 @@ await test("day2:record_scar_usage", () => call("record_scar_usage", {
   reference_context: "Applied during database migration deployment — verified reversibility",
 }));
 
+// Record scar usage batch
+console.log("\n[2.8] Record scar usage batch...");
+const batchScars = recalledIds.slice(0, 2).map(id => ({
+  scar_identifier: id,
+  surfaced_at: new Date().toISOString(),
+  acknowledged_at: new Date().toISOString(),
+  reference_type: "acknowledged",
+  reference_context: "Batch test — acknowledged during deployment review",
+  execution_successful: true,
+}));
+if (batchScars.length > 0) {
+  await test("day2:record_scar_usage_batch", () => call("record_scar_usage_batch", { scars: batchScars }));
+} else {
+  await test("day2:record_scar_usage_batch", () => call("record_scar_usage_batch", { scars: [{
+    scar_identifier: "00000000", surfaced_at: new Date().toISOString(),
+    reference_type: "none", reference_context: "No scars recalled in test",
+  }]}));
+}
+
 // Session refresh mid-day
-console.log("\n[2.8] Session refresh...");
+console.log("\n[2.9] Session refresh...");
 await test("day2:session_refresh", () => call("session_refresh", { project: "stress-test" }));
 
 // Close day 2
@@ -467,6 +486,25 @@ await test("day3:absorb", () => call("absorb_observations", {
   ],
 }));
 
+// Transcripts
+console.log("\n[3.10] Transcripts...");
+await test("day3:save_transcript", () => call("save_transcript", {
+  session_id: sessionId || "00000000-0000-0000-0000-000000000000",
+  transcript: "User: Can you deploy the migration?\nAgent: Let me check recall first.\nAgent: Found 3 relevant scars for deployment.\nUser: Go ahead.\nAgent: Migration applied. All tests pass.\nUser: Great, close the session.\nAgent: Session closed with reflection.",
+  format: "markdown",
+  project: "stress-test",
+}));
+
+await test("day3:get_transcript", () => call("get_transcript", {
+  session_id: sessionId || "00000000-0000-0000-0000-000000000000",
+}));
+
+await test("day3:search_transcripts", () => call("search_transcripts", {
+  query: "deployment migration verification",
+  project: "stress-test",
+  match_count: 5,
+}));
+
 // Close day 3
 await test("day3:session_close", () => call("session_close", { close_type: "quick",
   closing_reflection: { what_worked: "Doc indexing and search work well", what_broke: "Nothing",
@@ -503,8 +541,19 @@ if (scarIds.length > 0) {
   }));
 }
 
+// Promote and dismiss suggestions
+console.log("\n[4.4] Promote and dismiss suggestions...");
+// promote_suggestion expects a suggestion_id from session_start's suggested_threads
+// Use a synthetic ID — tool should handle gracefully (not found / no suggestions)
+await test("day4:promote_suggestion", () => call("promote_suggestion", {
+  suggestion_id: "ts-00000001", project: "stress-test",
+}));
+await test("day4:dismiss_suggestion", () => call("dismiss_suggestion", {
+  suggestion_id: "ts-00000002",
+}));
+
 // Thread lifecycle: create, list, cleanup, resolve
-console.log("\n[4.4] Thread lifecycle...");
+console.log("\n[4.5] Thread lifecycle...");
 const newThreadText = await test("day4:create_thread", () => call("create_thread", { text: "Upgrade Node.js from 18 to 22 LTS" }));
 const newThreadId = extractId(newThreadText, /(t-[0-9a-f]{8})/);
 

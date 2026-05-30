@@ -58,8 +58,6 @@ Other commands:
   npx gitmem-mcp telemetry status  Check telemetry settings
   npx gitmem-mcp telemetry enable  Enable anonymous usage tracking (opt-in)
   npx gitmem-mcp telemetry disable Disable usage tracking
-  npx gitmem-mcp license status    Show current machine's license status
-  npx gitmem-mcp license list      List all license keys (admin)
   npx gitmem-mcp server            Start MCP server (default)
   npx gitmem-mcp help              Show this help message
 
@@ -903,14 +901,6 @@ switch (command) {
     break;
   case "telemetry":
     import("../dist/commands/telemetry.js").then((m) => m.main(process.argv.slice(3)));
-    break;
-  case "license":
-    import("../dist/commands/license.js")
-      .then((m) => m.main(process.argv.slice(3)))
-      .catch(() => {
-        console.error("Error: license command not available in this build.");
-        process.exit(1);
-      });
     break;
   case "install-hooks":
     cmdInstallHooks();

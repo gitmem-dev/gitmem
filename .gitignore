@@ -13,3 +13,6 @@ dist/
 .mcp.json
 .npmrc
 CLAUDE.md
+
+# Internal admin docs (not shipped)
+docs/admin-license-management.md

@@ -50,6 +50,7 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "!dist/**/*.test.*",
+    "!dist/commands/license.*",
     "bin",
     "hooks",
     "!hooks/tests",

@@ -13,3 +13,6 @@ dist/
 .mcp.json
 .npmrc
 CLAUDE.md
+
+# Internal admin tools (not shipped)
+src/commands/license.ts

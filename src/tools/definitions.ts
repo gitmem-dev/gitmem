@@ -2145,7 +2145,7 @@ export const TOOLS = [
       properties: {
         id: {
           type: "string",
-          description: "UUID of the learning to archive",
+          description: "UUID or short ID prefix of the learning to archive (e.g., the 8-char prefix shown by recall/search)",
         },
         reason: {
           type: "string",
@@ -2163,7 +2163,7 @@ export const TOOLS = [
       properties: {
         id: {
           type: "string",
-          description: "UUID of the learning to archive",
+          description: "UUID or short ID prefix of the learning to archive (e.g., the 8-char prefix shown by recall/search)",
         },
         reason: {
           type: "string",
@@ -2181,7 +2181,7 @@ export const TOOLS = [
       properties: {
         id: {
           type: "string",
-          description: "UUID of the learning to archive",
+          description: "UUID or short ID prefix of the learning to archive (e.g., the 8-char prefix shown by recall/search)",
         },
         reason: {
           type: "string",

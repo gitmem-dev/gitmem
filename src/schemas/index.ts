@@ -21,3 +21,4 @@ export * from "./get-transcript.js";
 export * from "./prepare-context.js";
 export * from "./absorb-observations.js";
 export * from "./active-sessions.js";
+export * from "./archive-learning.js";

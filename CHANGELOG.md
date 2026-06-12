@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-06-11
+
+### Fixed
+- **Stale npx cache**: All MCP server configs now use `gitmem-mcp@latest` instead of `gitmem-mcp`. Without `@latest`, npx can serve a cached older version indefinitely — the `-y` flag only auto-confirms prompts, it does not force a registry check. Affects: init wizard, configure command, README, docs, and distribution configs.
+
 ## [1.6.2] - 2026-06-11
 
 ### Fixed

@@ -64,6 +64,7 @@ import {
   flushCache,
   startBackgroundInit,
 } from "./services/startup.js";
+import { checkWritePath } from "./services/write-health.js";
 import { getEffectTracker } from "./services/effect-tracker.js";
 import { RIPPLE, ANSI } from "./services/display-protocol.js";
 import { getProject } from "./services/session-state.js";
@@ -498,9 +499,16 @@ export async function runServer(): Promise<void> {
       } else {
         console.error(`[gitmem:license] Validated: ${result.tier} tier`);
       }
+      // Verify the write path with the FINAL tier (post-validation): catches an
+      // invalid license silently downgrading writes to local files.
+      void checkWritePath();
     }).catch((err) => {
       console.error(`[gitmem:license] Validation error: ${err}`);
     });
+  } else {
+    // No license key to validate — verify the write path with the detected tier
+    // (catches a GITMEM_TABLE_PREFIX / schema mismatch on the backward-compat path).
+    void checkWritePath();
   }
 
   if (hasSupabase()) {

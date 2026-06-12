@@ -26,6 +26,20 @@ export DATABASE_URL="postgresql://postgres.yourref:yourpassword@aws-0-region.poo
 - **OPENROUTER_API_KEY**: [openrouter.ai/keys](https://openrouter.ai/keys) → Create Key
 - **DATABASE_URL**: Supabase Dashboard → Connect → Connection string (Session pooler or Direct)
 
+### 2. (Optional) Point at an existing schema with a custom table prefix
+
+By default GitMem uses tables prefixed with `gitmem_` (`gitmem_learnings`, `gitmem_decisions`, …). If you are pointing GitMem at a Supabase project whose tables use a **different** prefix — for example an existing `orchestra_` schema you are not migrating yet — set:
+
+```bash
+export GITMEM_TABLE_PREFIX="orchestra_"
+```
+
+Important:
+
+- **Env-only.** The prefix is resolved at runtime by `getTableName()` (`src/services/tier.ts`). It is **not** read from `.gitmem/config.json` and **cannot** be set by `activate`. It must be present in **every** client's environment — your shell profile for the CLI **and** the `env` block of the MCP server entry in `claude_desktop_config.json` for the desktop app.
+- **You own the tables.** `activate`'s auto-schema always creates `gitmem_*` tables; with a custom prefix it will not create your prefixed tables, so they must already exist on the target project.
+- **Mismatch symptom.** `create_learning` / `create_decision` fail with PostgREST `PGRST205` ("table not in schema cache"), while threads appear to work — thread writes silently fall back to the local `.gitmem` cache, and `gitmem-cache-health` reads Supabase regardless of storage tier, so both can look healthy while writes go nowhere. See the write-path health check.
+
 ### 3. Activate
 
 ```bash
@@ -63,7 +77,7 @@ You don't have to paste secrets into a terminal. The activate command resolves c
 
 ## What gets created
 
-The activate command creates these in your Supabase project:
+The activate command creates these in your Supabase project (table and view names are prefixed by `GITMEM_TABLE_PREFIX`, default `gitmem_`):
 
 | Tables | Purpose |
 |--------|---------|
@@ -207,6 +221,16 @@ npx gitmem-mcp setup | pbcopy    # macOS — copies SQL to clipboard
 npx gitmem-mcp setup             # prints SQL
 # Then paste into Supabase Dashboard → SQL Editor → Run
 ```
+
+### Writes succeed but nothing appears in Supabase
+
+`create_learning` / `create_decision` return a UUID but the row never shows up in your `*_learnings` table, and there is **no** `PGRST205` error. This means GitMem fell back to **free tier** and wrote to a local `.gitmem/` file instead of Supabase. With `SUPABASE_URL` set, the only path to free tier is an invalid or missing license, so check:
+
+- `GITMEM_API_KEY` is a real `gitmem_pro_...` key (not a placeholder), present in the **same** environment as the MCP server (e.g. the `env` block in `claude_desktop_config.json`, not just your shell).
+- The license validated — the startup log shows `Tier: pro`, not `Tier: free` / `Tier updated: free`.
+- The device limit (3) is not exhausted — see below.
+
+Reads can be misleading here: `gitmem-cache-health` and `recall` may still reach Supabase while the **write** path is local. Confirm pro end-to-end by creating a learning and verifying the row exists in `<prefix>learnings` with a non-null `embedding`.
 
 ### Device limit reached
 

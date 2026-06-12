@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-06-11
+
+### Fixed
+- **`archive_learning` short-ID resolution**: Accepts 8-character ID prefixes (e.g., `6edd41e6`) in addition to full UUIDs, matching the short IDs shown by `recall` and `search`.
+
+### Added
+- **Write-path health check**: New startup diagnostic detects two silent failure classes — (1) Supabase credentials present but tier resolved to FREE (writes go to local files instead of Supabase), and (2) pro/dev tier but resolved tables don't exist (prefix mismatch). Logs a loud warning at startup instead of failing silently on the first write.
+- **`GITMEM_TABLE_PREFIX` documentation**: Pro setup guide now documents custom table prefix configuration, mismatch symptoms, and troubleshooting steps.
+
 ## [1.6.1] - 2026-05-25
 
 ### Fixed

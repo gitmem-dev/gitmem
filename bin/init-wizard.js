@@ -555,6 +555,18 @@ async function stepMcpServer() {
   const hasGitmem = existing?.mcpServers?.gitmem || existing?.mcpServers?.["gitmem-mcp"];
 
   if (hasGitmem) {
+    // Check if existing config uses stale "gitmem-mcp" without @latest
+    const entry = existing.mcpServers.gitmem || existing.mcpServers["gitmem-mcp"];
+    const args = entry?.args;
+    if (Array.isArray(args)) {
+      const idx = args.indexOf("gitmem-mcp");
+      if (idx !== -1) {
+        args[idx] = "gitmem-mcp@latest";
+        writeJson(mcpPath, existing);
+        log(CHECK, `Updated MCP args to use gitmem-mcp@latest ${C.dim}(prevents stale npx cache)${C.reset}`);
+        return { done: true };
+      }
+    }
     log(CHECK, `MCP server already configured ${C.dim}(${mcpName})${C.reset}`);
     return { done: false };
   }

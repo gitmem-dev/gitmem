@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-06-11
+
+### Fixed
+- **Init wizard upgrades stale configs**: Running `npx gitmem-mcp@latest init` on a project with an existing gitmem config now detects `"gitmem-mcp"` without `@latest` in the args and upgrades it in-place. Previously it skipped with "already configured" and left the stale reference untouched.
+
 ## [1.6.3] - 2026-06-11
 
 ### Fixed

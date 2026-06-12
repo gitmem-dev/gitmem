@@ -113,7 +113,7 @@ Add GitMem to any MCP-compatible AI agent:
 cd your-project && npx gitmem-mcp init
 
 # Or add the MCP server directly
-claude mcp add gitmem -- npx -y gitmem-mcp
+claude mcp add gitmem -- npx -y gitmem-mcp@latest
 \`\`\`
 
 Manual MCP config (works with any MCP client):
@@ -123,7 +123,7 @@ Manual MCP config (works with any MCP client):
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }

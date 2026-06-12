@@ -27,7 +27,7 @@ Or add manually to `~/.openclaw/mcp.json`:
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }

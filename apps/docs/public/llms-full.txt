@@ -1560,7 +1560,7 @@ If you want to configure the MCP server without the init wizard.
 <Tab value="Claude Code">
 
 ```bash
-claude mcp add gitmem -- npx -y gitmem-mcp
+claude mcp add gitmem -- npx -y gitmem-mcp@latest
 ```
 
 </Tab>
@@ -1573,7 +1573,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }
@@ -1593,7 +1593,7 @@ Add to `.cursor/mcp.json` in your project:
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }

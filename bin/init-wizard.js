@@ -253,11 +253,11 @@ function log(icon, main, detail) {
 function buildMcpConfig() {
   const supabaseUrl = process.env.SUPABASE_URL;
   if (!supabaseUrl) {
-    return { command: "npx", args: ["-y", "gitmem-mcp"] };
+    return { command: "npx", args: ["-y", "gitmem-mcp@latest"] };
   }
   return {
     command: "npx",
-    args: ["-y", "gitmem-mcp"],
+    args: ["-y", "gitmem-mcp@latest"],
     env: {
       SUPABASE_URL: supabaseUrl,
       SUPABASE_SERVICE_ROLE_KEY:

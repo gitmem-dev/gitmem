@@ -101,7 +101,7 @@ Add this to your MCP client's config file:
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }

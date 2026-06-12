@@ -27,7 +27,7 @@ async function createClient(): Promise<{
 }> {
   const transport = new StdioClientTransport({
     command: "npx",
-    args: ["-y", "gitmem-mcp"],
+    args: ["-y", "gitmem-mcp@latest"],
     env: {
       ...process.env,
       NO_COLOR: "1",

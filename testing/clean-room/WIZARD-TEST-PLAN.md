@@ -55,7 +55,7 @@ cat .gitmem/learnings.json | jq '. | length'
 
 # MCP server config
 cat .mcp.json | jq .
-# Expected: mcpServers.gitmem with command "npx" and args ["-y", "gitmem-mcp"]
+# Expected: mcpServers.gitmem with command "npx" and args ["-y", "gitmem-mcp@latest"]
 
 # CLAUDE.md
 head -3 CLAUDE.md

@@ -60,7 +60,7 @@ npx gitmem-mcp configure
 
 **What to verify:**
 - Says "Free tier — no API keys needed!"
-- Outputs valid JSON with `"command": "npx"` and `"args": ["-y", "gitmem-mcp"]`
+- Outputs valid JSON with `"command": "npx"` and `"args": ["-y", "gitmem-mcp@latest"]`
 - No env block (free tier doesn't need one)
 - **No orchestra references**
 
@@ -71,7 +71,7 @@ cat > .mcp.json << 'EOF'
   "mcpServers": {
     "gitmem": {
       "command": "npx",
-      "args": ["-y", "gitmem-mcp"]
+      "args": ["-y", "gitmem-mcp@latest"]
     }
   }
 }

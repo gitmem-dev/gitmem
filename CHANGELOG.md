@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.5] - 2026-06-27
+
+### Fixed
+- **`resolve_thread` can now resolve threads created by other sessions**: `list_threads` reads the Supabase source-of-truth, but `resolve_thread` previously matched only the local/session cache — so a thread created by another session showed up in `list_threads` yet returned "Thread not found" when you tried to resolve it. These "visible-but-unresolvable" threads piled up across sessions. `resolve_thread` now falls back to looking the thread up in Supabase (by ID, or by text for `text_match`) before failing, resolves it in the source-of-truth, and syncs the local cache. (GIT-46)
+
 ## [1.6.4] - 2026-06-11
 
 ### Fixed

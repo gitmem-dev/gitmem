@@ -14,14 +14,19 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { getTableName } from "../services/tier.js";
-import { getThreads, getCurrentSession } from "../services/session-state.js";
+import { getThreads, getCurrentSession, getProject } from "../services/session-state.js";
 import {
   resolveThread as resolveThreadInList,
   findThreadById,
+  findThreadByText,
   loadThreadsFile,
   saveThreadsFile,
 } from "../services/thread-manager.js";
-import { resolveThreadInSupabase } from "../services/thread-supabase.js";
+import {
+  resolveThreadInSupabase,
+  getThreadFromSupabaseById,
+  listThreadsFromSupabase,
+} from "../services/thread-supabase.js";
 import { writeTriplesForThreadResolution } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
@@ -32,7 +37,7 @@ import {
 } from "../services/metrics.js";
 import { wrapDisplay } from "../services/display-protocol.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
-import type { ResolveThreadParams, ResolveThreadResult } from "../types/index.js";
+import type { ResolveThreadParams, ResolveThreadResult, ThreadObject } from "../types/index.js";
 
 export async function resolveThread(
   params: ResolveThreadParams
@@ -85,12 +90,33 @@ export async function resolveThread(
   }
 
   // Resolve the thread locally (in-memory / file)
-  const resolved = resolveThreadInList(threads, {
+  let resolved = resolveThreadInList(threads, {
     threadId: effectiveThreadId,
     textMatch: effectiveTextMatch,
     sessionId,
     resolutionNote: params.resolution_note,
   });
+
+  // GIT-46: cross-session fallback. list_threads reads the Supabase
+  // source-of-truth, but the local match above only sees threads this session
+  // created/cached — so a thread created by another session is visible in
+  // list_threads yet "not found" here. Before failing, hydrate the thread from
+  // Supabase, splice it into the working set, and retry. The downstream flow
+  // (local cache write + Supabase resolve + metrics/triples) then proceeds
+  // unchanged, syncing the previously-diverged local cache back to the SOT.
+  if (!resolved) {
+    const hydrated = await hydrateThreadFromSupabase(effectiveThreadId, effectiveTextMatch);
+    if (hydrated) {
+      if (!findThreadById(threads, hydrated.id)) {
+        threads.push(hydrated);
+      }
+      resolved = resolveThreadInList(threads, {
+        threadId: hydrated.id,
+        sessionId,
+        resolutionNote: params.resolution_note,
+      });
+    }
+  }
 
   if (!resolved) {
     const latencyMs = timer.stop();
@@ -204,4 +230,32 @@ export async function resolveThread(
     performance: perfData,
     display: wrapDisplay(resolveMsg),
   };
+}
+
+/**
+ * GIT-46: fetch a thread from the Supabase source-of-truth when it isn't in
+ * the local/session cache (e.g. created by another session).
+ *
+ * - By thread_id: direct, project-agnostic lookup (thread_id is globally unique).
+ * - By text_match: scan the project's open threads and substring-match, mirroring
+ *   the local findThreadByText behavior.
+ *
+ * Returns null when Supabase is unavailable or no thread matches — callers then
+ * fall through to the normal "Thread not found" path.
+ */
+async function hydrateThreadFromSupabase(
+  threadId?: string,
+  textMatch?: string
+): Promise<ThreadObject | null> {
+  if (threadId) {
+    return await getThreadFromSupabaseById(threadId);
+  }
+  if (textMatch) {
+    const project = getProject() || "default";
+    const openThreads = await listThreadsFromSupabase(project, { statusFilter: "open" });
+    if (openThreads) {
+      return findThreadByText(openThreads, textMatch);
+    }
+  }
+  return null;
 }

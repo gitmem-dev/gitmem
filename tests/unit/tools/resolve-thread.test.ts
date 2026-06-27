@@ -13,10 +13,16 @@ import type { ThreadObject } from "../../../src/types/index.js";
 vi.mock("../../../src/services/session-state.js", () => ({
   getThreads: vi.fn(() => []),
   getCurrentSession: vi.fn(() => ({ sessionId: "test-session" })),
+  getProject: vi.fn(() => "default"),
 }));
 
 vi.mock("../../../src/services/thread-supabase.js", () => ({
   resolveThreadInSupabase: vi.fn(() => Promise.resolve(true)),
+  // GIT-46: cross-session fallback lookups. Default to "not in Supabase" so
+  // existing tests (local threads present) are unaffected; the cross-session
+  // tests override these per-case.
+  getThreadFromSupabaseById: vi.fn(() => Promise.resolve(null)),
+  listThreadsFromSupabase: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock("../../../src/services/triple-writer.js", () => ({
@@ -58,7 +64,11 @@ vi.mock("../../../src/services/thread-manager.js", async (importOriginal) => {
 });
 
 import { getThreads } from "../../../src/services/session-state.js";
-import { resolveThreadInSupabase } from "../../../src/services/thread-supabase.js";
+import {
+  resolveThreadInSupabase,
+  getThreadFromSupabaseById,
+  listThreadsFromSupabase,
+} from "../../../src/services/thread-supabase.js";
 import { resolveThread } from "../../../src/tools/resolve-thread.js";
 
 beforeEach(() => {
@@ -200,5 +210,96 @@ describe("resolve_thread — duplicate cascade", () => {
     });
 
     expect(result.performance.result_count).toBe(2);
+  });
+});
+
+/**
+ * GIT-46: cross-session thread resolution.
+ *
+ * Bug: list_threads reads the Supabase SOT, but resolve_thread historically
+ * matched only the local/session cache. A thread created by another session
+ * was visible in list_threads yet returned "Thread not found" on resolve —
+ * "visible-but-unresolvable" threads accumulate across sessions.
+ *
+ * Reproduces the bug at the unit level: local/session state is EMPTY (the
+ * thread was created by a *different* session) while the thread exists in
+ * Supabase. On unfixed `main` these are RED ("Thread not found"); after the
+ * Supabase-fallback fix they pass. These run in `test:unit` (the suite CI
+ * actually executes — see GIT-46 notes on integration tests not running in CI).
+ */
+describe("resolve_thread — cross-session resolution (GIT-46)", () => {
+  // A thread that lives in the Supabase SOT but NOT in this session's cache.
+  const remoteThread: ThreadObject = {
+    id: "t-cafe0001",
+    text: "Cross-session thread created by another session",
+    status: "open",
+    created_at: "2026-06-01T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    // Local/session state is empty — this session never saw the thread.
+    vi.mocked(getThreads).mockReturnValue([]);
+    mockThreads.length = 0;
+  });
+
+  it("case 1: resolves a thread created by another session via Supabase fallback", async () => {
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue({ ...remoteThread });
+
+    const result = await resolveThread({ thread_id: "t-cafe0001" });
+
+    expect(result.success).toBe(true);
+    expect(result.resolved_thread?.id).toBe("t-cafe0001");
+    expect(result.resolved_thread?.status).toBe("resolved");
+  });
+
+  it("case 2: persists the resolution to the Supabase SOT (not just local cache)", async () => {
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue({ ...remoteThread });
+
+    await resolveThread({ thread_id: "t-cafe0001", resolution_note: "done in session B" });
+
+    // Proves SOT update path was invoked for the cross-session thread id.
+    expect(resolveThreadInSupabase).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(resolveThreadInSupabase).mock.calls[0][0]).toBe("t-cafe0001");
+  });
+
+  it("case 3: resolves a cross-session thread by text_match too", async () => {
+    vi.mocked(listThreadsFromSupabase).mockResolvedValue([{ ...remoteThread }]);
+
+    const result = await resolveThread({ text_match: "another session" });
+
+    expect(result.success).toBe(true);
+    expect(result.resolved_thread?.id).toBe("t-cafe0001");
+    expect(result.resolved_thread?.status).toBe("resolved");
+    expect(vi.mocked(resolveThreadInSupabase).mock.calls[0][0]).toBe("t-cafe0001");
+  });
+
+  it("case 4 (regression guard): same-session resolve, #N, text_match, and cascade still work", async () => {
+    // No Supabase fallback needed — everything is local.
+    mockThreads.push(
+      { id: "t-local001", text: "Local original thread", status: "open", created_at: "2026-01-01T00:00:00Z" },
+      { id: "t-local002", text: "Local duplicate thread", status: "open", created_at: "2026-01-02T00:00:00Z" },
+    );
+
+    // same-session exact id
+    const byId = await resolveThread({ thread_id: "t-local001" });
+    expect(byId.success).toBe(true);
+
+    // #N positional (only t-local002 remains open → "#1")
+    const byPos = await resolveThread({ thread_id: "#1" });
+    expect(byPos.success).toBe(true);
+    expect(byPos.resolved_thread?.id).toBe("t-local002");
+
+    // Supabase fallback must NOT be consulted when the thread is local
+    expect(getThreadFromSupabaseById).not.toHaveBeenCalled();
+  });
+
+  it("still returns 'Thread not found' when the thread is in neither local nor Supabase", async () => {
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue(null);
+    vi.mocked(listThreadsFromSupabase).mockResolvedValue(null);
+
+    const result = await resolveThread({ thread_id: "t-ghost999" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Thread not found");
   });
 });

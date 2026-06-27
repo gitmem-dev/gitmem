@@ -213,6 +213,40 @@ export async function resolveThreadInSupabase(
 }
 
 /**
+ * Fetch a single thread from Supabase by its thread_id ("t-XXXX").
+ *
+ * Used by resolve_thread's cross-session fallback (GIT-46): a thread can live
+ * in the Supabase source-of-truth (and show up in list_threads) while being
+ * absent from this session's local cache because another session created it.
+ *
+ * Deliberately NOT scoped by project — thread_id is globally unique, and
+ * scoping would re-introduce the "can only resolve threads I own" constraint
+ * this fallback exists to remove.
+ *
+ * Returns the mapped ThreadObject, or null if not found / Supabase unavailable.
+ */
+export async function getThreadFromSupabaseById(
+  threadId: string
+): Promise<ThreadObject | null> {
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    return null;
+  }
+
+  try {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
+      select: "*",
+      filters: { thread_id: threadId },
+      limit: 1,
+    });
+    if (rows.length === 0) return null;
+    return rowToThreadObject(rows[0]);
+  } catch (error) {
+    console.error("[thread-supabase] Failed to get thread by id:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
  * List threads from Supabase with project filter.
  * Uses threads_lite view (no embedding column).
  * Returns null if Supabase is unavailable (caller should fall back to local).

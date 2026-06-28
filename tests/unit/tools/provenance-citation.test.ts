@@ -543,6 +543,93 @@ describe("recall: confidence tiers", () => {
 
     expect(result.display).not.toContain("[low confidence]");
   });
+
+  // GIT-49: stub low-confidence scars (< 0.55) — header only, skip the heavy body
+  it("stubs sub-0.55 scars: header shown but description and counter_arguments omitted", async () => {
+    setupRecallRemote([
+      makeRecallScar({
+        id: "weak-stub",
+        title: "Weak stub scar",
+        similarity: 0.5,
+        description: "UNIQUE_STUB_BODY_should_be_omitted_for_low_confidence",
+        counter_arguments: ["UNIQUE_STUB_COUNTERARG_should_be_omitted"],
+      }),
+    ]);
+
+    const result = await recall({ plan: "stub test" });
+    const display = result.display!;
+
+    // Scar stays visible + confirmable: title and the tag still render
+    expect(display).toContain("Weak stub scar");
+    expect(display).toContain("[low confidence]");
+    // Heavy body is skipped
+    expect(display).not.toContain("UNIQUE_STUB_BODY_should_be_omitted_for_low_confidence");
+    expect(display).not.toContain("UNIQUE_STUB_COUNTERARG_should_be_omitted");
+    expect(display).not.toContain("You might think");
+  });
+
+  it("renders the full body for >=0.55 scars (description + counter_arguments present)", async () => {
+    setupRecallRemote([
+      makeRecallScar({
+        id: "strong-full",
+        title: "Strong full scar",
+        similarity: 0.7,
+        description: "UNIQUE_FULL_BODY_should_render_for_high_confidence",
+        counter_arguments: ["UNIQUE_FULL_COUNTERARG_should_render"],
+      }),
+    ]);
+
+    const result = await recall({ plan: "full render test" });
+    const display = result.display!;
+
+    expect(display).toContain("UNIQUE_FULL_BODY_should_render_for_high_confidence");
+    expect(display).toContain("You might think");
+    expect(display).toContain("UNIQUE_FULL_COUNTERARG_should_render");
+    expect(display).not.toContain("[low confidence]");
+  });
+
+  it("never stubs blocking-verification scars, even below threshold", async () => {
+    setupRecallRemote([
+      {
+        ...makeRecallScar({
+          id: "blocking-weak",
+          title: "Blocking weak scar",
+          similarity: 0.5,
+          description: "UNIQUE_BLOCKING_BODY_must_render_despite_low_score",
+        }),
+        required_verification: {
+          when: "before deploy",
+          queries: ["SELECT 1;"],
+          must_show: "the row count",
+          blocking: true,
+        },
+      },
+    ]);
+
+    const result = await recall({ plan: "blocking exemption test" });
+
+    // Below threshold (so still tagged) but the body must NOT be stubbed
+    expect(result.display).toContain("UNIQUE_BLOCKING_BODY_must_render_despite_low_score");
+  });
+
+  it("stubbing reduces output length for low-confidence scars", async () => {
+    const heavy = {
+      description: "A".repeat(400),
+      counter_arguments: ["B".repeat(120), "C".repeat(120)],
+    };
+
+    setupRecallRemote([
+      makeRecallScar({ id: "len-full", title: "Length scar", similarity: 0.7, ...heavy }),
+    ]);
+    const fullLen = (await recall({ plan: "length baseline" })).display!.length;
+
+    setupRecallRemote([
+      makeRecallScar({ id: "len-stub", title: "Length scar", similarity: 0.5, ...heavy }),
+    ]);
+    const stubLen = (await recall({ plan: "length stubbed" })).display!.length;
+
+    expect(stubLen).toBeLessThan(fullLen);
+  });
 });
 
 // ============================================================

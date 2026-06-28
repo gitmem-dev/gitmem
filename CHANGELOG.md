@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.6] - 2026-06-27
+
+### Changed
+- **`recall` stubs low-confidence scars to cut wasted tokens**: scars scoring below the `0.55` similarity threshold (already flagged `[low confidence]`, ~66% N/A rate in that band) now render as a one-line stub — title, severity, score, short id, and the `[low confidence]` tag — instead of hydrating their full body (description, counter-arguments, applies-when, why-this-matters, action-protocol, self-check, related triples). High-confidence scars (≥ 0.55) are unchanged, and blocking-verification scars always render in full regardless of score. The `0.55` cutoff is now a single named constant (`LOW_CONFIDENCE_THRESHOLD`) shared by the tag and the stub so they can't drift apart. The scar's id stays visible, so an agent can still pull detail on demand. (GIT-49)
+
 ## [1.6.5] - 2026-06-27
 
 ### Fixed

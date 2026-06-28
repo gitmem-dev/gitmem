@@ -44,6 +44,17 @@ import { fetchDismissalCounts, type DismissalCounts } from "../services/behavior
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
 
 /**
+ * Confidence cutoff for scar rendering.
+ *
+ * Matches below this similarity are flagged `[low confidence]` and, per the
+ * 1.5.0 UX-audit calibration, are N/A ~66% of the time. They pass the pro-tier
+ * 0.45 inclusion filter but are rendered as stubs (header only) rather than full
+ * bodies — the tag boundary and the stub boundary share this constant so they
+ * can never drift apart.
+ */
+export const LOW_CONFIDENCE_THRESHOLD = 0.55;
+
+/**
  * Parameters for recall tool
  */
 export interface RecallParams {
@@ -194,8 +205,8 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     const sev = SEV[scar.severity] || "[?]";
 
     const starterTag = scar.is_starter ? ` ${dimText("[starter]")}` : "";
-    // Confidence tier: marginal matches (< 0.55) get flagged — 66% N/A rate in this range
-    const confidenceTag = scar.similarity < 0.55 ? ` ${dimText("[low confidence]")}` : "";
+    // Confidence tier: marginal matches get flagged — 66% N/A rate below the threshold
+    const confidenceTag = scar.similarity < LOW_CONFIDENCE_THRESHOLD ? ` ${dimText("[low confidence]")}` : "";
     // Pro: decay tag for scars with reduced behavioral relevance
     const decayTag = hasProInsights() && scar.decay_multiplier !== undefined && scar.decay_multiplier < 0.8
       ? ` ${dimText(`[decay: ${Math.round(scar.decay_multiplier * 100)}%]`)}`
@@ -210,61 +221,69 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       }
     }
 
-    // Use variant enforcement text if available (blind to variant name)
-    if (scar.variant_info?.has_variants && scar.variant_info.variant) {
-      const variantText = formatVariantEnforcement(scar.variant_info.variant, scar.title);
-      lines.push(variantText);
-    } else {
-      // Legacy path: use original scar description
-      lines.push(scar.description);
-    }
+    // Stub low-confidence scars: render header only, skip the heavy body.
+    // ~66% of sub-threshold matches are N/A, so their full bodies are wasted
+    // tokens. Blocking-verification scars always render full regardless of score.
+    const isStub =
+      scar.similarity < LOW_CONFIDENCE_THRESHOLD && !scar.required_verification?.blocking;
 
-    if (scar.counter_arguments.length > 0) {
-      lines.push("");
-      lines.push("*You might think:*");
-      for (const counter of scar.counter_arguments.slice(0, 2)) {
-        lines.push(`  - ${counter}`);
+    if (!isStub) {
+      // Use variant enforcement text if available (blind to variant name)
+      if (scar.variant_info?.has_variants && scar.variant_info.variant) {
+        const variantText = formatVariantEnforcement(scar.variant_info.variant, scar.title);
+        lines.push(variantText);
+      } else {
+        // Legacy path: use original scar description
+        lines.push(scar.description);
       }
-    }
 
-    if (scar.applies_when.length > 0) {
-      lines.push("");
-      lines.push("*Applies when:* " + scar.applies_when.slice(0, 3).join(", "));
-    }
-
-    // Render LLM-cooperative enforcement fields
-    if (scar.why_this_matters) {
-      lines.push("");
-      lines.push(`**Why this matters:** ${scar.why_this_matters}`);
-    }
-
-    if (scar.action_protocol && scar.action_protocol.length > 0) {
-      lines.push("");
-      lines.push("**Action Protocol:**");
-      scar.action_protocol.forEach((step, i) => {
-        lines.push(`  ${i + 1}. ${step}`);
-      });
-    }
-
-    if (scar.self_check_criteria && scar.self_check_criteria.length > 0) {
-      lines.push("");
-      lines.push("**Self-Check:**");
-      for (const criterion of scar.self_check_criteria) {
-        lines.push(`  - [ ] ${criterion}`);
+      if (scar.counter_arguments.length > 0) {
+        lines.push("");
+        lines.push("*You might think:*");
+        for (const counter of scar.counter_arguments.slice(0, 2)) {
+          lines.push(`  - ${counter}`);
+        }
       }
-    }
 
-    // Render related knowledge triples
-    if (scar.related_triples && scar.related_triples.length > 0) {
-      lines.push("");
-      lines.push("*Related knowledge:*");
-      for (const triple of scar.related_triples) {
-        lines.push(`  - ${triple.subject} **${triple.predicate}** ${triple.object}`);
+      if (scar.applies_when.length > 0) {
+        lines.push("");
+        lines.push("*Applies when:* " + scar.applies_when.slice(0, 3).join(", "));
       }
-    }
 
-    if (scar.source_issue) {
-      lines.push(`*Source:* ${scar.source_issue}`);
+      // Render LLM-cooperative enforcement fields
+      if (scar.why_this_matters) {
+        lines.push("");
+        lines.push(`**Why this matters:** ${scar.why_this_matters}`);
+      }
+
+      if (scar.action_protocol && scar.action_protocol.length > 0) {
+        lines.push("");
+        lines.push("**Action Protocol:**");
+        scar.action_protocol.forEach((step, i) => {
+          lines.push(`  ${i + 1}. ${step}`);
+        });
+      }
+
+      if (scar.self_check_criteria && scar.self_check_criteria.length > 0) {
+        lines.push("");
+        lines.push("**Self-Check:**");
+        for (const criterion of scar.self_check_criteria) {
+          lines.push(`  - [ ] ${criterion}`);
+        }
+      }
+
+      // Render related knowledge triples
+      if (scar.related_triples && scar.related_triples.length > 0) {
+        lines.push("");
+        lines.push("*Related knowledge:*");
+        for (const triple of scar.related_triples) {
+          lines.push(`  - ${triple.subject} **${triple.predicate}** ${triple.object}`);
+        }
+      }
+
+      if (scar.source_issue) {
+        lines.push(`*Source:* ${scar.source_issue}`);
+      }
     }
 
     lines.push("");

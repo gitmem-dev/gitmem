@@ -17,6 +17,7 @@ import { getThreads, getProject } from "../services/session-state.js";
 import { aggregateThreads, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js";
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { listThreadsFromSupabase } from "../services/thread-supabase.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
 import * as supabase from "../services/supabase-client.js";
 import {
   Timer,
@@ -92,8 +93,9 @@ export async function listThreads(
   let allThreads: ThreadObject[] | null = null;
   let source: "supabase" | "aggregation" | "memory" | "file" = "file";
 
-  // Try Supabase first (source of truth)
-  const supabaseThreads = await listThreadsFromSupabase(project, {
+  // Try Supabase first (source of truth) — scoped by the one resolver (GIT-69)
+  const scope = resolveThreadScope({ project });
+  const supabaseThreads = await listThreadsFromSupabase(scope, {
     statusFilter: includeResolved ? undefined : statusFilter,
     includeResolved,
   });

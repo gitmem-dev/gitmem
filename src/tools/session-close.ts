@@ -17,6 +17,8 @@ import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
+import type { Project } from "../types/index.js";
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -1375,7 +1377,12 @@ export async function sessionClose(
             // Phase 5: Implicit thread detection (chained after embedding)
             const suggestProject: string = (existingSession?.project as string) || "default";
             const recentSessions = await loadRecentSessionEmbeddings(suggestProject, 30, 20);
-            const threadEmbs = await loadOpenThreadEmbeddings(suggestProject);
+            // GIT-69: project visibility is deliberate here — the suggestion
+            // pass proposes threads to a human rather than silently merging.
+            const threadEmbs = await loadOpenThreadEmbeddings(
+              resolveThreadScope({ project: suggestProject as Project, sessionId }),
+              "project"
+            );
             if (recentSessions && threadEmbs) {
               const existing = loadSuggestions();
               const updated = detectSuggestedThreads(

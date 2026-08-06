@@ -25,6 +25,8 @@ const {
   buildScopedThreadQuery,
   isInScope,
   describeScope,
+  computePanelOmission,
+  formatOmissionLine,
   THREAD_SCOPE_ORDER,
   THREAD_SCOPE_LIMIT,
   INACTIVE_STATUSES,
@@ -287,5 +289,76 @@ describe("project-disagreement fixture — the recovery→scoping seam", () => {
     expect(describeScope(scope, "project")).toContain("weekend_warrior");
     expect(describeScope(scope, "own_session")).toContain(SESSION_A.slice(0, 8));
     expect(describeScope({ project: "gitmem", sessionId: null }, "own_session")).toContain("none");
+  });
+});
+
+// ---------- Display layer: no silent truncation (R7) ----------
+
+describe("panel omission accounting", () => {
+  // The cap is annotation, not scope. These assert the panel cannot claim a
+  // completeness it does not have, and that its numbers reconcile exactly to
+  // the scope set: shown + dormantHidden + overCap === totalInScope.
+
+  const cases = [
+    { name: "everything fits", listable: 3, dormantHidden: 0, maxShow: 5 },
+    { name: "over cap only", listable: 12, dormantHidden: 0, maxShow: 5 },
+    { name: "dormant only", listable: 4, dormantHidden: 31, maxShow: 5 },
+    { name: "both", listable: 16, dormantHidden: 31, maxShow: 5 },
+    { name: "exactly at cap", listable: 5, dormantHidden: 0, maxShow: 5 },
+    { name: "empty scope", listable: 0, dormantHidden: 0, maxShow: 5 },
+    { name: "all dormant", listable: 0, dormantHidden: 9, maxShow: 5 },
+  ];
+
+  for (const c of cases) {
+    it(`reconciles: ${c.name}`, () => {
+      const counts = {
+        listable: c.listable,
+        dormantHidden: c.dormantHidden,
+        totalInScope: c.listable + c.dormantHidden,
+      };
+      const o = computePanelOmission(counts, c.maxShow);
+
+      // The invariant R7 exists to protect.
+      expect(o.shown + o.dormantHidden + o.overCap).toBe(counts.totalInScope);
+      expect(o.shown).toBeLessThanOrEqual(c.maxShow);
+      expect(o.overCap).toBeGreaterThanOrEqual(0);
+    });
+  }
+
+  it("says nothing when the view is complete", () => {
+    const o = computePanelOmission({ listable: 3, dormantHidden: 0, totalInScope: 3 }, 5);
+    expect(formatOmissionLine(o)).toBeNull();
+  });
+
+  it("discloses both omission kinds and where the rest lives", () => {
+    const o = computePanelOmission({ listable: 16, dormantHidden: 31, totalInScope: 47 }, 5);
+    const line = formatOmissionLine(o);
+
+    expect(line).toContain("showing 5 of 47 in scope");
+    expect(line).toContain("31 dormant");
+    expect(line).toContain("11 over cap");
+    expect(line).toContain("list_threads");
+  });
+
+  it("omits a zero term rather than printing '0 dormant'", () => {
+    const overCapOnly = formatOmissionLine(
+      computePanelOmission({ listable: 12, dormantHidden: 0, totalInScope: 12 }, 5)
+    );
+    expect(overCapOnly).toContain("7 over cap");
+    expect(overCapOnly).not.toContain("dormant");
+
+    const dormantOnly = formatOmissionLine(
+      computePanelOmission({ listable: 4, dormantHidden: 31, totalInScope: 35 }, 5)
+    );
+    expect(dormantOnly).toContain("31 dormant");
+    expect(dormantOnly).not.toContain("over cap");
+  });
+
+  it("discloses dormant-only omission even when nothing is over cap", () => {
+    // The panel looks complete — 4 threads listed, 4 threads shown — while 31
+    // in-scope threads are withheld. Exactly the case a naive "+N more" misses.
+    const o = computePanelOmission({ listable: 4, dormantHidden: 31, totalInScope: 35 }, 5);
+    expect(o.overCap).toBe(0);
+    expect(formatOmissionLine(o)).not.toBeNull();
   });
 });

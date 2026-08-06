@@ -27,6 +27,7 @@ import {
   getThreadFromSupabaseById,
   listThreadsFromSupabase,
 } from "../services/thread-supabase.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
 import { writeTriplesForThreadResolution } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
@@ -251,8 +252,10 @@ async function hydrateThreadFromSupabase(
     return await getThreadFromSupabaseById(threadId);
   }
   if (textMatch) {
-    const project = getProject() || "default";
-    const openThreads = await listThreadsFromSupabase(project, { statusFilter: "open" });
+    // GIT-69: same scope resolver as list_threads, so a thread the user can
+    // see is a thread they can resolve by text.
+    const scope = resolveThreadScope();
+    const openThreads = await listThreadsFromSupabase(scope, { statusFilter: "open" });
     if (openThreads) {
       return findThreadByText(openThreads, textMatch);
     }

@@ -28,6 +28,7 @@ import {
   touchThreadsInSupabase,
 } from "../services/thread-supabase.js";
 import { checkDuplicate } from "../services/thread-dedup.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { writeTriplesForThreadCreation } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
@@ -106,14 +107,21 @@ export async function createThread(
     }
   }
 
-  // Phase 3: Load existing open threads with embeddings for dedup check
+  // Phase 3 / GIT-69: Load dedup candidates through the one scope resolver.
+  // Candidates are this session's own threads in this project — never another
+  // session's, which cannot be safely auto-merged (R1).
+  const scope = resolveThreadScope({ project, sessionId: sessionId ?? null });
+
   let existingThreads: ThreadWithEmbedding[] = [];
-  const loadedFromSupabase = await loadOpenThreadEmbeddings(project);
+  const loadedFromSupabase = await loadOpenThreadEmbeddings(scope);
   if (loadedFromSupabase) {
     existingThreads = loadedFromSupabase;
-  } else {
-    // Supabase unavailable: use local threads for text-only fallback
-    const localThreads = loadThreadsFile().filter((t) => t.status === "open");
+  } else if (scope.sessionId) {
+    // Supabase unavailable: use local threads for text-only fallback, held to
+    // the same scope the query would have applied.
+    const localThreads = loadThreadsFile().filter(
+      (t) => t.status === "open" && t.source_session === scope.sessionId
+    );
     existingThreads = localThreads.map((t) => ({
       thread_id: t.id,
       text: t.text,

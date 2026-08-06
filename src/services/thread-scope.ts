@@ -79,6 +79,13 @@ export const THREAD_SCOPE_LIMIT = 100;
 /** Statuses that mean "this thread is no longer live work". */
 export const TERMINAL_STATUSES = ["resolved", "archived"] as const;
 
+/**
+ * In scope but excluded from a default listing (R7). Dormant threads exist —
+ * hiding them from scope would make the panel and the dedup candidate set
+ * disagree about what exists. They are filtered at display and counted.
+ */
+export const DORMANT_STATUSES: readonly string[] = ["dormant"];
+
 /** Statuses excluded from the active-thread view. */
 export const INACTIVE_STATUSES = ["resolved", "archived", "dormant"] as const;
 
@@ -170,6 +177,68 @@ export function isInScope(
   }
 
   return true;
+}
+
+// --- Honest truncation (R7) ---
+
+/**
+ * What the scope actually contained. The three counts must reconcile:
+ * listable + dormantHidden === totalInScope.
+ */
+export interface ThreadScopeCounts {
+  /** In scope and eligible for the default listing. */
+  listable: number;
+  /** In scope, withheld from the default listing because dormant. */
+  dormantHidden: number;
+  /** Everything the scope selected. */
+  totalInScope: number;
+}
+
+export interface PanelOmission {
+  shown: number;
+  dormantHidden: number;
+  overCap: number;
+  totalInScope: number;
+}
+
+/**
+ * Split a scope into what a capped panel shows and what it withholds.
+ *
+ * By construction shown + dormantHidden + overCap === totalInScope. That
+ * identity is the point: a panel showing 5 of 47 with no indicator is a
+ * green-message pattern in miniature — a display asserting a completeness it
+ * does not have.
+ */
+export function computePanelOmission(
+  counts: ThreadScopeCounts,
+  maxShow: number
+): PanelOmission {
+  const shown = Math.max(0, Math.min(counts.listable, maxShow));
+  return {
+    shown,
+    dormantHidden: counts.dormantHidden,
+    overCap: Math.max(0, counts.listable - shown),
+    totalInScope: counts.totalInScope,
+  };
+}
+
+/**
+ * Render the omission line, or null when the view is complete and there is
+ * nothing to disclose. Any capped or filtered view must state what it omitted
+ * and where the rest lives (R7).
+ */
+export function formatOmissionLine(
+  omission: PanelOmission,
+  fullViewHint = "list_threads for full view"
+): string | null {
+  const withheld = omission.dormantHidden + omission.overCap;
+  if (withheld === 0) return null;
+
+  const parts: string[] = [];
+  if (omission.dormantHidden > 0) parts.push(`${omission.dormantHidden} dormant`);
+  if (omission.overCap > 0) parts.push(`${omission.overCap} over cap`);
+
+  return `showing ${omission.shown} of ${omission.totalInScope} in scope (${parts.join(", ")}) — ${fullViewHint}`;
 }
 
 /**

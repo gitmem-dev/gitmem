@@ -57,6 +57,11 @@ const SAFE_TEXT = {
   dualMessage: "Harness case charlie — velvet compass gherkin",
   deadSotId: "Harness case delta — brass otter samovar",
   deadSotNaming: "Harness case echo — plum trellis oscilloscope",
+  dedupSeed: "Harness case foxtrot — juniper anvil quasar",
+  dedupLonger:
+    "Harness case foxtrot — juniper anvil quasar, extended with additional wording so the two submissions differ in length while still colliding",
+  freeNoSession: "Harness case golf — tin sparrow obelisk",
+  freeNoSessionNaming: "Harness case hotel — moss lantern pendulum",
 } as const;
 
 const TEST_DIR = join(tmpdir(), `gitmem-git67-${process.pid}`);
@@ -177,5 +182,113 @@ describe("GIT-67 / R4: healthy session, unreachable durable store", () => {
     const text = getToolResultText(result).toLowerCase();
 
     expect(text).toMatch(/durable|local[_ ]only|not stored/);
+  });
+});
+
+describe("GIT-63 / R2: dedup refuses rather than discarding", () => {
+  let mcp: McpTestClient;
+
+  beforeAll(async () => {
+    const dir = freshDir("dedup");
+    mcp = await createMcpClient({
+      ...createOutageEnv(),
+      GITMEM_DIR: dir,
+      HOME: dir,
+    });
+    await callTool(mcp.client, "session_start", {
+      agent_identity: "cli",
+      project: "gitmem",
+    });
+    // Seed the thread the next call will collide with.
+    await callTool(mcp.client, "create_thread", { text: SAFE_TEXT.dedupSeed });
+  });
+
+  afterAll(async () => {
+    await mcp?.cleanup();
+  });
+
+  it("states that the submitted text was NOT stored", async () => {
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.dedupSeed,
+    });
+    const text = getToolResultText(result).toLowerCase();
+
+    // The old behaviour read as "created and merged" while the row kept its
+    // previous text and only updated_at moved.
+    expect(text).toMatch(/not stored|duplicate_candidate/);
+    expect(text).not.toMatch(/thread created/i);
+  });
+
+  it("shows both lengths so a discard is arithmetically visible", async () => {
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.dedupLonger,
+    });
+    const text = getToolResultText(result);
+
+    // Two char counts must appear — the stored row's and the submission's.
+    const lengths = text.match(/\b\d+ chars\b/g) ?? [];
+    expect(lengths.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("offers an explicit way through rather than a dead end", async () => {
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.dedupSeed,
+    });
+    const text = getToolResultText(result);
+
+    expect(text).toMatch(/allow_duplicate/);
+    expect(text).toMatch(/resolve_thread/);
+  });
+
+  it("allow_duplicate: true actually creates a distinct thread", async () => {
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.dedupSeed,
+      allow_duplicate: true,
+    });
+    const text = getToolResultText(result);
+
+    expect(text).not.toMatch(/not stored/i);
+    expect(text).toMatch(THREAD_ID_PATTERN);
+  });
+});
+
+describe("R5: free tier writes without a session, and says so", () => {
+  let mcp: McpTestClient;
+
+  beforeAll(async () => {
+    const dir = freshDir("free-no-session");
+    mcp = await createMcpClient({
+      GITMEM_TIER: "free",
+      SUPABASE_URL: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
+      GITMEM_DIR: dir,
+      HOME: dir,
+    });
+  });
+
+  afterAll(async () => {
+    await mcp?.cleanup();
+  });
+
+  it("stores the thread — the local file IS the SOT here", async () => {
+    // Refusing this would fail-close every sessionless free user. R5 makes the
+    // guard tier-relative precisely to avoid that.
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.freeNoSession,
+    });
+    const text = getToolResultText(result);
+
+    expect(text).toMatch(THREAD_ID_PATTERN);
+    expect(text).not.toMatch(/not stored/i);
+  });
+
+  it("names the store and the absent session rather than implying ownership", async () => {
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.freeNoSessionNaming,
+    });
+    const text = getToolResultText(result).toLowerCase();
+
+    expect(text).toContain("local file");
+    expect(text).toContain("session: none");
   });
 });

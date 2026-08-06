@@ -273,10 +273,18 @@ export async function restartServer(
  * Read a thread row straight from Supabase, bypassing every gitmem code path.
  *
  * The acceptance standard for this sprint is the row, not the tool message, so
- * assertions need a channel the code under test cannot influence. Returns null
- * when the row is absent, and throws when the store is unreachable — an
- * unreachable store must never read as "row absent", or the harness reproduces
- * the fail-open bug it exists to catch.
+ * assertions need a channel the code under test cannot influence.
+ *
+ * STANDING INVARIANT — do not soften this to return null on error.
+ *
+ * Absent row → null. Unreachable store → throw. Those are different facts and
+ * must stay different values. Collapsing them would make every row-absence
+ * assertion pass whenever the store is merely down, which is the fail-open
+ * class rebuilt inside the instrument that exists to detect it: a test suite
+ * reporting "verified, no row written" when it verified nothing at all.
+ *
+ * If a caller finds the throw inconvenient, the correct fix is to handle the
+ * unreachable case explicitly, never to erase the distinction here.
  */
 export async function queryThreadRow(
   threadId: string,

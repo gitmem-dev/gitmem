@@ -15,7 +15,7 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { getTableName } from "../services/tier.js";
+import { getTableName, getTier, hasSupabase } from "../services/tier.js";
 import { getThreads, setThreads, getCurrentSession, getProject } from "../services/session-state.js";
 import {
   generateThreadId,
@@ -25,7 +25,7 @@ import {
 import {
   createThreadInSupabase,
   loadOpenThreadEmbeddings,
-  touchThreadsInSupabase,
+  getThreadFromSupabaseById,
 } from "../services/thread-supabase.js";
 import { checkDuplicate } from "../services/thread-dedup.js";
 import { resolveThreadScope } from "../services/thread-scope.js";
@@ -52,14 +52,48 @@ export interface CreateThreadParams {
   linear_issue?: string;
   /** Project namespace (default: default) */
   project?: Project;
+  /**
+   * R2: force a genuinely new thread past a dedup match. Dedup refuses rather
+   * than merging, so this is the caller's explicit way through — never a
+   * default, because the whole point is that the decision is stated.
+   */
+  allow_duplicate?: boolean;
 }
+
+/**
+ * Why a write did not store, when it did not (GIT-67/GIT-63).
+ * Absent on success.
+ */
+export type NotStoredReason =
+  | "no_active_session"
+  | "duplicate_candidate"
+  | "empty_text"
+  | "store_unavailable";
+
+/**
+ * Where a thread actually landed (R3: every response names its store).
+ * `local_only` is the honest middle state from R4 — written somewhere, but
+ * not somewhere durable.
+ */
+export type StoredIn = "supabase" | "local" | "local_only" | null;
 
 export interface CreateThreadResult {
   success: boolean;
+  /**
+   * Whether a row exists. Distinct from `success` on purpose: a dedup refusal
+   * is a well-formed answer to a well-formed request, not a crash.
+   */
+  stored: boolean;
+  /** Whether what was stored survives this machine. */
+  durable: boolean;
+  /** R3: names the store in-band, which also kills the f104e10d silent-local trap. */
+  stored_in: StoredIn;
+  reason?: NotStoredReason;
   thread?: ThreadObject;
   error?: string;
   total_open: number;
   supabase_synced: boolean;
+  supabase_error?: string;
   performance: PerformanceData;
   /** Phase 3: true when dedup gate found an existing duplicate */
   deduplicated?: boolean;
@@ -68,6 +102,11 @@ export interface CreateThreadResult {
     method: "embedding" | "token_overlap" | "text_normalization" | "skipped";
     similarity: number | null;
     matched_thread_id: string | null;
+    /** R2: the STORED text of the match, so the caller sees what it collided with. */
+    matched_text?: string;
+    /** R2: both lengths, so a silent discard is arithmetically visible. */
+    stored_length?: number;
+    submitted_length?: number;
   };
   display?: string;
 }
@@ -84,11 +123,15 @@ export async function createThread(
     const latencyMs = timer.stop();
     return {
       success: false,
+      stored: false,
+      durable: false,
+      stored_in: null,
+      reason: "empty_text",
       error: "Thread text is required",
       total_open: 0,
       supabase_synced: false,
       performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
-      display: wrapDisplay(`Failed: thread text is required`),
+      display: wrapDisplay(`Not stored: thread text is required`),
     };
   }
 
@@ -96,6 +139,38 @@ export async function createThread(
   const sessionId = session?.sessionId;
   const project = params.project || getProject() || "default";
   const trimmedText = params.text.trim();
+
+  // GIT-67 / R5: fail loud with no ID when there is no session to own the
+  // write. The reported defect was a success payload carrying a plausible
+  // t-xxxxxxxx for a row that never existed — the caller records that ID and
+  // moves on, so an invented ID is strictly worse than an error.
+  //
+  // Tier-relative per R5: on pro the write is refused outright, because the
+  // durable store records source_session and an unowned row is a defect. On
+  // free the local file is the SOT and sessionless use is legitimate, so the
+  // write proceeds and the response says `session: none` rather than implying
+  // an ownership it does not have.
+  const tier = getTier();
+  if (!sessionId && tier !== "free") {
+    const latencyMs = timer.stop();
+    const message =
+      "Not stored: no active session (reason: no_active_session). " +
+      "No thread ID has been issued because no row was written. " +
+      "Call session_start() first, then retry — or fall back to another record (e.g. the issue tracker) if the session cannot be restored.";
+
+    return {
+      success: false,
+      stored: false,
+      durable: false,
+      stored_in: null,
+      reason: "no_active_session",
+      error: message,
+      total_open: 0,
+      supabase_synced: false,
+      performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
+      display: wrapDisplay(message),
+    };
+  }
 
   // Phase 3: Generate embedding for new text (best-effort)
   let newEmbedding: number[] | null = null;
@@ -132,30 +207,33 @@ export async function createThread(
   // Phase 3: Run dedup check
   const dedupResult = checkDuplicate(trimmedText, newEmbedding, existingThreads);
 
-  // If duplicate found, touch existing thread and return it
-  if (dedupResult.is_duplicate && dedupResult.matched_thread_id) {
-    // Touch the existing thread to keep it vital
-    await touchThreadsInSupabase([dedupResult.matched_thread_id]);
+  // GIT-63 / R2: a dedup match REFUSES. It does not merge, and it does not
+  // discard.
+  //
+  // The old behaviour returned the matched thread's ID with the SUBMITTED text
+  // rendered beside it and success:true, while the stored row kept its own
+  // text and only updated_at moved. The caller believed a handoff was written;
+  // the database held the previous session's. Nothing anywhere said the
+  // content had been dropped.
+  //
+  // Everything below renders from the STORED row. The submitted text appears
+  // only as a length, never as the thing that got an ID.
+  if (dedupResult.is_duplicate && dedupResult.matched_thread_id && !params.allow_duplicate) {
+    const matchedId = dedupResult.matched_thread_id;
+
+    // Read the stored row back rather than trusting the dedup candidate cache
+    // — the refusal quotes the database, not our copy of it.
+    const storedRow = await getThreadFromSupabaseById(matchedId);
+    const storedText = storedRow?.text ?? dedupResult.matched_text ?? "";
 
     const fileThreads = loadThreadsFile();
     const totalOpen = fileThreads.filter((t) => t.status === "open").length;
-
-    // Find the existing thread to return
-    const existingThread: ThreadObject = fileThreads.find(
-      (t) => t.id === dedupResult.matched_thread_id
-    ) || {
-      id: dedupResult.matched_thread_id,
-      text: dedupResult.matched_text || trimmedText,
-      status: "open",
-      created_at: new Date().toISOString(),
-    };
-
     const latencyMs = timer.stop();
 
     recordMetrics({
       id: metricsId,
       tool_name: "create_thread" as any,
-      query_text: `dedup:${dedupResult.matched_thread_id}`,
+      query_text: `dedup_refused:${matchedId}`,
       tables_searched: [getTableName("threads")],
       latency_ms: latencyMs,
       result_count: 0,
@@ -164,23 +242,45 @@ export async function createThread(
         dedup_blocked: true,
         dedup_method: dedupResult.method,
         dedup_similarity: dedupResult.similarity,
-        matched_thread_id: dedupResult.matched_thread_id,
+        matched_thread_id: matchedId,
+        submitted_length: trimmedText.length,
+        stored_length: storedText.length,
       },
     }).catch(() => {});
 
+    const message =
+      `NOT STORED: your text was not written (reason: duplicate_candidate).\n` +
+      `It resembles an existing thread in this session${dedupResult.similarity !== null ? ` (similarity ${dedupResult.similarity})` : ""}.\n\n` +
+      `Existing thread ${matchedId} — ${storedText.length} chars, unchanged:\n` +
+      `  "${truncate(storedText, 120)}"\n\n` +
+      `Your submission — ${trimmedText.length} chars, NOT persisted anywhere:\n` +
+      `  "${truncate(trimmedText, 120)}"\n\n` +
+      `To supersede: resolve_thread("${matchedId}") then create_thread again.\n` +
+      `To keep both: create_thread with allow_duplicate: true.`;
+
     return {
-      success: true,
-      thread: formatThreadForDisplay(existingThread),
+      success: false,
+      stored: false,
+      durable: false,
+      stored_in: null,
+      reason: "duplicate_candidate",
+      // Deliberately NO `thread` field. Returning a ThreadObject here is how
+      // the old code handed back another thread's ID as if it were the
+      // caller's; there is no thread to return, because nothing was created.
       total_open: totalOpen,
-      supabase_synced: true,
+      supabase_synced: false,
       performance: buildPerformanceData("create_thread" as any, latencyMs, 0),
       deduplicated: true,
       dedup: {
         method: dedupResult.method,
         similarity: dedupResult.similarity,
-        matched_thread_id: dedupResult.matched_thread_id,
+        matched_thread_id: matchedId,
+        matched_text: storedText,
+        stored_length: storedText.length,
+        submitted_length: trimmedText.length,
       },
-      display: wrapDisplay(`Dedup: matched existing thread "${truncate(trimmedText, 60)}"\nID: ${dedupResult.matched_thread_id}`),
+      error: message,
+      display: wrapDisplay(message),
     };
   }
 
@@ -193,12 +293,21 @@ export async function createThread(
     ...(sessionId && { source_session: sessionId }),
   };
 
-  // Write to Supabase (source of truth) with embedding — non-blocking on failure
+  // Write to Supabase (source of truth) with embedding.
   let supabaseSynced = false;
+  let supabaseError: string | undefined;
   const embeddingJson = newEmbedding ? JSON.stringify(newEmbedding) : null;
-  const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);
-  if (supabaseResult) {
-    supabaseSynced = true;
+
+  if (hasSupabase()) {
+    try {
+      const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);
+      supabaseSynced = Boolean(supabaseResult);
+      if (!supabaseSynced) {
+        supabaseError = "write returned no row";
+      }
+    } catch (err) {
+      supabaseError = err instanceof Error ? err.message : String(err);
+    }
   }
 
   // Update in-memory session state if active
@@ -246,11 +355,65 @@ export async function createThread(
     })
   );
 
+  // GIT-63/GIT-67 core convention: render from a post-write READ of the stored
+  // row, never from the submitted payload. An ID appears in output only if the
+  // row backing it exists.
+  //
+  // Tier-relative per R3: pro's SOT is the Supabase row, free's is the local
+  // record. Each reads back its own store; neither claims the other's.
+  const storedRow = supabaseSynced ? await getThreadFromSupabaseById(thread.id) : null;
+  const localRecord = loadThreadsFile().find((t) => t.id === thread.id) ?? null;
+  const rendered = storedRow ?? localRecord;
+
+  const durable = supabaseSynced && storedRow !== null;
+  const storedIn: StoredIn = durable
+    ? "supabase"
+    : hasSupabase()
+      ? "local_only"
+      : "local";
+
+  if (!rendered) {
+    // Neither store has it. Nothing to render from, so nothing is claimed.
+    const message =
+      `NOT STORED: the write could not be confirmed in any store (reason: store_unavailable).` +
+      (supabaseError ? `\nDurable store: ${supabaseError}` : "");
+    return {
+      success: false,
+      stored: false,
+      durable: false,
+      stored_in: null,
+      reason: "store_unavailable",
+      error: message,
+      total_open: totalOpen,
+      supabase_synced: false,
+      supabase_error: supabaseError,
+      performance: perfData,
+      display: wrapDisplay(message),
+    };
+  }
+
+  // R4: fail-honest. The local buffer survives — destroying it to signal an
+  // error would repeat the crime in reverse — but the response is
+  // unmistakably non-success, and no ID is presented as durable.
+  const message = durable
+    ? `Thread created: "${truncate(rendered.text, 60)}"\nID: ${rendered.id} · ${totalOpen} open threads · stored in supabase`
+    : hasSupabase()
+      ? `SAVED LOCALLY ONLY — not durable (stored_in: local_only, durable: false).\n` +
+        `Thread ${rendered.id}: "${truncate(rendered.text, 60)}"\n` +
+        `The durable store did not accept this write${supabaseError ? ` (${supabaseError})` : ""}, so it exists only on this machine and will not reach another session.\n` +
+        `Retry when the store is reachable, or record it somewhere durable.`
+      : `Thread created: "${truncate(rendered.text, 60)}"\nID: ${rendered.id} · ${totalOpen} open threads · stored in local file` +
+        (sessionId ? "" : " · session: none");
+
   return {
-    success: true,
-    thread: formatThreadForDisplay(thread),
+    success: durable || !hasSupabase(),
+    stored: true,
+    durable,
+    stored_in: storedIn,
+    thread: formatThreadForDisplay(rendered),
     total_open: totalOpen,
     supabase_synced: supabaseSynced,
+    ...(supabaseError ? { supabase_error: supabaseError } : {}),
     performance: perfData,
     deduplicated: false,
     dedup: {
@@ -258,6 +421,6 @@ export async function createThread(
       similarity: dedupResult.similarity,
       matched_thread_id: null,
     },
-    display: wrapDisplay(`Thread created: "${truncate(trimmedText, 60)}"\nID: ${thread.id} · ${totalOpen} open threads`),
+    display: wrapDisplay(message),
   };
 }

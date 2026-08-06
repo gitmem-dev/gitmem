@@ -23,6 +23,10 @@ vi.mock("../../../src/services/thread-supabase.js", () => ({
   // tests override these per-case.
   getThreadFromSupabaseById: vi.fn(() => Promise.resolve(null)),
   listThreadsFromSupabase: vi.fn(() => Promise.resolve(null)),
+  // GIT-69 item 4: ownership lookup used to explain refusals. Defaults to
+  // "no ownership record", which keeps the bare not-found path for existing
+  // tests; the scoping tests override it per-case.
+  getThreadOwnership: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock("../../../src/services/triple-writer.js", () => ({
@@ -66,6 +70,7 @@ vi.mock("../../../src/services/thread-manager.js", async (importOriginal) => {
 import { getThreads } from "../../../src/services/session-state.js";
 import {
   resolveThreadInSupabase,
+  getThreadOwnership,
   getThreadFromSupabaseById,
   listThreadsFromSupabase,
 } from "../../../src/services/thread-supabase.js";
@@ -260,6 +265,77 @@ describe("resolve_thread — cross-session resolution (GIT-46)", () => {
     // Proves SOT update path was invoked for the cross-session thread id.
     expect(resolveThreadInSupabase).toHaveBeenCalledTimes(1);
     expect(vi.mocked(resolveThreadInSupabase).mock.calls[0][0]).toBe("t-cafe0001");
+  });
+
+  // ---- GIT-69 item 4 v1: project scope + audit trail (R9c) ----
+
+  it("refuses a cross-project resolve and names the project", async () => {
+    // Condition (1). getThreadFromSupabaseById filters on thread_id alone with
+    // no project filter, so without this gate a caller in project A resolves
+    // project B's thread outright.
+    vi.mocked(getThreadOwnership).mockResolvedValue({
+      thread_id: "t-cafe0001",
+      project: "weekend_warrior",
+      source_session: "other-session",
+      status: "open",
+    });
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue({ ...remoteThread });
+
+    const result = await resolveThread({ thread_id: "t-cafe0001" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("weekend_warrior");
+    expect(result.error).toContain("Cross-project resolve is not permitted");
+    // The refusal must be a refusal, not a silent no-op that still wrote.
+    expect(resolveThreadInSupabase).not.toHaveBeenCalled();
+  });
+
+  it("returns ownership information on a miss rather than a bare not-found", async () => {
+    // Condition (3). "Not found" for a thread that demonstrably exists reports
+    // absence when the truth is that it wasn't reachable in this scope.
+    vi.mocked(getThreadOwnership).mockResolvedValue({
+      thread_id: "t-cafe0001",
+      project: "default",
+      source_session: "abcdef12-3456-7890-abcd-ef1234567890",
+      status: "open",
+    });
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue(null);
+
+    const result = await resolveThread({ thread_id: "t-cafe0001" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("abcdef12");
+    expect(result.error).toContain("owned by session");
+    expect(result.error).not.toBe('Thread not found: "t-cafe0001"');
+  });
+
+  it("names the owning session when resolving a thread this session does not own", async () => {
+    // Condition (2). The audit trail is the price of the widened power — a
+    // silent cross-session write is what project scope would otherwise buy.
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue({
+      ...remoteThread,
+      source_session: "99887766-5544-3322-1100-aabbccddeeff",
+    });
+
+    const result = await resolveThread({ thread_id: "t-cafe0001" });
+
+    expect(result.success).toBe(true);
+    expect(result.display).toContain("Cross-session resolve");
+    expect(result.display).toContain("99887766");
+  });
+
+  it("stays quiet when the caller owns the thread", async () => {
+    // No audit line for the ordinary case — an always-on notice is noise, and
+    // noise is how a real signal gets ignored.
+    vi.mocked(getThreadFromSupabaseById).mockResolvedValue({
+      ...remoteThread,
+      source_session: "test-session",
+    });
+
+    const result = await resolveThread({ thread_id: "t-cafe0001" });
+
+    expect(result.success).toBe(true);
+    expect(result.display).not.toContain("Cross-session resolve");
   });
 
   it("case 3: resolves a cross-session thread by text_match too", async () => {

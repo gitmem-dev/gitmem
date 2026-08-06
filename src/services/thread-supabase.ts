@@ -63,6 +63,14 @@ export type { ThreadScopeCounts } from "./thread-scope.js";
  * discard local state (GIT-69 item 3). `skipped` means Supabase is not this
  * tier's SOT — nothing to sync, which is success, not failure.
  */
+/** Ownership facts about a thread, used to explain refusals (GIT-69 item 4). */
+export interface ThreadOwnership {
+  thread_id: string;
+  project: string;
+  source_session: string | null;
+  status: string;
+}
+
 export interface ThreadSyncResult {
   attempted: number;
   synced: string[];
@@ -252,6 +260,49 @@ export async function resolveThreadInSupabase(
  *
  * Returns the mapped ThreadObject, or null if not found / Supabase unavailable.
  */
+/**
+ * Who owns a thread, regardless of the caller's scope (GIT-69 item 4).
+ *
+ * Deliberately UNSCOPED — this is the one lookup allowed to see across
+ * projects, because its purpose is to explain a refusal rather than to grant
+ * access. Per R9c: a miss must return ownership information where it exists
+ * ("owned by session Y in project P") rather than a bare not-found, and a
+ * cross-project resolve must be refused by name rather than silently missing.
+ *
+ * Callers must never use this to widen what they resolve — only to say why
+ * they did not.
+ */
+export async function getThreadOwnership(
+  threadId: string
+): Promise<ThreadOwnership | null> {
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    return null;
+  }
+
+  try {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
+      select: "thread_id,project,source_session,status",
+      filters: { thread_id: threadId },
+      limit: 1,
+    });
+
+    if (rows.length === 0) return null;
+
+    return {
+      thread_id: rows[0].thread_id,
+      project: rows[0].project,
+      source_session: rows[0].source_session,
+      status: rows[0].status,
+    };
+  } catch (error) {
+    console.error(
+      "[thread-supabase] Ownership lookup failed:",
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
+}
+
 export async function getThreadFromSupabaseById(
   threadId: string
 ): Promise<ThreadObject | null> {

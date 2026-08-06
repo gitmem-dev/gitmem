@@ -43,10 +43,32 @@ const { red, yellow, green, bold, dim, reset } = ANSI;
 // Display protocol suffix
 // ---------------------------------------------------------------------------
 
+/**
+ * GIT-74/R11: collapsed from a 51-char rule plus three lines to a single line.
+ *
+ * This fires on EVERY tool response, so it was the largest cross-surface chrome
+ * item in the token audit — and the box-drawing rule alone tokenizes at roughly
+ * the cost of the sentence beneath it. The instruction is unchanged in force:
+ * echo verbatim, because the result is otherwise invisible to the user. Only
+ * the words spent saying it are fewer.
+ */
 const DISPLAY_SUFFIX =
-  "\n───────────────────────────────────────────────────\n" +
-  "DISPLAY PROTOCOL: Output the content above verbatim as your response text.\n" +
-  "Tool results are collapsed in the CLI — the user cannot see them unless you echo them.";
+  "\nDISPLAY PROTOCOL: echo the above verbatim — tool results are collapsed and the user cannot see them otherwise.";
+
+/**
+ * The one citation rule (GIT-74/R12).
+ *
+ * It lived as three separate string literals in recall, search and
+ * prepare_context, which had already drifted — different wording, and only two
+ * of the three carried the worked example. A test asserted they were
+ * consistent and passed on a shared prefix.
+ *
+ * One definition, every surface imports it: the same discipline the thread
+ * scope resolver applied to thread visibility. Compacted per the token audit —
+ * the rule is unchanged in force, only shorter.
+ */
+export const CITATION_LINE =
+  'Cite record IDs for claims; otherwise say "not in institutional memory."';
 
 /**
  * Wrap formatted content with the display protocol suffix.

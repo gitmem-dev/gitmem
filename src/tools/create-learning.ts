@@ -120,6 +120,22 @@ export async function createLearning(
     ...(params.self_check_criteria && { self_check_criteria: params.self_check_criteria }),
   };
 
+  // GIT-76: applies_when is universal, not win-specific.
+  //
+  // It sat inside the `win` branch below since the monorepo extraction
+  // (d0530f7, 2026-02-03), so every scar and pattern written by this package
+  // validated the field, reported success, and discarded it. The corpus shows
+  // the split cleanly: records from Dec 2025 carry values, everything written
+  // here since is [].
+  //
+  // It is also the single most decision-relevant field for an APPLYING/N_A
+  // call in confirm_scars, so its absence degraded scar utility and not merely
+  // fidelity — which is how the GIT-74 token audit found it: the compact tier
+  // had nothing to render.
+  if (params.applies_when !== undefined) {
+    learningData.applies_when = params.applies_when;
+  }
+
   // Add type-specific fields
   if (params.learning_type === "scar") {
     learningData.severity = params.severity;
@@ -130,7 +146,6 @@ export async function createLearning(
   if (params.learning_type === "win") {
     learningData.problem_context = params.problem_context || "";
     learningData.solution_approach = params.solution_approach || "";
-    learningData.applies_when = params.applies_when || [];
     learningData.severity = params.severity || "medium";
   }
 

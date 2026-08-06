@@ -28,7 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
-import { wrapDisplay, productLine } from "../services/display-protocol.js";
+import { wrapDisplay, productLine, CITATION_LINE } from "../services/display-protocol.js";
 import { formatNudgeHeader } from "../services/nudge-variants.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 import {
@@ -86,10 +86,7 @@ Proceed with caution — this may be new territory without documented lessons.`;
 
   // Citation protocol — provenance enforcement for any downstream claims
   // Placed BEFORE results so agents see it before processing scars
-  lines.push("───────────────────────────────────────────────────");
-  lines.push("CITATION RULE: When referencing facts from these scars, cite the record ID.");
-  lines.push("Example: \"Edge improved to 3.07 [id:48ebca14]\" — not paraphrased numbers.");
-  lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+  lines.push(CITATION_LINE);
   lines.push("");
 
   // Blocking verification requirements first

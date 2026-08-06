@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CITATION_LINE } from "../../../src/services/display-protocol.js";
 
 // ============================================================
 // Part 1: format-utils (compact format) — no mocking needed
@@ -221,7 +222,7 @@ describe("search: citation protocol", () => {
 
     const result = await search({ query: "EPS strategy" });
 
-    expect(result.display).toContain("CITATION RULE");
+    expect(result.display).toContain(CITATION_LINE);
     expect(result.display).toContain("cite the record ID");
     expect(result.display).toContain("not in institutional memory");
   });
@@ -231,7 +232,7 @@ describe("search: citation protocol", () => {
 
     const result = await search({ query: "test query" });
 
-    expect(result.display).toContain("CITATION RULE");
+    expect(result.display).toContain(CITATION_LINE);
     expect(result.display).toContain("cite the record ID");
   });
 
@@ -240,7 +241,7 @@ describe("search: citation protocol", () => {
 
     const result = await search({ query: "nonexistent topic" });
 
-    expect(result.display).not.toContain("CITATION RULE");
+    expect(result.display).not.toContain(CITATION_LINE);
   });
 });
 
@@ -328,7 +329,7 @@ describe("prepare_context full: citation protocol", () => {
       format: "full",
     });
 
-    expect(result.memory_payload).toContain("CITATION RULE");
+    expect(result.memory_payload).toContain(CITATION_LINE);
     expect(result.memory_payload).toContain("cite the record ID");
     expect(result.memory_payload).toContain("not in institutional memory");
   });
@@ -354,7 +355,7 @@ describe("prepare_context full: citation protocol", () => {
       format: "full",
     });
 
-    expect(result.memory_payload).not.toContain("CITATION RULE");
+    expect(result.memory_payload).not.toContain(CITATION_LINE);
     expect(result.memory_payload).toContain("no relevant scars");
   });
 
@@ -368,7 +369,7 @@ describe("prepare_context full: citation protocol", () => {
 
     const payload = result.memory_payload;
     const ackIdx = payload.indexOf("Acknowledge these lessons");
-    const citationIdx = payload.indexOf("CITATION RULE");
+    const citationIdx = payload.indexOf(CITATION_LINE);
 
     expect(ackIdx).toBeGreaterThan(-1);
     expect(citationIdx).toBeGreaterThan(-1);
@@ -470,7 +471,7 @@ describe("recall: citation protocol", () => {
 
     const result = await recall({ plan: "deploy edge function" });
 
-    expect(result.display).toContain("CITATION RULE");
+    expect(result.display).toContain(CITATION_LINE);
     expect(result.display).toContain("cite the record ID");
     expect(result.display).toContain("not in institutional memory");
   });
@@ -489,7 +490,7 @@ describe("recall: citation protocol", () => {
 
     const result = await recall({ plan: "free tier recall test" });
 
-    expect(result.display).toContain("CITATION RULE");
+    expect(result.display).toContain(CITATION_LINE);
   });
 
   it("display omits CITATION RULE when no scars found", async () => {
@@ -497,7 +498,7 @@ describe("recall: citation protocol", () => {
 
     const result = await recall({ plan: "no matching scars here" });
 
-    expect(result.display).not.toContain("CITATION RULE");
+    expect(result.display).not.toContain(CITATION_LINE);
   });
 
   it("citation protocol appears before results (before 'Acknowledge these lessons')", async () => {
@@ -507,7 +508,7 @@ describe("recall: citation protocol", () => {
 
     const display = result.display!;
     const ackIdx = display.indexOf("Acknowledge these lessons");
-    const citationIdx = display.indexOf("CITATION RULE");
+    const citationIdx = display.indexOf(CITATION_LINE);
 
     expect(ackIdx).toBeGreaterThan(-1);
     expect(citationIdx).toBeGreaterThan(-1);

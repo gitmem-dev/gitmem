@@ -206,6 +206,20 @@ async function main(): Promise<void> {
     record("cache-health", "live-read", await call("gitmem-cache-health", { project: "gitmem" }), "post-GIT-69 three-valued status");
 
     record("health (write-path)", "live-read", await call("health", {}), "");
+
+    // The audit deliberately starts no session, so every live response above
+    // carries the no-active-session enforcement banner. It does NOT fire in
+    // normal use. Measured exactly rather than estimated away, so the recall
+    // figures can be reported both raw and net.
+    record(
+      "— enforcement banner (artifact, subtract)",
+      "live-read",
+      "--- gitmem enforcement ---\n" +
+        "No active session. Call session_start() first to initialize memory context.\n" +
+        "Without a session, scars won't be tracked and the closing ceremony can't run.\n" +
+        "---\n",
+      "present in every live row above; absent when a session is active",
+    );
   } finally {
     await live.close();
   }

@@ -58,6 +58,19 @@ export interface ThreadDisplayInfo {
 
 export type { ThreadScopeCounts } from "./thread-scope.js";
 
+/**
+ * Outcome of a thread sync, so a caller can decide whether it is safe to
+ * discard local state (GIT-69 item 3). `skipped` means Supabase is not this
+ * tier's SOT — nothing to sync, which is success, not failure.
+ */
+export interface ThreadSyncResult {
+  attempted: number;
+  synced: string[];
+  failed: { id: string; error: string }[];
+  skipped: boolean;
+  all_synced: boolean;
+}
+
 export interface ActiveThreadsResult {
   open: ThreadObject[];
   displayInfo: ThreadDisplayInfo[];
@@ -487,10 +500,24 @@ export async function syncThreadsToSupabase(
   threads: ThreadObject[],
   project: Project = "default",
   sessionId?: string
-): Promise<void> {
-  if (!hasSupabase() || !supabase.isConfigured() || threads.length === 0) {
-    return;
+): Promise<ThreadSyncResult> {
+  // GIT-69 item 3: this used to return void and swallow every per-thread
+  // error to a console line marked "non-fatal", which made the outcome
+  // unknowable to the caller. session_close then pruned the local cache
+  // regardless. A destructive local operation cannot be gated on a remote
+  // write whose result was never examined (scar cd345431).
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    // Not a failure: on free tier Supabase is not the SOT, so there is
+    // nothing to sync and nothing to gate on.
+    return { attempted: 0, synced: [], failed: [], skipped: true, all_synced: true };
   }
+
+  if (threads.length === 0) {
+    return { attempted: 0, synced: [], failed: [], skipped: false, all_synced: true };
+  }
+
+  const synced: string[] = [];
+  const failed: { id: string; error: string }[] = [];
 
   //  Load existing open threads once upfront for text-based dedup.
   // Prevents duplicate creation when closing ceremony generates new thread IDs
@@ -558,11 +585,29 @@ export async function syncThreadsToSupabase(
         // Existing thread, just touch it
         await touchThreadsInSupabase([thread.id]);
       }
+      synced.push(thread.id);
     } catch (error) {
-      console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, error instanceof Error ? error.message : error);
-      // Continue with other threads
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, message);
+      // Continue with the other threads — a partial sync is still worth
+      // completing — but record the miss so the caller can refuse to prune.
+      failed.push({ id: thread.id, error: message });
     }
   }
+
+  if (failed.length > 0) {
+    console.error(
+      `[thread-supabase] Thread sync incomplete: ${synced.length} synced, ${failed.length} failed (${failed.map((f) => f.id).join(", ")})`
+    );
+  }
+
+  return {
+    attempted: threads.length,
+    synced,
+    failed,
+    skipped: false,
+    all_synced: failed.length === 0,
+  };
 }
 
 // ---------- Archival (Phase 6) ----------

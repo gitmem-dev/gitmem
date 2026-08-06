@@ -263,3 +263,104 @@ describe("getSurfacedScars() — cross-session isolation", () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GIT-51 reconciliation (GIT-69 sprint): the two ruled fixes
+// ---------------------------------------------------------------------------
+
+/** Seed a session whose session.json and registry entry disagree on project. */
+function seedConflictingSession(opts: {
+  sessionId: string;
+  registryProject: string;
+  fileProject: string;
+}): void {
+  const startedAt = new Date().toISOString();
+  registerSession({
+    session_id: opts.sessionId,
+    agent: "cli",
+    started_at: startedAt,
+    hostname: HOSTNAME,
+    pid: DEAD_PID,
+    project: opts.registryProject,
+  });
+
+  const sessionDir = path.join(tmpDir, "sessions", opts.sessionId);
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(sessionDir, "session.json"),
+    JSON.stringify({
+      session_id: opts.sessionId,
+      agent: "cli",
+      started_at: startedAt,
+      project: opts.fileProject,
+      hostname: HOSTNAME,
+      pid: DEAD_PID,
+      surfaced_scars: [],
+      threads: [],
+    })
+  );
+}
+
+describe("recovery retries when the registry changes", () => {
+  it("finds a session registered AFTER an earlier failed recovery", () => {
+    // The SessionStart hook runs as a separate CLI process (scar 55d1bccd), so
+    // a session can appear in the registry after this process already tried and
+    // failed. A plain boolean latch made that permanent — and with GIT-67's R5
+    // guard refusing sessionless writes, one early miss would refuse every
+    // write for the life of the process. Fail-closed replacing fail-open.
+    expect(resolveCurrentSession()).toBeNull();
+
+    seedOrphanedSession({ sessionId: "cccc3333-3333-3333-3333-333333333333" });
+
+    const recovered = resolveCurrentSession();
+    expect(recovered).not.toBeNull();
+    expect(recovered?.sessionId).toBe("cccc3333-3333-3333-3333-333333333333");
+  });
+
+  it("does not re-read while the registry is unchanged", () => {
+    // The latch still exists — it just is not permanent. Two consecutive
+    // failures with no registry change stay null without thrashing the disk.
+    expect(resolveCurrentSession()).toBeNull();
+    expect(resolveCurrentSession()).toBeNull();
+  });
+});
+
+describe("project disagreement between session.json and the registry", () => {
+  it("flags the conflict instead of resolving it silently", () => {
+    seedConflictingSession({
+      sessionId: "dddd4444-4444-4444-4444-444444444444",
+      registryProject: "weekend_warrior",
+      fileProject: "gitmem",
+    });
+
+    const recovered = resolveCurrentSession();
+
+    expect(recovered?.recoveryConflict).toBe(true);
+  });
+
+  it("keeps session.json authoritative, as documented", () => {
+    seedConflictingSession({
+      sessionId: "eeee5555-5555-5555-5555-555555555555",
+      registryProject: "weekend_warrior",
+      fileProject: "gitmem",
+    });
+
+    // Precedence is unchanged from the original `||` — what changed is that it
+    // is now stated and the disagreement is recorded. GIT-69's scope resolver
+    // keys on this project, so a silent wrong value scopes the whole session to
+    // the wrong namespace.
+    expect(resolveCurrentSession()?.project).toBe("gitmem");
+  });
+
+  it("does not flag a conflict when the two agree", () => {
+    seedOrphanedSession({
+      sessionId: "ffff6666-6666-6666-6666-666666666666",
+      project: "gitmem",
+    });
+
+    const recovered = resolveCurrentSession();
+
+    expect(recovered?.project).toBe("gitmem");
+    expect(recovered?.recoveryConflict).toBeFalsy();
+  });
+});

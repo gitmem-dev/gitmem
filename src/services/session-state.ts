@@ -16,7 +16,7 @@ import fs from "fs";
 import * as os from "os";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 import { getSessionPath } from "./gitmem-dir.js";
-import { findSessionByHostPid, adoptSessionForCurrentProcess } from "./active-sessions.js";
+import { findSessionByHostPid, adoptSessionForCurrentProcess, getRegistryFingerprint } from "./active-sessions.js";
 
 interface SessionContext {
   sessionId: string;
@@ -32,14 +32,36 @@ interface SessionContext {
   children: SessionChild[];      // v2 Phase 2: Child agent records
   threads: ThreadObject[];       // : Working thread state
   feedbackSubmitCount: number;   // Rate limit counter for contribute_feedback
+  /**
+   * GIT-51: set when this session was recovered from disk and session.json
+   * disagreed with the registry about which project it belongs to. Carried on
+   * the context so a consumer can see that its scope rests on a resolved
+   * conflict rather than on agreement.
+   */
+  recoveryConflict?: boolean;
 }
 
 // Global session state (single active session per MCP server instance)
 let currentSession: SessionContext | null = null;
 
-// GIT-51: recovery reads the registry and a session file, so it runs at most
-// once per process while state is null. Reset whenever state is set or cleared.
+// GIT-51: recovery reads the registry and a session file, so it does not repeat
+// while nothing has changed. Reset whenever state is set or cleared.
 let recoveryAttempted = false;
+
+// GIT-51 (reconciliation): the registry fingerprint at the last FAILED recovery.
+//
+// A plain boolean latch was permanently fail-closed in one real scenario: the
+// SessionStart hook runs as a separate CLI process (scar 55d1bccd), so a
+// session can appear in the registry AFTER this process has already tried and
+// failed to recover. With GIT-67's R5 guard now refusing sessionless writes on
+// pro, that combination turns one early miss into every subsequent write being
+// refused for the life of the process — a fail-closed bug replacing a fail-open
+// one.
+//
+// Keying the latch on the registry's mtime keeps the I/O-avoidance the boolean
+// was for (no repeated reads while nothing changed) without making the failure
+// permanent.
+let lastFailedRecoveryFingerprint: number | null | undefined = undefined;
 
 /**
  * Set the current active session
@@ -88,14 +110,41 @@ function recoverSessionFromDisk(): SessionContext | null {
     const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
     if (!data.session_id) return null;
 
+    // GIT-51 (reconciliation): explicit precedence with loud disagreement.
+    //
+    // This was `data.project || entry.project` — a silent two-source fallback.
+    // When session.json and the registry disagree, session.json won and nothing
+    // said so, and every downstream consumer inherited a project the registry
+    // never agreed to. GIT-69's scope resolver keys on (project, sessionId), so
+    // a wrong project here scopes the whole session to the wrong namespace —
+    // the cross-project leak class arriving through a new door.
+    //
+    // Precedence is unchanged and now documented: session.json is authoritative
+    // because it is written by the session itself, while the registry entry is
+    // an index that can lag. The difference is that a conflict is now recorded
+    // and logged rather than resolved in silence.
+    const recoveryConflict =
+      Boolean(data.project) &&
+      Boolean(entry.project) &&
+      data.project !== entry.project;
+
+    if (recoveryConflict) {
+      console.error(
+        `[session-state] RECOVERY CONFLICT for ${String(data.session_id).slice(0, 8)}: ` +
+        `session.json project "${data.project}" != registry project "${entry.project}". ` +
+        `Using session.json (authoritative); registry entry is a lagging index.`
+      );
+    }
+
     setCurrentSession({
       sessionId: data.session_id,
       linearIssue: data.linear_issue,
       agent: data.agent || entry.agent,
-      project: data.project || entry.project,
+      project: data.project ?? entry.project,
       startedAt: data.started_at ? new Date(data.started_at) : new Date(entry.started_at),
       surfacedScars: Array.isArray(data.surfaced_scars) ? data.surfaced_scars : [],
       threads: Array.isArray(data.threads) ? data.threads : [],
+      recoveryConflict,
     });
 
     console.error(
@@ -115,9 +164,18 @@ function recoverSessionFromDisk(): SessionContext | null {
  */
 export function resolveCurrentSession(): SessionContext | null {
   if (currentSession) return currentSession;
-  if (recoveryAttempted) return null;
+
+  // Retry whenever the registry has changed since the last failure — another
+  // process (the SessionStart hook) may have registered a session in between.
+  const fingerprint = getRegistryFingerprint();
+  if (recoveryAttempted && lastFailedRecoveryFingerprint === fingerprint) {
+    return null;
+  }
+
   recoveryAttempted = true;
-  return recoverSessionFromDisk();
+  const recovered = recoverSessionFromDisk();
+  lastFailedRecoveryFingerprint = recovered ? undefined : fingerprint;
+  return recovered;
 }
 
 /**

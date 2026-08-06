@@ -53,6 +53,25 @@ function getRegistryPath(): string {
   return path.join(getGitmemDir(), REGISTRY_FILENAME);
 }
 
+/**
+ * A cheap fingerprint of the registry's current state (GIT-51).
+ *
+ * Session recovery needs to know whether it is worth retrying. The registry is
+ * written by OTHER processes — notably the SessionStart hook, which runs as its
+ * own CLI process (scar 55d1bccd) — so "I already failed to recover" is only
+ * valid until someone else touches the file.
+ *
+ * Returns null when the registry does not exist, which is itself a stable
+ * state worth caching against.
+ */
+export function getRegistryFingerprint(): number | null {
+  try {
+    return fs.statSync(getRegistryPath()).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 function getLockPath(): string {
   return path.join(getGitmemDir(), LOCK_FILENAME);
 }

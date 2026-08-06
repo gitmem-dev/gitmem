@@ -227,6 +227,93 @@ export function createTierEnv(tier: "free" | "pro" | "dev"): Record<string, stri
 }
 
 /**
+ * Pro tier whose durable store is unreachable (GIT-67 / R4).
+ *
+ * This is the f9fa0461 condition reproduced honestly: a perfectly healthy
+ * session with a dead SOT. The tier is forced to pro so the server believes
+ * Supabase is its durable store, and the URL points at a closed port so every
+ * request fails fast with a connection refusal — no mocking, no interception,
+ * the real write path failing the real way.
+ *
+ * Port 1 is privileged and never listening, so failures are immediate rather
+ * than timeouts; a harness that takes 30s per assertion does not get run.
+ */
+export function createOutageEnv(
+  overrides: Record<string, string> = {}
+): Record<string, string> {
+  return {
+    GITMEM_TIER: "pro",
+    SUPABASE_URL: "http://127.0.0.1:1",
+    SUPABASE_SERVICE_ROLE_KEY: "outage-harness-not-a-real-key",
+    GITMEM_TABLE_PREFIX: "orchestra_",
+    ...overrides,
+  };
+}
+
+/**
+ * Restart the MCP server while on-disk session state survives (GIT-51/GIT-67).
+ *
+ * The server is a separate long-lived process holding session identity in
+ * memory; restarting it is what orphans that identity. Reusing the same
+ * GITMEM_DIR/HOME is the whole point — the files persist, the process does
+ * not, which is precisely the state the reported defect occurs in.
+ *
+ * Returns a fresh client. The caller must use it; the old one is closed.
+ */
+export async function restartServer(
+  mcp: McpTestClient,
+  env: Record<string, string> = {},
+  options: { cwd?: string } = {}
+): Promise<McpTestClient> {
+  await mcp.cleanup();
+  return createMcpClient(env, options);
+}
+
+/**
+ * Read a thread row straight from Supabase, bypassing every gitmem code path.
+ *
+ * The acceptance standard for this sprint is the row, not the tool message, so
+ * assertions need a channel the code under test cannot influence. Returns null
+ * when the row is absent, and throws when the store is unreachable — an
+ * unreachable store must never read as "row absent", or the harness reproduces
+ * the fail-open bug it exists to catch.
+ */
+export async function queryThreadRow(
+  threadId: string,
+  config: { url: string; key: string; tablePrefix?: string }
+): Promise<Record<string, unknown> | null> {
+  const table = `${config.tablePrefix ?? "orchestra_"}threads`;
+  const endpoint = `${config.url}/rest/v1/${table}?thread_id=eq.${encodeURIComponent(threadId)}&select=*`;
+
+  const response = await fetch(endpoint, {
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${config.key}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Row query failed (${response.status} ${response.statusText}) — store unreachable, NOT proof of absence`
+    );
+  }
+
+  const rows = (await response.json()) as Record<string, unknown>[];
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * Whether real Supabase credentials are present.
+ *
+ * Row-level assertions need a live store. Tests gate on this and skip loudly
+ * rather than passing vacuously — a suite that silently skips its only
+ * real assertion is the same lie as a green message over an unwritten row.
+ */
+export function hasLiveSupabase(): boolean {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+/**
  * Core tools available in all tiers
  */
 export const CORE_TOOLS = [

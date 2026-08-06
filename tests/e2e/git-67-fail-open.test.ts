@@ -62,6 +62,7 @@ const SAFE_TEXT = {
     "Harness case foxtrot — juniper anvil quasar, extended with additional wording so the two submissions differ in length while still colliding",
   freeNoSession: "Harness case golf — tin sparrow obelisk",
   freeNoSessionNaming: "Harness case hotel — moss lantern pendulum",
+  freeConsistency: "Harness case india — walnut beacon fulcrum",
 } as const;
 
 const TEST_DIR = join(tmpdir(), `gitmem-git67-${process.pid}`);
@@ -290,5 +291,39 @@ describe("R5: free tier writes without a session, and says so", () => {
 
     expect(text).toContain("local file");
     expect(text).toContain("session: none");
+  });
+
+  it("banner and payload AGREE — criterion 3 as amended by R10", async () => {
+    // The original criterion said a response must never contain both a success
+    // payload and an enforcement banner. That was written against the old
+    // defect, where the two CONTRADICTED: success claimed while enforcement
+    // asserted the write's precondition was absent. The contradiction is what
+    // made the response a lie.
+    //
+    // Amended: a response must never simultaneously claim success and assert a
+    // condition that negates that success. Co-presence is fine when both are
+    // true. So this asserts CONSISTENCY, not absence — and it is deliberately
+    // written to fail if a future change makes the payload claim a session
+    // while the banner denies one.
+    const result = await callTool(mcp.client, "create_thread", {
+      text: SAFE_TEXT.freeConsistency,
+    });
+    const text = getToolResultText(result);
+    const lower = text.toLowerCase();
+
+    const bannerDeniesSession = /no active session/i.test(text);
+    const payloadClaimsStored = THREAD_ID_PATTERN.test(text) && !/not stored/i.test(text);
+
+    if (bannerDeniesSession && payloadClaimsStored) {
+      // Permitted only because the payload agrees about the session and names
+      // where it actually landed. Either omission would recreate the lie.
+      expect(lower).toContain("session: none");
+      expect(lower).toMatch(/local file|local_only|supabase/);
+    }
+
+    // The negating combination itself: a stored claim that also asserts the
+    // write did not store. Must never occur in any tier.
+    const selfNegating = payloadClaimsStored && /not stored|no thread id has been issued/i.test(text);
+    expect(selfNegating).toBe(false);
   });
 });

@@ -14,5 +14,9 @@ dist/
 .npmrc
 CLAUDE.md
 
+# Credentials — never commit
+.mcpregistry_github_token
+.mcpregistry_registry_token
+
 # Internal admin docs (not shipped)
 docs/admin-license-management.md

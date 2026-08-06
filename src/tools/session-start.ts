@@ -35,7 +35,7 @@ import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
-import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
+import { registerSession, findSessionByHostPid, adoptSessionForCurrentProcess, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import { productLine, dimText, boldText } from "../services/display-protocol.js";
@@ -704,8 +704,11 @@ function checkExistingSession(
     // GIT-20: Prune stale sessions from crashed/dead containers
     pruneStale();
 
-    // GIT-20: Check registry for THIS process's session (hostname + PID match)
-    const mySession = findSessionByHostPid(os.hostname(), process.pid);
+    // GIT-20: Check registry for THIS process's session (hostname + PID match).
+    // GIT-51: if the server restarted, the PID no longer matches — adopt the
+    // session this process left behind rather than starting a second one.
+    const mySession =
+      findSessionByHostPid(os.hostname(), process.pid) ?? adoptSessionForCurrentProcess();
     if (mySession) {
       console.error(`[session_start] Found own session in registry: ${mySession.session_id} (host: ${mySession.hostname}, pid: ${mySession.pid})`);
       const data = readSessionFile(mySession.session_id);

@@ -16,7 +16,7 @@ import fs from "fs";
 import * as os from "os";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 import { getSessionPath } from "./gitmem-dir.js";
-import { listActiveSessions } from "./active-sessions.js";
+import { findSessionByHostPid, adoptSessionForCurrentProcess } from "./active-sessions.js";
 
 interface SessionContext {
   sessionId: string;
@@ -37,6 +37,10 @@ interface SessionContext {
 // Global session state (single active session per MCP server instance)
 let currentSession: SessionContext | null = null;
 
+// GIT-51: recovery reads the registry and a session file, so it runs at most
+// once per process while state is null. Reset whenever state is set or cleared.
+let recoveryAttempted = false;
+
 /**
  * Set the current active session
  * Called by session_start
@@ -53,7 +57,67 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
     threads: context.threads || [],
     feedbackSubmitCount: 0,
   };
+  recoveryAttempted = false;
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
+}
+
+/**
+ * GIT-51: Rebuild in-memory session state from disk after an MCP server restart.
+ *
+ * Session identity used to live only in `currentSession`, which dies with the
+ * process, and only session_start could rebuild it. Agents don't call
+ * session_start again mid-session, so every session-required tool reported "No
+ * active session" for the rest of a session that was alive and healthy — and
+ * session_close couldn't resolve which session to close.
+ *
+ * Recovery runs here instead, so *any* tool call re-binds identity: match this
+ * process's PID in the registry first, then adopt a session left by a previous
+ * incarnation of this process.
+ *
+ * Returns null when there is genuinely no session — never invents one.
+ */
+function recoverSessionFromDisk(): SessionContext | null {
+  try {
+    const entry =
+      findSessionByHostPid(os.hostname(), process.pid) ?? adoptSessionForCurrentProcess();
+    if (!entry) return null;
+
+    const sessionFilePath = getSessionPath(entry.session_id, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return null;
+
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    if (!data.session_id) return null;
+
+    setCurrentSession({
+      sessionId: data.session_id,
+      linearIssue: data.linear_issue,
+      agent: data.agent || entry.agent,
+      project: data.project || entry.project,
+      startedAt: data.started_at ? new Date(data.started_at) : new Date(entry.started_at),
+      surfacedScars: Array.isArray(data.surfaced_scars) ? data.surfaced_scars : [],
+      threads: Array.isArray(data.threads) ? data.threads : [],
+    });
+
+    console.error(
+      `[session-state] Recovered session ${data.session_id.slice(0, 8)} from disk after MCP restart ` +
+      `(${currentSession?.surfacedScars.length ?? 0} surfaced scars)`
+    );
+    return currentSession;
+  } catch (error) {
+    console.warn("[session-state] Failed to recover session from disk:", error);
+    return null;
+  }
+}
+
+/**
+ * Resolve the active session, recovering from disk if in-memory state was lost
+ * to an MCP server restart (GIT-51).
+ */
+export function resolveCurrentSession(): SessionContext | null {
+  if (currentSession) return currentSession;
+  if (recoveryAttempted) return null;
+  recoveryAttempted = true;
+  return recoverSessionFromDisk();
 }
 
 /**
@@ -61,7 +125,7 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
  * Returns null if no session active
  */
 export function getCurrentSession(): SessionContext | null {
-  return currentSession;
+  return resolveCurrentSession();
 }
 
 /**
@@ -73,6 +137,7 @@ export function clearCurrentSession(): void {
     console.error(`[session-state] Clearing session: ${currentSession.sessionId}`);
   }
   currentSession = null;
+  recoveryAttempted = false;
 }
 
 /**
@@ -133,52 +198,35 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
  * Get all surfaced scars for the current session
  */
 export function getSurfacedScars(): SurfacedScar[] {
+  // Resolve identity first — after an MCP restart this rebuilds currentSession
+  // (including its scars) from the session file (GIT-51).
+  const session = resolveCurrentSession();
+
   // Return in-memory if available
-  if (currentSession?.surfacedScars && currentSession.surfacedScars.length > 0) {
-    return currentSession.surfacedScars;
+  if (session?.surfacedScars && session.surfacedScars.length > 0) {
+    return session.surfacedScars;
   }
 
-  // Fallback 1: recover from per-session file if in-memory was lost (MCP restart)
-  if (currentSession?.sessionId) {
+  // Fallback: re-read the resolved session's file. Covers the case where
+  // identity survived but the scars array did not — e.g. scars were appended by
+  // another process, or by this session before an in-place refresh.
+  //
+  // GIT-51: this deliberately reads only the *resolved* session's file. The
+  // previous "newest session on this host" fallback could hand one session
+  // another concurrent session's scars.
+  if (session?.sessionId) {
     try {
-      const sessionFilePath = getSessionPath(currentSession.sessionId, "session.json");
+      const sessionFilePath = getSessionPath(session.sessionId, "session.json");
       if (fs.existsSync(sessionFilePath)) {
         const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
         if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
-          currentSession.surfacedScars = data.surfaced_scars;
+          session.surfacedScars = data.surfaced_scars;
           console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from file`);
           return data.surfaced_scars;
         }
       }
     } catch (error) {
       console.warn("[session-state] Failed to recover surfaced scars from file:", error);
-    }
-  }
-
-  // Fallback 2: if currentSession is null (MCP restarted completely), find session from registry.
-  // After MCP restart the PID changes, but the active-sessions registry may still have
-  // the previous session entry (pruneStale adopts dead-PID sessions on same hostname).
-  if (!currentSession) {
-    try {
-      const hostname = os.hostname();
-      const sessions = listActiveSessions();
-      const candidates = sessions
-        .filter(s => s.hostname === hostname)
-        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-
-      if (candidates.length > 0) {
-        const recoveredId = candidates[0].session_id;
-        const sessionFilePath = getSessionPath(recoveredId, "session.json");
-        if (fs.existsSync(sessionFilePath)) {
-          const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-          if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
-            console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from registry session ${recoveredId.slice(0, 8)}`);
-            return data.surfaced_scars;
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("[session-state] Failed to recover surfaced scars from registry:", error);
     }
   }
 

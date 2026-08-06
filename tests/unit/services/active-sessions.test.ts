@@ -16,6 +16,7 @@ import {
   listActiveSessions,
   findSessionByHostPid,
   findSessionById,
+  adoptSessionForCurrentProcess,
   pruneStale,
   migrateFromLegacy,
   resetMigrationFlag,
@@ -255,40 +256,42 @@ describe("pruneStale", () => {
     expect(sessions[0].session_id).toBe(fresh.session_id);
   });
 
-  it("adopts recent sessions with dead PIDs on same host (MCP server restart)", () => {
+  it("keeps dead-PID sessions on this host for adoption (GIT-51)", () => {
+    // A dead PID on this host is the signature of an MCP server restart, not a
+    // dead session. Pruning it here deleted the session directory out from
+    // under a session that was still running.
     const dead = makeEntry({
       session_id: "11111111-1111-1111-1111-111111111111",
       hostname: os.hostname(),
       pid: 99999999, // very unlikely to be a real PID
-      started_at: new Date().toISOString(), // recent — should be adopted
+      started_at: new Date().toISOString(),
     });
 
     registerSession(dead);
     createSessionFile(dead.session_id); // file exists but PID is dead
 
     const pruned = pruneStale();
-    expect(pruned).toBe(0); // adopted, not pruned
+    expect(pruned).toBe(0);
 
     const sessions = listActiveSessions();
     expect(sessions).toHaveLength(1);
     expect(sessions[0].session_id).toBe(dead.session_id);
-    expect(sessions[0].pid).toBe(process.pid); // PID updated to current process
+    expect(fs.existsSync(path.join(tmpDir, "sessions", dead.session_id))).toBe(true);
   });
 
-  it("prunes old sessions with dead PIDs on same host", () => {
+  it("keeps dead-PID sessions older than the old 2h adoption window (GIT-51)", () => {
     const oldDead = makeEntry({
       session_id: "11111111-1111-1111-1111-111111111111",
       hostname: os.hostname(),
-      pid: 99999999, // very unlikely to be a real PID
-      started_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3h ago — past adopt threshold
+      pid: 99999999,
+      started_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3h ago
     });
 
     registerSession(oldDead);
     createSessionFile(oldDead.session_id);
 
-    const pruned = pruneStale();
-    expect(pruned).toBe(1);
-    expect(listActiveSessions()).toHaveLength(0);
+    expect(pruneStale()).toBe(0);
+    expect(listActiveSessions()).toHaveLength(1);
   });
 
   it("keeps sessions with live PIDs", () => {
@@ -411,6 +414,126 @@ describe("pruneStale", () => {
     pruneStale();
 
     expect(fs.existsSync(sessionDir)).toBe(false);
+  });
+});
+
+describe("adoptSessionForCurrentProcess (GIT-51)", () => {
+  it("adopts a session left by a previous incarnation of this process", () => {
+    const dead = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: 99999999,
+      started_at: new Date().toISOString(),
+    });
+    registerSession(dead);
+    createSessionFile(dead.session_id);
+
+    const adopted = adoptSessionForCurrentProcess();
+
+    expect(adopted).not.toBeNull();
+    expect(adopted!.session_id).toBe(dead.session_id);
+    expect(adopted!.pid).toBe(process.pid);
+    expect(listActiveSessions()[0].pid).toBe(process.pid);
+  });
+
+  it("adopts a session older than 2 hours", () => {
+    // The old ADOPT_THRESHOLD_MS window was shorter than a normal working
+    // session, so long sessions — the ones that most need recovery — were
+    // excluded from it.
+    const dead = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: 99999999,
+      started_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+    });
+    registerSession(dead);
+    createSessionFile(dead.session_id);
+
+    expect(adoptSessionForCurrentProcess()?.session_id).toBe(dead.session_id);
+  });
+
+  it("adopts at most one entry — never leaves two rows sharing hostname+pid", () => {
+    const first = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: 99999998,
+      started_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+    const second = makeEntry({
+      session_id: "22222222-2222-2222-2222-222222222222",
+      hostname: os.hostname(),
+      pid: 99999999,
+      started_at: new Date().toISOString(),
+    });
+    registerSession(first);
+    registerSession(second);
+    createSessionFile(first.session_id);
+    createSessionFile(second.session_id);
+
+    const adopted = adoptSessionForCurrentProcess();
+
+    // Most recently started wins — deterministic, not array order.
+    expect(adopted!.session_id).toBe(second.session_id);
+
+    const sessions = listActiveSessions();
+    const mine = sessions.filter((s) => s.hostname === os.hostname() && s.pid === process.pid);
+    expect(mine).toHaveLength(1);
+    expect(mine[0].session_id).toBe(second.session_id);
+  });
+
+  it("never claims a session whose PID is still alive", () => {
+    const live = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: process.pid, // this process is alive
+    });
+    registerSession(live);
+    createSessionFile(live.session_id);
+
+    // findSessionByHostPid already resolves our own session; adoption must not
+    // also claim it (nor any other live process's session).
+    expect(adoptSessionForCurrentProcess()).toBeNull();
+  });
+
+  it("ignores dead-PID sessions on other hosts", () => {
+    const remote = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: "some-other-container",
+      pid: 99999999,
+    });
+    registerSession(remote);
+    createSessionFile(remote.session_id);
+
+    expect(adoptSessionForCurrentProcess()).toBeNull();
+  });
+
+  it("ignores entries with no session file on disk", () => {
+    registerSession(
+      makeEntry({
+        session_id: "11111111-1111-1111-1111-111111111111",
+        hostname: os.hostname(),
+        pid: 99999999,
+      })
+    );
+
+    expect(adoptSessionForCurrentProcess()).toBeNull();
+  });
+
+  it("ignores entries past the 24h stale horizon", () => {
+    const ancient = makeEntry({
+      session_id: "11111111-1111-1111-1111-111111111111",
+      hostname: os.hostname(),
+      pid: 99999999,
+      started_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    });
+    registerSession(ancient);
+    createSessionFile(ancient.session_id);
+
+    expect(adoptSessionForCurrentProcess()).toBeNull();
+  });
+
+  it("returns null on an empty registry", () => {
+    expect(adoptSessionForCurrentProcess()).toBeNull();
   });
 });
 

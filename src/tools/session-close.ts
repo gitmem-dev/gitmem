@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase, hasProInsights, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
+import { clearCurrentSession, resolveCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
@@ -854,9 +854,14 @@ export async function sessionClose(
 
   // GIT-21: Recover session_id from active-sessions registry (hostname+PID) or legacy file
   if (!params.session_id && params.close_type !== "retroactive") {
-    // Try registry first (GIT-20 writes here)
+    // Try registry first (GIT-20 writes here).
+    // GIT-51: resolveCurrentSession() also adopts a session orphaned by an MCP
+    // restart, so close still finds the original session_id after a restart.
     try {
-      const mySession = findSessionByHostPid(os.hostname(), process.pid);
+      const resolved = resolveCurrentSession();
+      const mySession = resolved
+        ? { session_id: resolved.sessionId }
+        : findSessionByHostPid(os.hostname(), process.pid);
       if (mySession) {
         console.error(`[session_close] Recovered session_id from registry: ${mySession.session_id}`);
         params = { ...params, session_id: mySession.session_id };

@@ -144,13 +144,71 @@ describe("edge cases", () => {
   });
 });
 
+describe("three-valued status (R9a) — healthy is earned, never defaulted", () => {
+  it("is healthy only with full attribution AND no divergence", () => {
+    const both = [{ id: "t-a", status: "open" }];
+    expect(diffThreads(both, both).status).toBe("healthy");
+  });
+
+  it("is unverifiable when nothing diverges but something is unattributable", () => {
+    // The state binary status has no room for: no known divergence, but the
+    // check did not complete. Green here would be a completeness claim over an
+    // incomplete check.
+    const drift = diffThreads(
+      [
+        { id: "t-a", status: "open" },
+        { id: "t-w", status: "open" },
+      ],
+      [{ id: "t-a", status: "open" }]
+    );
+
+    expect(drift.drift_count).toBe(0);
+    expect(drift.in_sync).toBe(true);
+    expect(drift.status).toBe("unverifiable");
+  });
+
+  it("is drift when divergence is known", () => {
+    const drift = diffThreads(
+      [{ id: "t-a", status: "open" }],
+      [{ id: "t-a", status: "resolved" }]
+    );
+    expect(drift.status).toBe("drift");
+  });
+
+  it("reports drift over unverifiable when both apply", () => {
+    // Known divergence is the stronger claim — it must not be masked by the
+    // weaker one.
+    const drift = diffThreads(
+      [
+        { id: "t-a", status: "open" },
+        { id: "t-w", status: "open" },
+      ],
+      [{ id: "t-a", status: "resolved" }]
+    );
+
+    expect(drift.unattributable_local).toEqual(["t-w"]);
+    expect(drift.status).toBe("drift");
+  });
+
+  it("never returns healthy while any bucket is non-empty", () => {
+    const cases = [
+      diffThreads([{ id: "t-a", status: "open" }], [{ id: "t-a", status: "resolved" }]),
+      diffThreads([], [{ id: "t-c", status: "open" }]),
+      diffThreads([{ id: "t-w", status: "open" }], []),
+    ];
+    for (const drift of cases) {
+      expect(drift.status).not.toBe("healthy");
+    }
+  });
+});
+
 describe("describeThreadDrift()", () => {
   it("states plain agreement when there is nothing to disclose", () => {
     const drift = diffThreads(
       [{ id: "t-a", status: "open" }],
       [{ id: "t-a", status: "open" }]
     );
-    expect(describeThreadDrift(drift)).toBe("threads in sync (1)");
+    expect(describeThreadDrift(drift)).toBe("threads healthy (1 compared, all attributed)");
   });
 
   it("names the unattributable count even though it is not drift", () => {
@@ -166,8 +224,10 @@ describe("describeThreadDrift()", () => {
 
     expect(drift.in_sync).toBe(true);
     const text = describeThreadDrift(drift);
-    expect(text).toContain("1 local-only");
-    expect(text).toContain("unattributable");
+    // R9a: count AND reason in the status line itself.
+    expect(text).toContain("unverifiable");
+    expect(text).toContain("1 unattributable");
+    expect(text).toContain("no project field");
   });
 
   it("names each drift kind separately", () => {

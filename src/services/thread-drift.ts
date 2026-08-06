@@ -38,6 +38,20 @@ export interface DriftThread {
   status?: string;
 }
 
+/**
+ * Three-valued, because binary is the false choice (R9a).
+ *
+ *   healthy       full attribution AND no divergence — earned, never defaulted
+ *   unverifiable  nothing known divergent, but some rows could not be attributed
+ *   drift         divergence is known
+ *
+ * `healthy` beside "12 threads I could not classify" would be a completeness
+ * claim over an incomplete check. `drift` would be equally false — nothing is
+ * known divergent. The honest middle state exists so neither lie is available,
+ * and the green banner is reserved for checks that actually completed.
+ */
+export type ThreadDriftStatus = "healthy" | "unverifiable" | "drift";
+
 export interface ThreadDrift {
   /** Present in both stores, states agree. */
   in_sync_count: number;
@@ -53,8 +67,10 @@ export interface ThreadDrift {
   unattributable_local: string[];
   /** Divergent + only_remote. The count that can be asserted. */
   drift_count: number;
-  /** True when nothing attributable diverges. */
+  /** True when nothing attributable diverges. Not the same as `healthy`. */
   in_sync: boolean;
+  /** Three-valued verdict — see ThreadDriftStatus. */
+  status: ThreadDriftStatus;
 }
 
 export interface DriftDivergence {
@@ -127,6 +143,15 @@ export function diffThreads(
 
   const drift_count = divergent.length + only_remote.length;
 
+  // R9a: healthy is earned — full attribution AND no divergence. Anything
+  // unattributable downgrades to unverifiable rather than passing as green.
+  const status: ThreadDriftStatus =
+    drift_count > 0
+      ? "drift"
+      : unattributable_local.length > 0
+        ? "unverifiable"
+        : "healthy";
+
   return {
     in_sync_count,
     divergent,
@@ -134,6 +159,7 @@ export function diffThreads(
     unattributable_local,
     drift_count,
     in_sync: drift_count === 0,
+    status,
   };
 }
 
@@ -145,8 +171,8 @@ export function diffThreads(
  * tell "no local extras" from "local extras I declined to classify".
  */
 export function describeThreadDrift(drift: ThreadDrift): string {
-  if (drift.in_sync && drift.unattributable_local.length === 0) {
-    return `threads in sync (${drift.in_sync_count})`;
+  if (drift.status === "healthy") {
+    return `threads healthy (${drift.in_sync_count} compared, all attributed)`;
   }
 
   const parts: string[] = [];
@@ -156,11 +182,14 @@ export function describeThreadDrift(drift: ThreadDrift): string {
   if (drift.only_remote.length > 0) {
     parts.push(`${drift.only_remote.length} missing locally`);
   }
+  // R9a: the count AND the reason belong in the status line itself, not in a
+  // footnote — an omitted number reads as zero, and an unexplained one reads
+  // as a defect.
   if (drift.unattributable_local.length > 0) {
     parts.push(
-      `${drift.unattributable_local.length} local-only (project unattributable — local cache is not project-partitioned)`
+      `${drift.unattributable_local.length} unattributable (local cache has no project field, so these may belong to another project)`
     );
   }
 
-  return `threads: ${parts.join(", ")} of ${drift.in_sync_count + drift.drift_count} compared`;
+  return `threads ${drift.status}: ${parts.join(", ")}; ${drift.in_sync_count} verified in sync`;
 }

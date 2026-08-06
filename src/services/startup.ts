@@ -28,6 +28,11 @@ import {
   clearLocalSearch,
 } from "./local-vector-search.js";
 import { getConfig, shouldUseLocalSearch } from "./config.js";
+import { diffThreads, describeThreadDrift } from "./thread-drift.js";
+import type { ThreadDriftStatus } from "./thread-drift.js";
+import { loadThreadsFile } from "./thread-manager.js";
+import { listThreadsFromSupabase } from "./thread-supabase.js";
+import { resolveThreadScope } from "./thread-scope.js";
 import type { Project } from "../types/index.js";
 
 // Track startup state — unified cache, no per-project partitioning
@@ -318,12 +323,34 @@ export interface CacheStatus {
 }
 
 export interface CacheHealth {
-  status: "healthy" | "stale" | "out_of_sync" | "unavailable";
+  /**
+   * GIT-69 item 2 / R9a: `unverifiable` is the honest middle state — no known
+   * divergence, but the check did not complete over every covered store.
+   * `healthy` is earned, never defaulted.
+   */
+  status: "healthy" | "unverifiable" | "stale" | "out_of_sync" | "unavailable";
   local_scar_count: number;
   remote_scar_count: number;
   local_latest_updated_at: string | null;
   remote_latest_updated_at: string | null;
   needs_refresh: boolean;
+  details: string;
+  /**
+   * Thread-store parity. `ad5ca35a`: cache-health reported healthy on scar
+   * parity alone while two threads were demonstrably divergent — "healthy"
+   * asserted from one covered store is a claim of completeness never checked.
+   */
+  threads?: ThreadCacheHealth;
+}
+
+export interface ThreadCacheHealth {
+  status: ThreadDriftStatus | "unavailable";
+  local_count: number;
+  remote_count: number;
+  drift_count: number;
+  unattributable_count: number;
+  /** Bounded sample — full lists can be large; see details for totals. */
+  divergent_ids: string[];
   details: string;
 }
 
@@ -383,7 +410,7 @@ export function getCacheStatus(_project?: Project): CacheStatus {
 /**
  * Check cache health against remote Supabase
  */
-export async function checkCacheHealth(_project?: Project): Promise<CacheHealth> {
+export async function checkCacheHealth(project?: Project): Promise<CacheHealth> {
   const config = getConfig();
 
   if (config.resolvedSearchMode === "remote") {
@@ -438,6 +465,31 @@ export async function checkCacheHealth(_project?: Project): Promise<CacheHealth>
     details = `Timestamp mismatch: local=${localLatest}, remote=${remoteLatest}`;
   }
 
+  // GIT-69 item 2: threads are a covered store too. "Healthy" now requires
+  // parity on every store checked, not scars alone (ad5ca35a).
+  //
+  // Note the asymmetry, deliberate: scars are compared cross-project because
+  // the local cache is unified, while threads are project-scoped by schema.
+  // So `project` is load-bearing for this half of the check and ignored for
+  // the other — which is why it was `_project` until now.
+  const threads = await checkThreadHealth(project);
+
+  if (threads.status === "drift") {
+    status = "out_of_sync";
+    needsRefresh = true;
+    details = `${details}; ${threads.details}`;
+  } else if (
+    (threads.status === "unverifiable" || threads.status === "unavailable") &&
+    status === "healthy"
+  ) {
+    // R9a: no known divergence, but the check did not complete. Neither lie
+    // is available — not green, not drift.
+    status = "unverifiable";
+    details = threads.details;
+  } else if (threads.status !== "healthy") {
+    details = `${details}; ${threads.details}`;
+  }
+
   return {
     status,
     local_scar_count: localCount,
@@ -446,6 +498,61 @@ export async function checkCacheHealth(_project?: Project): Promise<CacheHealth>
     remote_latest_updated_at: remoteLatest,
     needs_refresh: needsRefresh,
     details,
+    threads,
+  };
+}
+
+/**
+ * Diff the local thread cache against the project's remote thread scope.
+ *
+ * A failed remote read reports `unavailable` rather than falling through to a
+ * scar-only verdict — silently omitting a store you could not reach and still
+ * printing "healthy" is precisely the ad5ca35a defect. R7's no-silent-
+ * truncation invariant, applied to a read.
+ */
+async function checkThreadHealth(project?: Project): Promise<ThreadCacheHealth> {
+  const scope = resolveThreadScope(project ? { project } : undefined);
+
+  let remote: { id: string; status?: string }[] | null = null;
+  try {
+    const rows = await listThreadsFromSupabase(scope, { statusFilter: "open" });
+    remote = rows ? rows.map((t) => ({ id: t.id, status: t.status })) : null;
+  } catch (error) {
+    console.error(
+      "[startup] Thread health check failed:",
+      error instanceof Error ? error.message : error
+    );
+  }
+
+  if (remote === null) {
+    return {
+      status: "unavailable",
+      local_count: 0,
+      remote_count: -1,
+      drift_count: 0,
+      unattributable_count: 0,
+      divergent_ids: [],
+      details: `threads unavailable: could not read the remote store for project ${scope.project} — thread parity NOT checked`,
+    };
+  }
+
+  const local = loadThreadsFile()
+    .filter((t) => t.status === "open")
+    .map((t) => ({ id: t.id, status: t.status }));
+
+  const drift = diffThreads(local, remote);
+
+  return {
+    status: drift.status,
+    local_count: local.length,
+    remote_count: remote.length,
+    drift_count: drift.drift_count,
+    unattributable_count: drift.unattributable_local.length,
+    divergent_ids: [
+      ...drift.divergent.map((d) => d.id),
+      ...drift.only_remote,
+    ].slice(0, 20),
+    details: describeThreadDrift(drift),
   };
 }
 

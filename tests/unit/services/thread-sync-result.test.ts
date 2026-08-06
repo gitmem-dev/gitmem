@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockDirectQuery = vi.fn();
+const mockDirectQueryAll = vi.fn();
 const mockDirectUpsert = vi.fn();
 const mockIsConfigured = vi.fn(() => true);
 const mockHasSupabase = vi.fn(() => true);
@@ -21,6 +22,7 @@ const mockHasSupabase = vi.fn(() => true);
 vi.mock("../../../src/services/supabase-client.js", () => ({
   isConfigured: (...a: unknown[]) => mockIsConfigured(...a),
   directQuery: (...a: unknown[]) => mockDirectQuery(...a),
+  directQueryAll: (...a: unknown[]) => mockDirectQueryAll(...a),
   directUpsert: (...a: unknown[]) => mockDirectUpsert(...a),
   upsertRecord: vi.fn(),
   listRecords: vi.fn(),
@@ -45,6 +47,10 @@ const thread = (id: string, status = "open") => ({
 
 beforeEach(() => {
   mockDirectQuery.mockReset();
+  mockDirectQueryAll.mockReset();
+  // GIT-70: the dedup candidate set is loaded via paginated directQueryAll.
+  // Empty by default so per-thread directQuery sequencing stays readable.
+  mockDirectQueryAll.mockResolvedValue([]);
   mockDirectUpsert.mockReset();
   mockIsConfigured.mockReturnValue(true);
   mockHasSupabase.mockReturnValue(true);
@@ -97,9 +103,7 @@ describe("outcome reporting", () => {
   });
 
   it("records a failed thread instead of swallowing it", async () => {
-    mockDirectQuery
-      .mockResolvedValueOnce([])                      // candidate load
-      .mockRejectedValueOnce(new Error("boom"));      // t-a lookup
+    mockDirectQuery.mockRejectedValueOnce(new Error("boom")); // t-a lookup
 
     const r = await syncThreadsToSupabase([thread("t-a")], "gitmem", "s-1");
 
@@ -113,7 +117,6 @@ describe("outcome reporting", () => {
     // A partial sync is still worth completing — but the miss must be named,
     // because the local file is the only remaining record of it.
     mockDirectQuery
-      .mockResolvedValueOnce([])                          // candidate load
       .mockRejectedValueOnce(new Error("network"))        // t-a fails
       .mockResolvedValueOnce([]);                         // t-b succeeds
 
@@ -130,9 +133,7 @@ describe("outcome reporting", () => {
   });
 
   it("never reports all_synced while any thread failed", async () => {
-    mockDirectQuery
-      .mockResolvedValueOnce([])
-      .mockRejectedValue(new Error("down"));
+    mockDirectQuery.mockRejectedValue(new Error("down"));
 
     const r = await syncThreadsToSupabase(
       [thread("t-a"), thread("t-b"), thread("t-c")],
@@ -147,9 +148,7 @@ describe("outcome reporting", () => {
   });
 
   it("names every missed id so the caller can report them", async () => {
-    mockDirectQuery
-      .mockResolvedValueOnce([])
-      .mockRejectedValue(new Error("timeout"));
+    mockDirectQuery.mockRejectedValue(new Error("timeout"));
 
     const r = await syncThreadsToSupabase(
       [thread("t-aaa"), thread("t-bbb")],
@@ -163,5 +162,77 @@ describe("outcome reporting", () => {
     for (const f of r.failed) {
       expect(f.error).toBeTruthy();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GIT-70: dedup candidate completeness
+// ---------------------------------------------------------------------------
+
+describe("dedup candidate coverage (GIT-70)", () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      thread_id: `t-${String(i).padStart(8, "0")}`,
+      text: `existing ${i}`,
+      status: "active",
+    }));
+
+  it("loads candidates with a deterministic total order", async () => {
+    // Not cosmetic. PostgREST Range pagination over an unordered result set can
+    // repeat and skip rows between pages, so without a total order the
+    // pagination introduces the very gaps it was added to close. thread_id is
+    // unique, so it orders totally on its own.
+    mockDirectQuery.mockResolvedValue([]);
+    await syncThreadsToSupabase([thread("t-a")], "gitmem", "s-1");
+
+    const [, options] = mockDirectQueryAll.mock.calls[0] as [string, { order?: string }];
+    expect(options.order).toBe("thread_id.asc");
+  });
+
+  it("reports complete coverage past the old 200-row window", async () => {
+    // The defect: an unordered single page of 200 over a table already at 256.
+    // A text match outside that window produced a silent duplicate.
+    mockDirectQueryAll.mockResolvedValue(rows(256));
+    mockDirectQuery.mockResolvedValue([]);
+
+    const r = await syncThreadsToSupabase([thread("t-new")], "gitmem", "s-1");
+
+    expect(r.dedup_coverage).toBe("complete");
+    expect(r.dedup_candidates).toBe(256);
+  });
+
+  it("reports partial coverage rather than absorbing the cap", async () => {
+    // directQueryAll stops at maxRows without saying so. Inheriting that
+    // silence would rebuild the defect one layer up.
+    mockDirectQueryAll.mockResolvedValue(rows(10000));
+    mockDirectQuery.mockResolvedValue([]);
+
+    const r = await syncThreadsToSupabase([thread("t-new")], "gitmem", "s-1");
+
+    expect(r.dedup_coverage).toBe("partial");
+    expect(r.dedup_candidates).toBe(10000);
+  });
+
+  it("reports unavailable when the candidate load fails", async () => {
+    mockDirectQueryAll.mockRejectedValue(new Error("candidate load down"));
+    mockDirectQuery.mockResolvedValue([]);
+
+    const r = await syncThreadsToSupabase([thread("t-new")], "gitmem", "s-1");
+
+    expect(r.dedup_coverage).toBe("unavailable");
+  });
+
+  it("still syncs successfully when coverage is incomplete", async () => {
+    // Coverage and success are different axes. Every thread syncs by identity
+    // regardless; incomplete coverage means a duplicate MAY exist, which
+    // all_synced cannot detect because writing a duplicate IS a successful
+    // write. This is the distinction the whole ticket rests on.
+    mockDirectQueryAll.mockRejectedValue(new Error("down"));
+    mockDirectQuery.mockResolvedValue([]);
+
+    const r = await syncThreadsToSupabase([thread("t-new")], "gitmem", "s-1");
+
+    expect(r.all_synced).toBe(true);
+    expect(r.dedup_coverage).not.toBe("complete");
   });
 });

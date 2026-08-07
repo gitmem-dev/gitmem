@@ -16,7 +16,7 @@ import fs from "fs";
 import * as os from "os";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 import { getSessionPath } from "./gitmem-dir.js";
-import { listActiveSessions } from "./active-sessions.js";
+import { findSessionByHostPid, adoptSessionForCurrentProcess, getRegistryFingerprint } from "./active-sessions.js";
 
 interface SessionContext {
   sessionId: string;
@@ -32,10 +32,36 @@ interface SessionContext {
   children: SessionChild[];      // v2 Phase 2: Child agent records
   threads: ThreadObject[];       // : Working thread state
   feedbackSubmitCount: number;   // Rate limit counter for contribute_feedback
+  /**
+   * GIT-51: set when this session was recovered from disk and session.json
+   * disagreed with the registry about which project it belongs to. Carried on
+   * the context so a consumer can see that its scope rests on a resolved
+   * conflict rather than on agreement.
+   */
+  recoveryConflict?: boolean;
 }
 
 // Global session state (single active session per MCP server instance)
 let currentSession: SessionContext | null = null;
+
+// GIT-51: recovery reads the registry and a session file, so it does not repeat
+// while nothing has changed. Reset whenever state is set or cleared.
+let recoveryAttempted = false;
+
+// GIT-51 (reconciliation): the registry fingerprint at the last FAILED recovery.
+//
+// A plain boolean latch was permanently fail-closed in one real scenario: the
+// SessionStart hook runs as a separate CLI process (scar 55d1bccd), so a
+// session can appear in the registry AFTER this process has already tried and
+// failed to recover. With GIT-67's R5 guard now refusing sessionless writes on
+// pro, that combination turns one early miss into every subsequent write being
+// refused for the life of the process — a fail-closed bug replacing a fail-open
+// one.
+//
+// Keying the latch on the registry's mtime keeps the I/O-avoidance the boolean
+// was for (no repeated reads while nothing changed) without making the failure
+// permanent.
+let lastFailedRecoveryFingerprint: number | null | undefined = undefined;
 
 /**
  * Set the current active session
@@ -53,7 +79,103 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
     threads: context.threads || [],
     feedbackSubmitCount: 0,
   };
+  recoveryAttempted = false;
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
+}
+
+/**
+ * GIT-51: Rebuild in-memory session state from disk after an MCP server restart.
+ *
+ * Session identity used to live only in `currentSession`, which dies with the
+ * process, and only session_start could rebuild it. Agents don't call
+ * session_start again mid-session, so every session-required tool reported "No
+ * active session" for the rest of a session that was alive and healthy — and
+ * session_close couldn't resolve which session to close.
+ *
+ * Recovery runs here instead, so *any* tool call re-binds identity: match this
+ * process's PID in the registry first, then adopt a session left by a previous
+ * incarnation of this process.
+ *
+ * Returns null when there is genuinely no session — never invents one.
+ */
+function recoverSessionFromDisk(): SessionContext | null {
+  try {
+    const entry =
+      findSessionByHostPid(os.hostname(), process.pid) ?? adoptSessionForCurrentProcess();
+    if (!entry) return null;
+
+    const sessionFilePath = getSessionPath(entry.session_id, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return null;
+
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    if (!data.session_id) return null;
+
+    // GIT-51 (reconciliation): explicit precedence with loud disagreement.
+    //
+    // This was `data.project || entry.project` — a silent two-source fallback.
+    // When session.json and the registry disagree, session.json won and nothing
+    // said so, and every downstream consumer inherited a project the registry
+    // never agreed to. GIT-69's scope resolver keys on (project, sessionId), so
+    // a wrong project here scopes the whole session to the wrong namespace —
+    // the cross-project leak class arriving through a new door.
+    //
+    // Precedence is unchanged and now documented: session.json is authoritative
+    // because it is written by the session itself, while the registry entry is
+    // an index that can lag. The difference is that a conflict is now recorded
+    // and logged rather than resolved in silence.
+    const recoveryConflict =
+      Boolean(data.project) &&
+      Boolean(entry.project) &&
+      data.project !== entry.project;
+
+    if (recoveryConflict) {
+      console.error(
+        `[session-state] RECOVERY CONFLICT for ${String(data.session_id).slice(0, 8)}: ` +
+        `session.json project "${data.project}" != registry project "${entry.project}". ` +
+        `Using session.json (authoritative); registry entry is a lagging index.`
+      );
+    }
+
+    setCurrentSession({
+      sessionId: data.session_id,
+      linearIssue: data.linear_issue,
+      agent: data.agent || entry.agent,
+      project: data.project ?? entry.project,
+      startedAt: data.started_at ? new Date(data.started_at) : new Date(entry.started_at),
+      surfacedScars: Array.isArray(data.surfaced_scars) ? data.surfaced_scars : [],
+      threads: Array.isArray(data.threads) ? data.threads : [],
+      recoveryConflict,
+    });
+
+    console.error(
+      `[session-state] Recovered session ${data.session_id.slice(0, 8)} from disk after MCP restart ` +
+      `(${currentSession?.surfacedScars.length ?? 0} surfaced scars)`
+    );
+    return currentSession;
+  } catch (error) {
+    console.warn("[session-state] Failed to recover session from disk:", error);
+    return null;
+  }
+}
+
+/**
+ * Resolve the active session, recovering from disk if in-memory state was lost
+ * to an MCP server restart (GIT-51).
+ */
+export function resolveCurrentSession(): SessionContext | null {
+  if (currentSession) return currentSession;
+
+  // Retry whenever the registry has changed since the last failure — another
+  // process (the SessionStart hook) may have registered a session in between.
+  const fingerprint = getRegistryFingerprint();
+  if (recoveryAttempted && lastFailedRecoveryFingerprint === fingerprint) {
+    return null;
+  }
+
+  recoveryAttempted = true;
+  const recovered = recoverSessionFromDisk();
+  lastFailedRecoveryFingerprint = recovered ? undefined : fingerprint;
+  return recovered;
 }
 
 /**
@@ -61,7 +183,7 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
  * Returns null if no session active
  */
 export function getCurrentSession(): SessionContext | null {
-  return currentSession;
+  return resolveCurrentSession();
 }
 
 /**
@@ -73,6 +195,7 @@ export function clearCurrentSession(): void {
     console.error(`[session-state] Clearing session: ${currentSession.sessionId}`);
   }
   currentSession = null;
+  recoveryAttempted = false;
 }
 
 /**
@@ -133,52 +256,35 @@ export function addSurfacedScars(scars: SurfacedScar[]): void {
  * Get all surfaced scars for the current session
  */
 export function getSurfacedScars(): SurfacedScar[] {
+  // Resolve identity first — after an MCP restart this rebuilds currentSession
+  // (including its scars) from the session file (GIT-51).
+  const session = resolveCurrentSession();
+
   // Return in-memory if available
-  if (currentSession?.surfacedScars && currentSession.surfacedScars.length > 0) {
-    return currentSession.surfacedScars;
+  if (session?.surfacedScars && session.surfacedScars.length > 0) {
+    return session.surfacedScars;
   }
 
-  // Fallback 1: recover from per-session file if in-memory was lost (MCP restart)
-  if (currentSession?.sessionId) {
+  // Fallback: re-read the resolved session's file. Covers the case where
+  // identity survived but the scars array did not — e.g. scars were appended by
+  // another process, or by this session before an in-place refresh.
+  //
+  // GIT-51: this deliberately reads only the *resolved* session's file. The
+  // previous "newest session on this host" fallback could hand one session
+  // another concurrent session's scars.
+  if (session?.sessionId) {
     try {
-      const sessionFilePath = getSessionPath(currentSession.sessionId, "session.json");
+      const sessionFilePath = getSessionPath(session.sessionId, "session.json");
       if (fs.existsSync(sessionFilePath)) {
         const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
         if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
-          currentSession.surfacedScars = data.surfaced_scars;
+          session.surfacedScars = data.surfaced_scars;
           console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from file`);
           return data.surfaced_scars;
         }
       }
     } catch (error) {
       console.warn("[session-state] Failed to recover surfaced scars from file:", error);
-    }
-  }
-
-  // Fallback 2: if currentSession is null (MCP restarted completely), find session from registry.
-  // After MCP restart the PID changes, but the active-sessions registry may still have
-  // the previous session entry (pruneStale adopts dead-PID sessions on same hostname).
-  if (!currentSession) {
-    try {
-      const hostname = os.hostname();
-      const sessions = listActiveSessions();
-      const candidates = sessions
-        .filter(s => s.hostname === hostname)
-        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-
-      if (candidates.length > 0) {
-        const recoveredId = candidates[0].session_id;
-        const sessionFilePath = getSessionPath(recoveredId, "session.json");
-        if (fs.existsSync(sessionFilePath)) {
-          const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-          if (data.surfaced_scars && Array.isArray(data.surfaced_scars) && data.surfaced_scars.length > 0) {
-            console.error(`[session-state] Recovered ${data.surfaced_scars.length} surfaced scars from registry session ${recoveredId.slice(0, 8)}`);
-            return data.surfaced_scars;
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("[session-state] Failed to recover surfaced scars from registry:", error);
     }
   }
 

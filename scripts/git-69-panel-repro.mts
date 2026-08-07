@@ -26,7 +26,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { readFileSync } from "fs";
+import { readFileSync, mkdirSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -101,14 +101,28 @@ function textOf(result: unknown): string {
 }
 
 async function main() {
+  // The child MUST run with its cwd outside the repo.
+  //
+  // GITMEM_HOME alone is NOT sufficient: the server resolves its state
+  // directory by walking UP from the working directory looking for .gitmem,
+  // and that walk-up wins. An earlier version of this script set GITMEM_HOME
+  // to a temp dir and still registered its session in the repo's
+  // .gitmem/active-sessions.json — which then made five enforcement unit tests
+  // fail, because they resolve the same real directory and adopt whatever
+  // session they find there. A "read-only" harness that mutates repo state is
+  // not read-only, so the isolation is pinned here by cwd as well.
+  const sandbox = join(tmpdir(), `git69-repro-${Date.now()}`);
+  mkdirSync(sandbox, { recursive: true });
+
   const transport = new StdioClientTransport({
     command: "node",
     args: [SERVER],
+    cwd: sandbox,
     env: {
       ...process.env,
       ...env,
       NO_COLOR: "1",
-      GITMEM_HOME: join(tmpdir(), `git69-repro-${Date.now()}`),
+      GITMEM_HOME: sandbox,
     } as Record<string, string>,
   });
   const client = new Client({ name: "git-69-repro", version: "1.0.0" }, { capabilities: {} });

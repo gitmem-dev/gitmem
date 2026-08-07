@@ -23,7 +23,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
-import { wrapDisplay, truncate, SEV, TYPE, productLine, dimText } from "../services/display-protocol.js";
+import { wrapDisplay, truncate, SEV, TYPE, productLine, dimText, CITATION_LINE } from "../services/display-protocol.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 
 // --- Types ---
@@ -84,9 +84,7 @@ function buildSearchDisplay(
   // Citation protocol — provenance enforcement for any downstream claims
   // Placed BEFORE results so agents see it before processing results
   if (results.length > 0) {
-    lines.push("───────────────────────────────────────────────────");
-    lines.push("CITATION RULE: When referencing facts from these results, cite the record ID.");
-    lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+    lines.push(dimText(CITATION_LINE));
     lines.push("");
   }
 

@@ -155,7 +155,54 @@ export function parseToolResult<T = unknown>(result: ToolCallResult): T {
     text = text.slice(0, -3);
   }
 
-  return JSON.parse(text.trim()) as T;
+  // GIT-74/R16a: tools that return a `display` field respond with the rendered
+  // display text and NO machine-data blob (server.ts: "No separate machine-data
+  // blob: it bloats the response and causes CLI auto-collapse"). Calling this
+  // on such a tool used to surface as a bare `SyntaxError: Unexpected token '('`
+  // — a stack trace where a diagnosis belongs. Say what the contract is instead.
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    throw new Error(
+      "parseToolResult: this tool returned display text, not JSON. Tools with a " +
+        "`display` field respond with rendered text only — assert over " +
+        "getToolResultText(), or verify the stored row directly. " +
+        `Got: ${trimmed.slice(0, 60)}…`
+    );
+  }
+
+  return JSON.parse(trimmed) as T;
+}
+
+/**
+ * Read a session row straight from the store.
+ *
+ * Sibling of queryThreadRow, and the honest replacement for asserting Supabase
+ * connectivity from a response body: since GIT-74 the response is display text,
+ * so "did session_start reach Supabase" is answered by the row it wrote, not by
+ * a performance object the tool no longer returns.
+ */
+export async function querySessionRow(
+  sessionId: string,
+  config: { url: string; key: string; tablePrefix?: string }
+): Promise<Record<string, unknown> | null> {
+  const table = `${config.tablePrefix ?? "orchestra_"}sessions`;
+  const endpoint = `${config.url}/rest/v1/${table}?id=eq.${encodeURIComponent(sessionId)}&select=id,agent,project`;
+
+  const response = await fetch(endpoint, {
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${config.key}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Row query failed (${response.status} ${response.statusText}) — store unreachable, NOT proof of absence`
+    );
+  }
+
+  const rows = (await response.json()) as Record<string, unknown>[];
+  return rows.length > 0 ? rows[0] : null;
 }
 
 /**

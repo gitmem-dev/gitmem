@@ -17,12 +17,15 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   createMcpClient,
   callTool,
   listTools,
-  parseToolResult,
   getToolResultText,
+  querySessionRow,
   isToolError,
   timedStep,
   EXPECTED_TOOL_COUNTS,
@@ -40,10 +43,28 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
   let sessionId: string;
 
   beforeAll(async () => {
+    // GIT-74/R16a: the smoke server MUST run with its cwd outside the repo.
+    //
+    // Without this it resolves the developer's real .gitmem by walking up from
+    // the working directory (GIT-80 — GITMEM_HOME alone does not prevent it),
+    // and then session_close tries to sync the developer's actual threads and
+    // sessions into the smoke target. Against a blank store that surfaces as
+    // foreign-key violations:
+    //
+    //   Key (source_session)=(057f7a50-…) is not present in table "gitmem_sessions"
+    //
+    // which is real local state leaking into a test, not a product defect. A
+    // smoke suite that reads the machine it runs on is measuring the machine.
+    const sandbox = mkdtempSync(join(tmpdir(), "gitmem-smoke-pro-"));
+
     const { result } = await timedStep("Server starts (pro)", async () => {
-      return createMcpClient({
-        GITMEM_TIER: "pro",
-      });
+      return createMcpClient(
+        {
+          GITMEM_TIER: "pro",
+          GITMEM_HOME: sandbox,
+        },
+        { cwd: sandbox }
+      );
     });
     mcp = result;
   }, 15_000);
@@ -88,36 +109,27 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
 
     expect(isToolError(result)).toBe(false);
 
-    const data = parseToolResult<{
-      session_id: string;
-      agent: string;
-      last_session: { id: string; title: string; date: string } | null;
-      recent_decisions?: Array<{ id: string; title: string }>;
-      performance: {
-        latency_ms: number;
-        total_latency_ms: number;
-        network_calls_made: number;
-      };
-    }>(result);
-
-    sessionId = data.session_id;
-
-    // Valid UUID
-    expect(data.session_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    // GIT-74/R16a: session_start returns display text, not a JSON body — the
+    // machine-data blob was removed deliberately. So the session id comes from
+    // the render, and "connected to Supabase" is proved by the row it wrote
+    // rather than by a performance object the tool no longer returns. That is
+    // a stronger assertion than the one it replaces: the old test could pass
+    // against a latency number with nothing persisted behind it.
+    const text = getToolResultText(result);
+    const uuid = text.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
     );
-    expect(data.agent).toBe("CLI");
+    expect(uuid, `no session id in session_start display:\n${text.slice(0, 200)}`).not.toBeNull();
+    sessionId = uuid![0];
 
-    // Performance breakdown proves Supabase connected
-    expect(data.performance).toBeDefined();
-    expect(data.performance.total_latency_ms).toBeGreaterThan(0);
-
-    // last_session field present (null is fine for first-ever session)
-    expect("last_session" in data).toBe(true);
-
-    // relevant_scars no longer in session_start result
-    // Scars load on-demand via recall()
-    expect(data).not.toHaveProperty("relevant_scars");
+    const row = await querySessionRow(sessionId, {
+      url: process.env.SUPABASE_URL!,
+      key: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      tablePrefix: process.env.GITMEM_TABLE_PREFIX,
+    });
+    expect(row, "session_start reported a session id with no row behind it").not.toBeNull();
+    expect(row!.id).toBe(sessionId);
+    expect(row!.project).toBe("test-project");
 
     // session_start should complete under 5s with Supabase
     expect(latencyMs).toBeLessThan(5000);
@@ -137,29 +149,23 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
 
     expect(isToolError(result)).toBe(false);
 
-    const data = parseToolResult<{
-      activated: boolean;
-      plan: string;
-      scars: Array<{
-        id: string;
-        title: string;
-        severity: string;
-        similarity: number;
-        description: string;
-      }>;
-    }>(result);
+    // GIT-74/R16a: recall renders display text, so the assertion moves onto the
+    // render. It must also not assume a populated corpus — this suite's venue is
+    // a deliberately blank e2e project, and the old test's "returns semantic
+    // matches" expectation was a fixture assumption, not a contract.
+    //
+    // The contract that actually holds either way: recall answers, and it is
+    // unambiguous about which case it is in. When scars ARE present they carry
+    // the citable id form the citation rule demands (GIT-74/R14).
+    const text = getToolResultText(result);
+    expect(text.length).toBeGreaterThan(0);
 
-    expect(data.plan).toBe("deploy to production");
-    expect(Array.isArray(data.scars)).toBe(true);
-
-    // Validate scar structure if any returned
-    if (data.scars.length > 0) {
-      const scar = data.scars[0];
-      expect(scar.id).toBeDefined();
-      expect(scar.title.length).toBeGreaterThan(0);
-      expect(scar.similarity).toBeGreaterThan(0);
-      expect(scar.description.length).toBeGreaterThan(0);
-    }
+    const foundScars = /\bid:[0-9a-z]{8}\b/.test(text);
+    const saidNone = /no relevant scars|no past lessons/i.test(text);
+    expect(
+      foundScars || saidNone,
+      `recall was neither a cited hit nor an explicit miss:\n${text.slice(0, 300)}`
+    ).toBe(true);
 
     // Recall should complete under 3s
     expect(latencyMs).toBeLessThan(3000);
@@ -178,9 +184,19 @@ describe.skipIf(!HAS_SUPABASE)("Smoke: Pro Tier", () => {
     const text = getToolResultText(result);
     expect(text.length).toBeGreaterThan(0);
 
-    // Verify no error payload hidden in the response
-    const data = parseToolResult<Record<string, unknown>>(result);
-    expect(data).not.toHaveProperty("error");
+    // GIT-74/R16a: the old check parsed the response as JSON and asserted no
+    // "error" key. Against display text that threw before it could assert
+    // anything — and the test is named "persists", so the honest check is the
+    // row, not the absence of a word in a string.
+    expect(text).not.toMatch(/\berror\b/i);
+
+    const row = await querySessionRow(sessionId, {
+      url: process.env.SUPABASE_URL!,
+      key: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      tablePrefix: process.env.GITMEM_TABLE_PREFIX,
+    });
+    expect(row, "session_close returned without the session row surviving").not.toBeNull();
+    expect(row!.id).toBe(sessionId);
   });
 
   it("cache_status reports initialized", async () => {

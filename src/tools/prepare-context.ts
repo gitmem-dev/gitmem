@@ -28,7 +28,7 @@ import {
   buildComponentPerformance,
 } from "../services/metrics.js";
 import { v4 as uuidv4 } from "uuid";
-import { wrapDisplay, productLine } from "../services/display-protocol.js";
+import { wrapDisplay, productLine, CITATION_LINE } from "../services/display-protocol.js";
 import { formatNudgeHeader } from "../services/nudge-variants.js";
 import type { Project, PerformanceBreakdown, PerformanceData } from "../types/index.js";
 import {
@@ -86,10 +86,7 @@ Proceed with caution — this may be new territory without documented lessons.`;
 
   // Citation protocol — provenance enforcement for any downstream claims
   // Placed BEFORE results so agents see it before processing scars
-  lines.push("───────────────────────────────────────────────────");
-  lines.push("CITATION RULE: When referencing facts from these scars, cite the record ID.");
-  lines.push("Example: \"Edge improved to 3.07 [id:48ebca14]\" — not paraphrased numbers.");
-  lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+  lines.push(CITATION_LINE);
   lines.push("");
 
   // Blocking verification requirements first
@@ -120,7 +117,10 @@ Proceed with caution — this may be new territory without documented lessons.`;
 
   for (const scar of scars) {
     const emoji = SEVERITY_EMOJI[scar.severity] || "[?]";
-    lines.push(`${emoji} **${scar.title}** (${scar.severity}, score: ${(scar.similarity || 0).toFixed(2)})`);
+    // GIT-74/R14: the id travels with the scar. This is the sub-agent injection
+    // path, where provenance matters most downstream — absorbed observations
+    // should carry citable ids home. ~3 tokens per record.
+    lines.push(`${emoji} **${scar.title}** (${scar.severity}, score: ${(scar.similarity || 0).toFixed(2)}) id:${scar.id.slice(0, 8)}`);
     lines.push(scar.description);
 
     if (scar.counter_arguments && scar.counter_arguments.length > 0) {

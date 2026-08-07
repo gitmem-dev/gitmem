@@ -18,6 +18,7 @@ export {
   createOutageEnv,
   restartServer,
   queryThreadRow,
+  querySessionRow,
   hasLiveSupabase,
   CORE_TOOLS,
   PRO_TOOLS,

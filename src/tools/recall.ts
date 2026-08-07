@@ -38,7 +38,7 @@ import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionPath } from "../services/gitmem-dir.js";
-import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI } from "../services/display-protocol.js";
+import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI, CITATION_LINE } from "../services/display-protocol.js";
 import { formatNudgeHeader } from "../services/nudge-variants.js";
 import { fetchDismissalCounts, type DismissalCounts } from "../services/behavioral-decay.js";
 import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, SurfacedScar } from "../types/index.js";
@@ -53,6 +53,28 @@ import type { Project, RelevantScar, PerformanceData, PerformanceBreakdown, Surf
  * can never drift apart.
  */
 export const LOW_CONFIDENCE_THRESHOLD = 0.55;
+
+/**
+ * Upper band boundary for tiered rendering (GIT-74/R11).
+ *
+ * At or above this similarity — or for the single top hit, whichever the query
+ * produced — a scar earns the extended render. Overall confirm-rate runs ~82%
+ * applied, and the high-similarity end is where that concentrates, so the
+ * likeliest-to-bind scar gets the deepest body.
+ */
+export const EXTENDED_THRESHOLD = 0.75;
+
+/** Per-field caps for compact/extended rendering. Chars, not tokens — the cap
+ *  is enforced where the text is, and the token budget is verified by the audit
+ *  script rather than guessed at per field. */
+const COMPACT_LESSON_CHARS = 180;
+const APPLIES_WHEN_CHARS = 60;
+const COUNTER_ARG_CHARS = 160;
+
+function truncateTo(text: string, cap: number): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  return cleaned.length <= cap ? cleaned : cleaned.slice(0, cap - 1).trimEnd() + "…";
+}
 
 /**
  * Parameters for recall tool
@@ -158,6 +180,12 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
   // Check if any scars have required_verification (blocking gates)
   const scarsWithVerification = scars.filter((s) => s.required_verification?.blocking);
 
+  // GIT-74/R11: the top hit earns the deepest render even if it does not clear
+  // EXTENDED_THRESHOLD — it is the likeliest to bind.
+  const topHitId = scars.length > 0
+    ? scars.reduce((best, s) => (s.similarity > best.similarity ? s : best), scars[0]).id
+    : null;
+
   const lines: string[] = [
     formatNudgeHeader(scars.length),
     "",
@@ -168,12 +196,11 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
     lines.push("");
   }
 
-  // Citation protocol — provenance enforcement for any downstream claims
-  // Placed BEFORE results so agents see it before processing scars
-  lines.push("───────────────────────────────────────────────────");
-  lines.push("CITATION RULE: When referencing facts from these scars, cite the record ID.");
-  lines.push("Example: \"Edge improved to 3.07 [id:48ebca14]\" — not paraphrased numbers.");
-  lines.push("If you cannot cite a specific record for a claim, say \"not in institutional memory.\"");
+  // Citation protocol — provenance enforcement for any downstream claims.
+  // GIT-74/R11: collapsed from a 4-line block to one line. It fired ~200 tokens
+  // of chrome on every recall including single-stub responses, and nothing
+  // honest lives in it — the rule is the same rule in one sentence.
+  lines.push(dimText(CITATION_LINE));
   lines.push("");
 
   // Display blocking verification requirements FIRST and prominently
@@ -221,13 +248,55 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
       }
     }
 
-    // Stub low-confidence scars: render header only, skip the heavy body.
-    // ~66% of sub-threshold matches are N/A, so their full bodies are wasted
-    // tokens. Blocking-verification scars always render full regardless of score.
-    const isStub =
-      scar.similarity < LOW_CONFIDENCE_THRESHOLD && !scar.required_verification?.blocking;
+    // GIT-74/R11: tiered rendering, banded by outcome rate rather than a flat
+    // budget. The corpus says where tokens earn their keep — the sub-0.55 band
+    // runs ~66% N/A (GIT-49's basis) while overall confirm-rate runs ~82%
+    // applied, so render depth follows expected utility.
+    //
+    //   stub      < 0.55            id + title + score            ~15 tok
+    //   compact   0.55 – 0.75       + one-line lesson + applies_when   ≤60 tok
+    //   extended  ≥ 0.75 or top hit + first counter-argument       ≤150 tok
+    //   full                        explicit fetch by id only
+    //
+    // The compact tier is the default and must stay sufficient for an honest
+    // APPLYING/N_A call — confirm_scars consumes this rendering, and degrading
+    // its decisions to save tokens would spend the product to buy efficiency.
+    // Blocking-verification scars render full regardless of score.
+    const forceFull = Boolean(scar.required_verification?.blocking);
+    const tier: "stub" | "compact" | "extended" | "full" = forceFull
+      ? "full"
+      : scar.similarity < LOW_CONFIDENCE_THRESHOLD
+        ? "stub"
+        : scar.similarity >= EXTENDED_THRESHOLD || scar.id === topHitId
+          ? "extended"
+          : "compact";
 
-    if (!isStub) {
+    if (tier === "compact" || tier === "extended") {
+      // GIT-74/R12b: render honest fields, or render nothing. Never fragments.
+      //
+      // This previously used the description's first sentence as the one-line
+      // lesson. Against the real corpus that was provenance metadata
+      // ("Liberation Blueprint nugget, session 096e940d…"), or the title echoed
+      // back by variant-enforcement text, about as often as it was a lesson. A
+      // fragment that *looks* like a rendered judgment is worse than no line —
+      // it teaches the reader to skim the field.
+      //
+      // So: why_this_matters when present, applies_when when present, and when
+      // neither exists the compact tier is the header line alone.
+      if (scar.why_this_matters) {
+        lines.push(`  ${truncateTo(scar.why_this_matters, COMPACT_LESSON_CHARS)}`);
+      }
+
+      if (scar.applies_when.length > 0) {
+        lines.push(`  ${dimText("Applies when:")} ${scar.applies_when.slice(0, 2).map((a) => truncateTo(a, APPLIES_WHEN_CHARS)).join("; ")}`);
+      }
+
+      if (tier === "extended" && scar.counter_arguments.length > 0) {
+        lines.push(`  ${dimText("You might think:")} ${truncateTo(scar.counter_arguments[0], COUNTER_ARG_CHARS)}`);
+      }
+    }
+
+    if (tier === "full") {
       // Use variant enforcement text if available (blind to variant name)
       if (scar.variant_info?.has_variants && scar.variant_info.variant) {
         const variantText = formatVariantEnforcement(scar.variant_info.variant, scar.title);
@@ -293,14 +362,14 @@ No past lessons match this plan closely enough. Scars accumulate as you work —
 
   lines.push("**Acknowledge these lessons before proceeding.**");
 
-  // Pro: graph nudge when triples exist on any scar
-  if (hasProInsights() && scars.some(s => s.related_triples && s.related_triples.length > 0)) {
-    const firstScarWithTriples = scars.find(s => s.related_triples && s.related_triples.length > 0);
-    if (firstScarWithTriples) {
-      lines.push("");
-      lines.push(dimText(`Pro: Use graph_traverse(lens: 'connected_to', node: '${firstScarWithTriples.title}') to explore deeper connections.`));
-    }
-  }
+  // Two-phase lazy recall (GIT-50): the affordance is stated once, not once per
+  // scar. Repeating it on every entry cost ~12 tokens × N to say one thing.
+  lines.push(dimText("Full body: search(\"<id>\")"));
+
+  // GIT-74/R11: the graph_traverse nudge is removed from default rendering.
+  // It fired on every recall carrying triples and cost tokens on a discovery
+  // hint the caller rarely took. graph_traverse remains available as a tool;
+  // it just no longer advertises itself inside the injection path.
 
   return lines.join("\n");
 }

@@ -27,6 +27,14 @@ import {
   getThreadFromSupabaseById,
   listThreadsFromSupabase,
 } from "../services/thread-supabase.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
+import { getThreadOwnership } from "../services/thread-supabase.js";
+import type { ThreadOwnership } from "../services/thread-supabase.js";
+
+/** Short form for log/response readability; "unknown" when unrecorded. */
+function shortId(id: string | null | undefined): string {
+  return id ? id.slice(0, 8) : "unknown";
+}
 import { writeTriplesForThreadResolution } from "../services/triple-writer.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
@@ -104,28 +112,60 @@ export async function resolveThread(
   // Supabase, splice it into the working set, and retry. The downstream flow
   // (local cache write + Supabase resolve + metrics/triples) then proceeds
   // unchanged, syncing the previously-diverged local cache back to the SOT.
+  // GIT-69 item 4 v1 (R9c): resolve is project-scoped, not own-session-scoped.
+  // Resolve is an explicit, human-directed act on a NAMED thread — the caller
+  // states a specific target — whereas dedup is automatic and silent over a
+  // candidate set. R1's own-session caution therefore does not transfer here.
+  // Cross-PROJECT resolve stays refused, and the widened power is paid for with
+  // an audit trail: any resolve of a thread this session does not own names the
+  // owning session.
+  const scope = resolveThreadScope();
+  let ownership: ThreadOwnership | null = null;
+
   if (!resolved) {
-    const hydrated = await hydrateThreadFromSupabase(effectiveThreadId, effectiveTextMatch);
-    if (hydrated) {
-      if (!findThreadById(threads, hydrated.id)) {
-        threads.push(hydrated);
+    // Ownership is checked BEFORE hydrating by ID: getThreadFromSupabaseById
+    // filters on thread_id alone with no project filter, so hydrating first
+    // would resolve across projects — condition (1) violated silently.
+    ownership = effectiveThreadId
+      ? await getThreadOwnership(effectiveThreadId)
+      : null;
+
+    const crossProject = ownership !== null && ownership.project !== scope.project;
+
+    if (!crossProject) {
+      const hydrated = await hydrateThreadFromSupabase(effectiveThreadId, effectiveTextMatch);
+      if (hydrated) {
+        if (!findThreadById(threads, hydrated.id)) {
+          threads.push(hydrated);
+        }
+        resolved = resolveThreadInList(threads, {
+          threadId: hydrated.id,
+          sessionId,
+          resolutionNote: params.resolution_note,
+        });
       }
-      resolved = resolveThreadInList(threads, {
-        threadId: hydrated.id,
-        sessionId,
-        resolutionNote: params.resolution_note,
-      });
     }
   }
 
   if (!resolved) {
     const latencyMs = timer.stop();
     const searchKey = params.thread_id || params.text_match;
+
+    // R9c(3): a miss returns ownership information where it exists, rather
+    // than a bare not-found. "Not found" for a thread that demonstrably exists
+    // in another project is the same lie as a success for a write that didn't
+    // land — it reports absence when the truth is refusal.
+    const message = ownership
+      ? ownership.project !== scope.project
+        ? `Refused: thread ${ownership.thread_id} belongs to project "${ownership.project}", not "${scope.project}". Cross-project resolve is not permitted.`
+        : `Thread not found in scope: "${searchKey}" (exists in project "${ownership.project}", owned by session ${shortId(ownership.source_session)}, status ${ownership.status})`
+      : `Thread not found: "${searchKey}"`;
+
     return {
       success: false,
-      error: `Thread not found: "${searchKey}"`,
+      error: message,
       performance: buildPerformanceData("resolve_thread", latencyMs, 0),
-      display: wrapDisplay(`Thread not found: "${searchKey}"`),
+      display: wrapDisplay(message),
     };
   }
 
@@ -219,6 +259,20 @@ export async function resolveThread(
   }
 
   let resolveMsg = `Thread resolved: "${resolved.text?.slice(0, 60) || resolved.id}"`;
+
+  // R9c(2): the audit trail is the price of the widened power. Resolving a
+  // thread this session did not create is now permitted inside the project, so
+  // every such resolve states who owned it and who closed it. A silent
+  // cross-session write is the thing the project-wide scope would otherwise
+  // have bought us.
+  const owner = resolved.source_session ?? ownership?.source_session ?? null;
+  if (owner && sessionId && owner !== sessionId) {
+    resolveMsg += `\nCross-session resolve: ${resolved.id} owned by session ${shortId(owner)}, resolved by session ${shortId(sessionId)} (project ${scope.project})`;
+    console.error(
+      `[resolve_thread] Cross-session resolve: ${resolved.id} owned by ${owner}, resolved by ${sessionId} in project ${scope.project}`
+    );
+  }
+
   if (alsoResolved.length > 0) resolveMsg += `\nAlso resolved: ${alsoResolved.map(t => t.id).join(", ")}`;
 
   return {
@@ -251,8 +305,10 @@ async function hydrateThreadFromSupabase(
     return await getThreadFromSupabaseById(threadId);
   }
   if (textMatch) {
-    const project = getProject() || "default";
-    const openThreads = await listThreadsFromSupabase(project, { statusFilter: "open" });
+    // GIT-69: same scope resolver as list_threads, so a thread the user can
+    // see is a thread they can resolve by text.
+    const scope = resolveThreadScope();
+    const openThreads = await listThreadsFromSupabase(scope, { statusFilter: "open" });
     if (openThreads) {
       return findThreadByText(openThreads, textMatch);
     }

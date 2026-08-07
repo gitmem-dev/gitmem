@@ -15,6 +15,12 @@ import { computeVitality, computeLifecycleStatus, detectThreadClass } from "./th
 import type { ThreadClass, LifecycleStatus } from "./thread-vitality.js";
 import { normalizeText, deduplicateThreadList } from "./thread-dedup.js";
 import type { ThreadWithEmbedding } from "./thread-dedup.js";
+import {
+  buildScopedThreadQuery,
+  TERMINAL_STATUSES,
+  DORMANT_STATUSES,
+} from "./thread-scope.js";
+import type { ThreadScope, ThreadVisibility, ThreadScopeCounts } from "./thread-scope.js";
 import type { ThreadObject, Project } from "../types/index.js";
 
 // ---------- Supabase Row Types ----------
@@ -48,6 +54,35 @@ export interface ThreadDisplayInfo {
   lifecycle_status: LifecycleStatus;
   thread_class: string;
   days_since_touch: number;
+}
+
+export type { ThreadScopeCounts } from "./thread-scope.js";
+
+/**
+ * Outcome of a thread sync, so a caller can decide whether it is safe to
+ * discard local state (GIT-69 item 3). `skipped` means Supabase is not this
+ * tier's SOT — nothing to sync, which is success, not failure.
+ */
+/** Ownership facts about a thread, used to explain refusals (GIT-69 item 4). */
+export interface ThreadOwnership {
+  thread_id: string;
+  project: string;
+  source_session: string | null;
+  status: string;
+}
+
+export interface ThreadSyncResult {
+  attempted: number;
+  synced: string[];
+  failed: { id: string; error: string }[];
+  skipped: boolean;
+  all_synced: boolean;
+}
+
+export interface ActiveThreadsResult {
+  open: ThreadObject[];
+  displayInfo: ThreadDisplayInfo[];
+  scope: ThreadScopeCounts;
 }
 
 // ---------- Mapping Helpers ----------
@@ -225,6 +260,49 @@ export async function resolveThreadInSupabase(
  *
  * Returns the mapped ThreadObject, or null if not found / Supabase unavailable.
  */
+/**
+ * Who owns a thread, regardless of the caller's scope (GIT-69 item 4).
+ *
+ * Deliberately UNSCOPED — this is the one lookup allowed to see across
+ * projects, because its purpose is to explain a refusal rather than to grant
+ * access. Per R9c: a miss must return ownership information where it exists
+ * ("owned by session Y in project P") rather than a bare not-found, and a
+ * cross-project resolve must be refused by name rather than silently missing.
+ *
+ * Callers must never use this to widen what they resolve — only to say why
+ * they did not.
+ */
+export async function getThreadOwnership(
+  threadId: string
+): Promise<ThreadOwnership | null> {
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    return null;
+  }
+
+  try {
+    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
+      select: "thread_id,project,source_session,status",
+      filters: { thread_id: threadId },
+      limit: 1,
+    });
+
+    if (rows.length === 0) return null;
+
+    return {
+      thread_id: rows[0].thread_id,
+      project: rows[0].project,
+      source_session: rows[0].source_session,
+      status: rows[0].status,
+    };
+  } catch (error) {
+    console.error(
+      "[thread-supabase] Ownership lookup failed:",
+      error instanceof Error ? error.message : error
+    );
+    return null;
+  }
+}
+
 export async function getThreadFromSupabaseById(
   threadId: string
 ): Promise<ThreadObject | null> {
@@ -252,7 +330,7 @@ export async function getThreadFromSupabaseById(
  * Returns null if Supabase is unavailable (caller should fall back to local).
  */
 export async function listThreadsFromSupabase(
-  project: Project = "default",
+  scope: ThreadScope,
   options: {
     statusFilter?: string;
     includeResolved?: boolean;
@@ -262,32 +340,38 @@ export async function listThreadsFromSupabase(
     return null;
   }
 
+  // GIT-69: project, ordering, and limit come from the one scope resolver.
+  // Only the status axis varies here, because list_threads is the surface that
+  // can deliberately ask for resolved threads.
+  const query = buildScopedThreadQuery(scope, {
+    visibility: "project",
+    exclude: TERMINAL_STATUSES,
+  });
+  if (!query) return null;
+
   try {
-    const filters: Record<string, string> = {
-      project,
-    };
+    const filters = { ...query.filters };
 
     // Apply status filter unless including all
     if (!options.includeResolved && options.statusFilter) {
       if (options.statusFilter === "open") {
         // "open" in local status = all non-terminal Supabase statuses
-        filters.status = "not.in.(resolved,archived)";
+        filters.status = `not.in.(${TERMINAL_STATUSES.join(",")})`;
       } else if (options.statusFilter === "resolved") {
         filters.status = "resolved";
       } else {
         // Pass through any Supabase-native status
         filters.status = options.statusFilter;
       }
-    } else if (!options.includeResolved) {
-      // Default: exclude resolved and archived
-      filters.status = "not.in.(resolved,archived)";
+    } else if (options.includeResolved) {
+      delete filters.status;
     }
 
     const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
       select: "*",
       filters,
-      order: "vitality_score.desc,last_touched_at.desc",
-      limit: 100,
+      order: query.order,
+      limit: query.limit,
     });
 
     const threads = deduplicateThreadList(rows.map(rowToThreadObject));
@@ -305,27 +389,35 @@ export async function listThreadsFromSupabase(
  * Returns null if Supabase is unavailable.
  */
 export async function loadActiveThreadsFromSupabase(
-  project: Project = "default"
-): Promise<{ open: ThreadObject[]; displayInfo: ThreadDisplayInfo[] } | null> {
+  scope: ThreadScope
+): Promise<ActiveThreadsResult | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
   }
 
+  // GIT-69/R7: the panel is a VIEW of the scope, not a second definition of
+  // it. Dormant threads are IN scope — they exist, and hiding them here would
+  // make the panel and the dedup candidate set disagree about what exists,
+  // which is this ticket's original sin. They are filtered at display, and the
+  // count is reported so the panel can say what it omitted.
+  const query = buildScopedThreadQuery(scope, {
+    visibility: "project",
+    exclude: TERMINAL_STATUSES,
+  });
+  if (!query) return null;
+
   try {
-    // Get only non-resolved, non-archived threads (open/active only)
     const rows = await supabase.directQuery<ThreadRow>(getTableName("threads_lite"), {
       select: "*",
-      filters: {
-        project,
-        status: "not.in.(archived,dormant,resolved)",
-      },
-      order: "vitality_score.desc,last_touched_at.desc",
-      limit: 50,
+      filters: query.filters,
+      order: query.order,
+      limit: query.limit,
     });
 
     const now = new Date();
     const open: ThreadObject[] = [];
     const displayInfo: ThreadDisplayInfo[] = [];
+    let dormantHidden = 0;
 
     // Deduplicate by text content (mirrors aggregateThreads logic)
     const seenText = new Set<string>();
@@ -336,6 +428,13 @@ export async function loadActiveThreadsFromSupabase(
       if (seenIds.has(row.id) || (key && seenText.has(key))) continue;
       seenIds.add(row.id);
       if (key) seenText.add(key);
+
+      // In scope, excluded from the default listing — counted, never dropped
+      // silently.
+      if (DORMANT_STATUSES.includes(row.status)) {
+        dormantHidden++;
+        continue;
+      }
 
       open.push(rowToThreadObject(row));
 
@@ -363,9 +462,17 @@ export async function loadActiveThreadsFromSupabase(
       });
     }
 
-    const dupsRemoved = rows.length - open.length;
-    console.error(`[thread-supabase] Loaded ${open.length} open threads from Supabase (${dupsRemoved} duplicates removed)`);
-    return { open, displayInfo };
+    const dupsRemoved = rows.length - open.length - dormantHidden;
+    console.error(`[thread-supabase] Loaded ${open.length} open threads from Supabase (${dormantHidden} dormant in scope, ${dupsRemoved} duplicates removed)`);
+    return {
+      open,
+      displayInfo,
+      scope: {
+        listable: open.length,
+        dormantHidden,
+        totalInScope: open.length + dormantHidden,
+      },
+    };
   } catch (error) {
     console.error("[thread-supabase] Failed to load active threads:", error instanceof Error ? error.message : error);
     return null;
@@ -444,10 +551,24 @@ export async function syncThreadsToSupabase(
   threads: ThreadObject[],
   project: Project = "default",
   sessionId?: string
-): Promise<void> {
-  if (!hasSupabase() || !supabase.isConfigured() || threads.length === 0) {
-    return;
+): Promise<ThreadSyncResult> {
+  // GIT-69 item 3: this used to return void and swallow every per-thread
+  // error to a console line marked "non-fatal", which made the outcome
+  // unknowable to the caller. session_close then pruned the local cache
+  // regardless. A destructive local operation cannot be gated on a remote
+  // write whose result was never examined (scar cd345431).
+  if (!hasSupabase() || !supabase.isConfigured()) {
+    // Not a failure: on free tier Supabase is not the SOT, so there is
+    // nothing to sync and nothing to gate on.
+    return { attempted: 0, synced: [], failed: [], skipped: true, all_synced: true };
   }
+
+  if (threads.length === 0) {
+    return { attempted: 0, synced: [], failed: [], skipped: false, all_synced: true };
+  }
+
+  const synced: string[] = [];
+  const failed: { id: string; error: string }[] = [];
 
   //  Load existing open threads once upfront for text-based dedup.
   // Prevents duplicate creation when closing ceremony generates new thread IDs
@@ -515,11 +636,29 @@ export async function syncThreadsToSupabase(
         // Existing thread, just touch it
         await touchThreadsInSupabase([thread.id]);
       }
+      synced.push(thread.id);
     } catch (error) {
-      console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, error instanceof Error ? error.message : error);
-      // Continue with other threads
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[thread-supabase] Failed to sync thread ${thread.id}:`, message);
+      // Continue with the other threads — a partial sync is still worth
+      // completing — but record the miss so the caller can refuse to prune.
+      failed.push({ id: thread.id, error: message });
     }
   }
+
+  if (failed.length > 0) {
+    console.error(
+      `[thread-supabase] Thread sync incomplete: ${synced.length} synced, ${failed.length} failed (${failed.map((f) => f.id).join(", ")})`
+    );
+  }
+
+  return {
+    attempted: threads.length,
+    synced,
+    failed,
+    skipped: false,
+    all_synced: failed.length === 0,
+  };
 }
 
 // ---------- Archival (Phase 6) ----------
@@ -603,10 +742,25 @@ function parseEmbedding(raw: string | number[] | null | undefined): number[] | n
  * Returns null if Supabase is unavailable.
  */
 export async function loadOpenThreadEmbeddings(
-  project: Project = "default"
+  scope: ThreadScope,
+  visibility: ThreadVisibility = "own_session"
 ): Promise<ThreadWithEmbedding[] | null> {
   if (!hasSupabase() || !supabase.isConfigured()) {
     return null;
+  }
+
+  // GIT-69/R1: dedup candidates default to the caller's OWN session. A match
+  // against another session's thread is never a safe automatic merge — it
+  // binds this session's content to a thread it does not own. With no active
+  // session the query is null and dedup is skipped entirely, rather than
+  // widening to every thread in the namespace.
+  //
+  // session_close's suggestion pass opts into "project" deliberately: it is
+  // proposing threads to a human, not silently merging into one.
+  const query = buildScopedThreadQuery(scope, { visibility });
+  if (!query) {
+    console.error("[thread-supabase] No session in scope — skipping dedup candidates");
+    return [];
   }
 
   try {
@@ -615,15 +769,13 @@ export async function loadOpenThreadEmbeddings(
       text: string;
       embedding: string | number[] | null;
     }>(getTableName("threads"), {
-      select: "thread_id,text,embedding",
-      filters: {
-        project,
-        status: "not.in.(resolved,archived)",
-      },
-      limit: 100,
+      select: "thread_id,text,embedding,source_session",
+      filters: query.filters,
+      order: query.order,
+      limit: query.limit,
     });
 
-    console.error(`[thread-supabase] Loaded ${rows.length} thread embeddings for dedup`);
+    console.error(`[thread-supabase] Loaded ${rows.length} thread embeddings for dedup (own session)`);
     return rows.map((row) => ({
       thread_id: row.thread_id,
       text: row.text,

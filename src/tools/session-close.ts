@@ -17,6 +17,9 @@ import { clearCurrentSession, getSurfacedScars, getConfirmations, getReflections
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
+import type { ThreadSyncResult } from "../services/thread-supabase.js";
+import { resolveThreadScope } from "../services/thread-scope.js";
+import type { Project } from "../types/index.js";
 import {
   validateSessionClose,
   buildCloseCompliance,
@@ -1256,20 +1259,55 @@ export async function sessionClose(
     params, existingSession, isRetroactive, agentIdentity, closeCompliance, sessionId
   );
 
-  // Sync threads to Supabase (fire-and-forget, non-blocking)
+  // GIT-69 item 3: sync threads and AWAIT the outcome.
+  //
+  // This was fire-and-forget with the error swallowed to a console line marked
+  // "non-fatal", and the local prune below ran unconditionally right after. A
+  // failed sync plus a successful prune drops resolved threads locally while
+  // remote still holds them open — no error, green close. The purest instance
+  // of scar cd345431 in the product: fire-and-forget hiding a failed write,
+  // with a destructive local operation gated on its unexamined result.
+  //
+  // R3: the gate is tier-relative. On free tier the local file IS the SOT and
+  // there is no sync to await — `skipped: true`, and the prune proceeds on
+  // local persistence alone. Awaiting a sync that does not exist would
+  // fail-close every free user's session close.
   const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
+  let threadSync: ThreadSyncResult = {
+    attempted: 0, synced: [], failed: [], skipped: true, all_synced: true,
+  };
+
   if (closeThreads.length > 0) {
     const closeProject = isRetroactive ? "default" : (existingSession?.project as string | undefined) || "default";
-    syncThreadsToSupabase(closeThreads, closeProject, sessionId).catch((err) => {
-      console.error("[session_close] Thread Supabase sync failed (non-fatal):", err);
-    });
+    try {
+      threadSync = await syncThreadsToSupabase(closeThreads, closeProject, sessionId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[session_close] Thread sync threw:", message);
+      threadSync = {
+        attempted: closeThreads.length,
+        synced: [],
+        failed: closeThreads.map((t) => ({ id: t.id, error: message })),
+        skipped: false,
+        all_synced: false,
+      };
+    }
   }
 
-  // Prune threads.json: only keep open threads
+  // Prune threads.json: only keep open threads — ONLY if the durable store
+  // agrees. A partial sync means the local file is the only record of the
+  // threads that did not land; discarding it would destroy them.
   try {
-    const openThreadsOnly = closeThreads.filter(t => t.status === "open" || !t.status);
-    saveThreadsFile(openThreadsOnly);
-    console.error(`[session_close] Pruned threads.json: ${openThreadsOnly.length} open threads (removed ${closeThreads.length - openThreadsOnly.length} resolved/archived)`);
+    if (!threadSync.all_synced) {
+      console.error(
+        `[session_close] Local thread prune SKIPPED — ${threadSync.failed.length} thread(s) did not reach Supabase (${threadSync.failed.map((f) => f.id).join(", ")}). ` +
+        `threads.json retained in full; it is the only record of the unsynced threads.`
+      );
+    } else {
+      const openThreadsOnly = closeThreads.filter(t => t.status === "open" || !t.status);
+      saveThreadsFile(openThreadsOnly);
+      console.error(`[session_close] Pruned threads.json: ${openThreadsOnly.length} open threads (removed ${closeThreads.length - openThreadsOnly.length} resolved/archived)`);
+    }
   } catch (err) {
     console.error("[session_close] Failed to prune threads.json (non-fatal):", err);
   }
@@ -1375,7 +1413,12 @@ export async function sessionClose(
             // Phase 5: Implicit thread detection (chained after embedding)
             const suggestProject: string = (existingSession?.project as string) || "default";
             const recentSessions = await loadRecentSessionEmbeddings(suggestProject, 30, 20);
-            const threadEmbs = await loadOpenThreadEmbeddings(suggestProject);
+            // GIT-69: project visibility is deliberate here — the suggestion
+            // pass proposes threads to a human rather than silently merging.
+            const threadEmbs = await loadOpenThreadEmbeddings(
+              resolveThreadScope({ project: suggestProject as Project, sessionId }),
+              "project"
+            );
             if (recentSessions && threadEmbs) {
               const existing = loadSuggestions();
               const updated = detectSuggestedThreads(
@@ -1471,21 +1514,42 @@ export async function sessionClose(
     const decisionsCount = params.decisions?.length || 0;
     await writeAgentBriefing(learningsCount, decisionsCount);
 
-    // GIT-21: Clean up session files (registry, per-session dir, legacy file)
-    cleanupSessionFiles(sessionId);
+    // GIT-69 item 3 / R4: a partial persist is not a close. Report it
+    // honestly AND keep the state needed to retry — cleaning up the session
+    // files and payload here would destroy the recovery path while announcing
+    // the failure, which is the crime in reverse.
+    const partialPersist = !threadSync.all_synced;
 
-    // Clean up payload file AFTER successful close (not before — crash safety)
-    if (payloadConsumed) {
-      try { fs.unlinkSync(payloadPath); } catch { /* already gone */ }
+    if (!partialPersist) {
+      // GIT-21: Clean up session files (registry, per-session dir, legacy file)
+      cleanupSessionFiles(sessionId);
+
+      // Clean up payload file AFTER successful close (not before — crash safety)
+      if (payloadConsumed) {
+        try { fs.unlinkSync(payloadPath); } catch { /* already gone */ }
+      }
+    } else {
+      console.error(
+        `[session_close] Partial persist — retaining session files and payload for ${sessionId} so the close can be retried`
+      );
     }
 
-    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true, validation.warnings.length > 0 ? validation.warnings : undefined, transcriptStatus, blindspotSnippet);
+    const persistErrors = partialPersist
+      ? [
+          `Thread sync incomplete: ${threadSync.failed.length} of ${threadSync.attempted} thread(s) did not reach Supabase — ${threadSync.failed.map((f) => `${f.id} (${f.error})`).join("; ")}. ` +
+          `threads.json was NOT pruned and session files were retained; re-run session_close to retry.`,
+        ]
+      : [];
+
+    const allErrors = [...persistErrors, ...validation.warnings];
+
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet);
 
     return {
-      success: true,
+      success: !partialPersist,
       session_id: sessionId,
       close_compliance: closeCompliance,
-      validation_errors: validation.warnings.length > 0 ? validation.warnings : undefined,
+      validation_errors: allErrors.length > 0 ? allErrors : undefined,
       performance: perfData,
       display,
     };

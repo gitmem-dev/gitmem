@@ -33,6 +33,8 @@ import { setCurrentSession, getCurrentSession, addSurfacedScars, getSurfacedScar
 import { aggregateThreads, saveThreadsFile, loadThreadsFile, mergeThreadStates } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../services/thread-supabase.js";
+import { resolveThreadScope, computePanelOmission, formatOmissionLine } from "../services/thread-scope.js";
+import type { ThreadScopeCounts } from "../services/thread-scope.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
@@ -157,6 +159,8 @@ async function loadLastSession(
   latency_ms: number;
   network_call: boolean;
   threadsFromSupabase: boolean;
+  /** What the scope held, so the panel can say what it omitted (GIT-69/R7). */
+  scopeCounts?: ThreadScopeCounts | null;
 }> {
   const timer = new Timer();
 
@@ -183,17 +187,19 @@ async function loadLastSession(
         limit: 10,
         orderBy: { column: "created_at", ascending: false },
       }),
-      loadActiveThreadsFromSupabase(project),
+      loadActiveThreadsFromSupabase(resolveThreadScope({ project })),
     ]);
 
     let aggregated_open_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];
     let threadsFromSupabase = false;
+    let scopeCounts: ThreadScopeCounts | null = null;
 
     if (supabaseThreads !== null) {
       // Supabase is source of truth for threads
       aggregated_open_threads = supabaseThreads.open;
       displayInfo = supabaseThreads.displayInfo;
+      scopeCounts = supabaseThreads.scope;
       threadsFromSupabase = true;
       console.error(`[session_start] Loaded ${aggregated_open_threads.length} open threads from Supabase`);
 
@@ -209,7 +215,7 @@ async function loadLastSession(
     const latency_ms = timer.stop();
 
     if (sessions.length === 0) {
-      return { session: null, aggregated_open_threads, displayInfo, latency_ms, network_call: true, threadsFromSupabase };
+      return { session: null, aggregated_open_threads, displayInfo, latency_ms, network_call: true, threadsFromSupabase, scopeCounts };
     }
 
     // Find the most recent session that was properly closed
@@ -248,6 +254,7 @@ async function loadLastSession(
       latency_ms,
       network_call: true,
       threadsFromSupabase,
+      scopeCounts,
     };
   } catch (error) {
     console.error("[session_start] Failed to load last session:", error);
@@ -864,7 +871,7 @@ function stripThreadPrefix(text: string): string {
   return text.replace(/^t-[a-f0-9]+:\s*/i, "");
 }
 
-function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>, isFirstSession?: boolean, analytics?: LightweightSummary | null): string {
+function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<string, ThreadDisplayInfo>, isFirstSession?: boolean, analytics?: LightweightSummary | null, scopeCounts?: ThreadScopeCounts | null): string {
   const visual: string[] = [];
 
   // Line 1: branded product line + session state
@@ -912,8 +919,17 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
       const truncated = text.length > 60 ? text.slice(0, 57) + "..." : text;
       visual.push(`  ${truncated}`);
     }
-    if (result.open_threads!.length > maxShow) {
-      visual.push(`  +${result.open_threads!.length - maxShow} more`);
+
+    // GIT-69/R7: no silent truncation. A capped or filtered view states what
+    // it omitted and where the rest lives.
+    const counts: ThreadScopeCounts = scopeCounts ?? {
+      listable: result.open_threads!.length,
+      dormantHidden: 0,
+      totalInScope: result.open_threads!.length,
+    };
+    const omissionLine = formatOmissionLine(computePanelOmission(counts, maxShow));
+    if (omissionLine) {
+      visual.push(dimText(`  ${omissionLine}`));
     }
   }
 
@@ -1184,7 +1200,7 @@ export async function sessionStart(
     displayInfoMap.set(info.thread.id, info);
   }
   const isFirstSession = !isResuming && !slimLastSession;
-  result.display = formatStartDisplay(result, displayInfoMap, isFirstSession, analyticsResult);
+  result.display = formatStartDisplay(result, displayInfoMap, isFirstSession, analyticsResult, lastSessionResult.scopeCounts);
 
   // Write display to per-session dir
   try {

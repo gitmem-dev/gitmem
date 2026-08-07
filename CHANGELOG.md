@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-07
+
+**No destructive changes, no data loss, no migration.** But if you start seeing errors after
+upgrading, those failures were occurring before and being reported as success. 1.7.0 makes them
+visible.
+
+That is the whole shape of this release. The response contracts changed — new refusal semantics on
+dedup, hard errors on sessionless Pro writes, `success: false` closes, a third cache-health status —
+so a write that quietly did nothing now says so. Nothing that worked before stops working.
+
+### Fixed
+
+- **`create_learning` silently dropped fields for most learning types.** `applies_when` was assigned
+  only inside the `win` branch, so every scar, pattern and anti-pattern since 2026-02-03 had the
+  field validated, acknowledged, and discarded. `problem_context` and `solution_approach` had the
+  identical defect at the identical site, and `anti_pattern` had no branch at all, reaching the row
+  with no severity. All four are fixed together, guarded by a parameterized test asserting that
+  every schema-accepted field persists to the stored row for every learning type. Nineteen affected
+  records were recovered from session transcripts and row-verified. (GIT-76)
+- **`session_close` could fail to persist against a correctly-provisioned store.** The upsert payload
+  was built by spreading the existing session record, which on the Supabase-miss path is the local
+  file record — a different shape, carrying rendering fields the table does not define. One unknown
+  key failed the entire close, so a fresh Pro install could not close its first session. The payload
+  is now filtered to the table's known columns, which fixes the shape-drift class rather than the one
+  field that surfaced it. (GIT-74)
+- **`syncThreadsToSupabase` created duplicate threads at session close.** An unordered 200-row dedup
+  window silently truncated the candidate set, so a text-matching thread outside the window fell
+  through to "genuinely new" and was created again. The candidate load is now deterministically
+  ordered and complete. (GIT-70)
+- **Thread scope was resolved four different ways.** `session_start`'s panel, `list_threads`,
+  `resolve_thread` and dedup candidate selection each implemented their own view, which is how a
+  `weekend_warrior` thread appeared in a `gitmem` session panel while `list_threads` correctly
+  excluded it. All four now import one resolver. (GIT-69)
+- **Session identity survives an MCP server restart**, instead of the enforcement layer reporting
+  "No active session" while the process kept serving. (GIT-51)
+- **Write tools no longer fabricate IDs for writes that did not land.** With no active session or an
+  unreachable store, `create_thread` returns an unambiguous failure with no minted ID, rather than a
+  success payload and an enforcement banner in the same response. (GIT-67, GIT-63)
+
+### Changed
+
+- **Scar surfacing is tiered by confidence.** Recall renders a stub below 0.55, a compact body from
+  0.55 to 0.75, an extended body at 0.75 or for the top hit, and the full body for
+  blocking-verification scars regardless of score. Measured against the real corpus: high-yield
+  recall dropped from 2565 to 487 tokens (81%), low-yield from 246 to 115 (53%). The citation line,
+  the acknowledge line that drives `confirm_scars`, and one footer were deliberately left in place —
+  they are load-bearing, and trimming honesty to hit a round number is the metric becoming the
+  target. (GIT-74, GIT-50)
+- **One citation rule, every surface.** `recall`, `search`, `prepare_context` and the compact hook
+  path had four separately-drifting copies. They now share one constant — and the two surfaces that
+  instructed agents to cite record IDs while rendering none now render them, because an instruction
+  ships only where the capability to obey it does. (GIT-74)
+- **Compact renderings show honest fields or nothing.** The one-line lesson is drawn from
+  `why_this_matters` and `applies_when`; when neither exists the tier is the header alone. The
+  previous first-sentence-of-description heuristic rendered provenance metadata or an echoed title
+  about as often as a lesson, and a fragment that looks like a judgment is worse than an absent line.
+
+### Known gaps
+
+Consumer verification for three fixes (GIT-67, GIT-69, GIT-70) is deferred to 1.7.1 and tracked in
+GIT-83. The test environment is provisioned and standing; the deferral is scope discipline, not an
+unknown.
+
+
 ## [1.6.6] - 2026-06-27
 
 ### Changed

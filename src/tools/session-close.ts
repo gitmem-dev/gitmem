@@ -1280,6 +1280,7 @@ export async function sessionClose(
   const closeThreads = (sessionData.open_threads || []) as ThreadObject[];
   let threadSync: ThreadSyncResult = {
     attempted: 0, synced: [], failed: [], skipped: true, all_synced: true,
+    dedup_coverage: "complete", dedup_candidates: 0,
   };
 
   if (closeThreads.length > 0) {
@@ -1295,6 +1296,8 @@ export async function sessionClose(
         failed: closeThreads.map((t) => ({ id: t.id, error: message })),
         skipped: false,
         all_synced: false,
+        dedup_coverage: "unavailable",
+        dedup_candidates: 0,
       };
     }
   }
@@ -1546,7 +1549,21 @@ export async function sessionClose(
         ]
       : [];
 
-    const allErrors = [...persistErrors, ...validation.warnings];
+    // GIT-70: coverage is a different axis from success. Every thread synced,
+    // so all_synced is true and the close succeeds — but an incomplete
+    // duplicate check means a duplicate row MAY have been created, and the
+    // sync would report that as a successful write. Disclosed rather than
+    // absorbed (R7): an omitted warning reads as "checked and clean".
+    const coverageWarnings =
+      threadSync.dedup_coverage !== "complete" && threadSync.attempted > 0
+        ? [
+            `Thread duplicate-check coverage was ${threadSync.dedup_coverage} ` +
+            `(${threadSync.dedup_candidates} candidates considered). Threads synced successfully, ` +
+            `but a duplicate may have been created for text matching a thread outside the checked set.`,
+          ]
+        : [];
+
+    const allErrors = [...persistErrors, ...coverageWarnings, ...validation.warnings];
 
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet);
 

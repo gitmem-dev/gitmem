@@ -71,12 +71,35 @@ export interface ThreadOwnership {
   status: string;
 }
 
+/**
+ * Whether the dedup candidate set for a sync was complete (GIT-70).
+ *
+ * `partial` and `unavailable` do not fail the sync — every thread still syncs
+ * by identity. They mean a duplicate MAY have been created, which the
+ * all_synced gate cannot detect: from the sync's perspective, writing a
+ * duplicate row is a successful write.
+ */
+export type DedupCoverage = "complete" | "partial" | "unavailable";
+
+/** Rows per page when loading dedup candidates. */
+const DEDUP_PAGE_SIZE = 1000;
+
+/** Hard ceiling on the candidate set. Hitting it is reported, never silent. */
+const DEDUP_MAX_ROWS = 10000;
+
 export interface ThreadSyncResult {
   attempted: number;
   synced: string[];
   failed: { id: string; error: string }[];
   skipped: boolean;
   all_synced: boolean;
+  /**
+   * GIT-70: how complete the duplicate check was. Distinct from all_synced,
+   * which reports whether writes landed — not whether they were correct.
+   */
+  dedup_coverage: DedupCoverage;
+  /** Candidate rows actually considered, so the coverage claim is auditable. */
+  dedup_candidates: number;
 }
 
 export interface ActiveThreadsResult {
@@ -560,11 +583,11 @@ export async function syncThreadsToSupabase(
   if (!hasSupabase() || !supabase.isConfigured()) {
     // Not a failure: on free tier Supabase is not the SOT, so there is
     // nothing to sync and nothing to gate on.
-    return { attempted: 0, synced: [], failed: [], skipped: true, all_synced: true };
+    return { attempted: 0, synced: [], failed: [], skipped: true, all_synced: true, dedup_coverage: "complete", dedup_candidates: 0 };
   }
 
   if (threads.length === 0) {
-    return { attempted: 0, synced: [], failed: [], skipped: false, all_synced: true };
+    return { attempted: 0, synced: [], failed: [], skipped: false, all_synced: true, dedup_coverage: "complete", dedup_candidates: 0 };
   }
 
   const synced: string[] = [];
@@ -573,20 +596,49 @@ export async function syncThreadsToSupabase(
   //  Load existing open threads once upfront for text-based dedup.
   // Prevents duplicate creation when closing ceremony generates new thread IDs
   // for threads that already exist with the same (or similar) text.
+  // GIT-70: this was an unordered `limit: 200` single page.
+  //
+  // The window truncated DEDUP COVERAGE, not sync coverage — every thread still
+  // synced via the exact thread_id lookup below. But a text-matching row
+  // outside the loaded 200 meant the map missed it and a DUPLICATE row was
+  // created, silently, with the dedup log never firing. A write that fires
+  // because a read was incomplete.
+  //
+  // Two changes. Pagination, so the candidate set is actually complete
+  // (orchestra_threads is already past 200). And a deterministic total order —
+  // required, not cosmetic: PostgREST Range pagination over an unordered
+  // result set can repeat and skip rows between pages, so without it the
+  // pagination would introduce its own gaps. thread_id is unique, so it is a
+  // total order on its own.
   let existingOpenThreads: { thread_id: string; text: string; status: string }[] = [];
+  let dedupCoverage: DedupCoverage = "complete";
   try {
-    existingOpenThreads = await supabase.directQuery<{ thread_id: string; text: string; status: string }>(
+    existingOpenThreads = await supabase.directQueryAll<{ thread_id: string; text: string; status: string }>(
       getTableName("threads"),
       {
         select: "thread_id,text,status",
         filters: {
           project,
-          status: "not.in.(resolved,archived)",
+          status: `not.in.(${TERMINAL_STATUSES.join(",")})`,
         },
-        limit: 200,
-      }
+        order: "thread_id.asc",
+      },
+      DEDUP_PAGE_SIZE,
+      DEDUP_MAX_ROWS
     );
+
+    // directQueryAll stops at maxRows without saying so. Inheriting that
+    // silence would rebuild the defect one layer up, so the cap is detected
+    // and reported rather than absorbed (R7).
+    if (existingOpenThreads.length >= DEDUP_MAX_ROWS) {
+      dedupCoverage = "partial";
+      console.error(
+        `[thread-supabase] Dedup candidate set hit the ${DEDUP_MAX_ROWS}-row cap — coverage is PARTIAL. ` +
+        `Threads beyond the cap cannot be matched, so a duplicate may be created.`
+      );
+    }
   } catch (err) {
+    dedupCoverage = "unavailable";
     console.error("[thread-supabase] Failed to load existing threads for dedup (proceeding without):", err instanceof Error ? err.message : err);
   }
 
@@ -658,6 +710,8 @@ export async function syncThreadsToSupabase(
     failed,
     skipped: false,
     all_synced: failed.length === 0,
+    dedup_coverage: dedupCoverage,
+    dedup_candidates: existingOpenThreads.length,
   };
 }
 

@@ -13,6 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase, hasProInsights, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
+import { filterToSessionColumns } from "../services/session-columns.js";
 import { clearCurrentSession, resolveCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
@@ -1392,8 +1393,14 @@ export async function sessionClose(
   try {
     // Upsert session WITHOUT embedding (fast path)
     // Embedding + thread detection run fire-and-forget after
+    //
+    // GIT-74/R17: filter to the table's known columns. sessionData is built by
+    // spreading the existing record, which on the Supabase-miss path is the
+    // LOCAL file record — a different shape, carrying rendering fields like
+    // `display`. One unknown key fails the whole upsert (PGRST204) and the
+    // close reports FAILED, which is honest but fatal on a fresh install.
     await Promise.all([
-      supabase.directUpsert(getTableName("sessions"), sessionData),
+      supabase.directUpsert(getTableName("sessions"), filterToSessionColumns(sessionData)),
       blindspotPromise,
     ]);
 

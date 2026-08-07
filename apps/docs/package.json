@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run generate:tools && npm run generate:llms && next build",
+    "build": "npm run generate:tools && npm run generate:changelog && npm run generate:llms && next build",
     "start": "next start",
     "generate:tools": "tsx scripts/generate-tool-docs.ts",
+    "generate:changelog": "tsx scripts/generate-changelog.ts",
     "generate:llms": "tsx scripts/generate-llms-txt.ts"
   },
   "dependencies": {

@@ -38,19 +38,35 @@ function makeFormattableScar(overrides: Partial<FormattableScar> = {}): Formatta
 }
 
 describe("formatCompact: citation protocol", () => {
-  it("includes citation reminder when scars are present", () => {
+  it("emits the shared citation rule when scars are present", () => {
     const scars = [makeFormattableScar()];
     const { payload } = formatCompact(scars, "test plan", 2000);
 
-    expect(payload).toContain("Cite record IDs");
-    expect(payload).toContain("factual claims");
+    // GIT-74/R14: this surface carried the fourth un-unified literal
+    // ("Cite record IDs for any factual claims from these scars."). It now
+    // imports the one constant like the other three, so the assertion moves
+    // off the prose and onto the constant.
+    expect(payload).toContain(CITATION_LINE);
+  });
+
+  it("renders a citable record id for every scar", () => {
+    // GIT-74/R14: instruction and capability travel together. This payload
+    // tells a sub-agent to cite record IDs, so it must carry them.
+    const scars = [
+      makeFormattableScar({ id: "eeeeeeee-1111-2222-3333-444444444444", title: "First" }),
+      makeFormattableScar({ id: "ffffffff-5555-6666-7777-888888888888", title: "Second" }),
+    ];
+    const { payload } = formatCompact(scars, "test plan", 2000);
+
+    expect(payload).toContain("id:eeeeeeee");
+    expect(payload).toContain("id:ffffffff");
   });
 
   it("does not include citation reminder when no scars match", () => {
     const { payload } = formatCompact([], "empty plan", 2000);
 
     // Empty scars = just the header, no citation line
-    expect(payload).not.toContain("Cite record IDs");
+    expect(payload).not.toContain(CITATION_LINE);
   });
 
   it("citation reminder appears after all scar lines", () => {
@@ -346,7 +362,7 @@ describe("prepare_context full: citation protocol", () => {
     expect(result.memory_payload).toContain(CITATION_LINE);
   });
 
-  it("emits the citation rule byte-identical to the other surfaces", async () => {
+  it("emits the citation rule exactly once, as the shared constant", async () => {
     setupPrepareRemote([makePrepareContextScar()]);
 
     const result = await prepareContext({
@@ -361,6 +377,22 @@ describe("prepare_context full: citation protocol", () => {
     const payload = result.memory_payload;
     const occurrences = payload.split(CITATION_LINE).length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it("renders a citable record id for every scar", async () => {
+    // GIT-74/R14: this surface instructed citation while rendering no ids at
+    // all — it commanded the impossible, and the predictable failure mode is
+    // fabricated or absent citations from sub-agents. Ids now travel with the
+    // scars, and this is the test that keeps them there.
+    setupPrepareRemote([
+      makePrepareContextScar({ id: "12345678-1111-2222-3333-444444444444", title: "First" }),
+      makePrepareContextScar({ id: "87654321-5555-6666-7777-888888888888", title: "Second" }),
+    ]);
+
+    const result = await prepareContext({ plan: "citable ids", format: "full" });
+
+    expect(result.memory_payload).toContain("id:12345678");
+    expect(result.memory_payload).toContain("id:87654321");
   });
 
   it("omits CITATION RULE when no scars found (full format)", async () => {
@@ -719,7 +751,7 @@ describe("recall: confidence tiers", () => {
 // Part 5: Cross-cutting provenance guarantees
 // ============================================================
 
-describe("provenance: citation rule is one constant, not three copies", () => {
+describe("provenance: citation rule is one constant across all four surfaces", () => {
   // The predecessors of these two tests asserted a box-drawing separator and a
   // prose prefix ("CITATION RULE: When referencing facts from these"). The
   // separator was retired from the retrieval surfaces by the GIT-74 token audit
@@ -729,40 +761,69 @@ describe("provenance: citation rule is one constant, not three copies", () => {
   //
   // The guarantee that actually matters: one exported constant, emitted whole
   // by every surface. Assert that, and the tests survive the next rewording.
+  //
+  // R12 unified three surfaces; formatCompact kept a fourth literal, so the
+  // drift R12 fixed could silently reopen on the hook path. R14 folded it in,
+  // and these tests now span all four.
 
-  it("all three retrieval surfaces emit the identical citation constant", async () => {
-    setupSearchRemote([makeSearchScar()]);
+  // One id per surface, so each assertion names the exact string that surface
+  // was given rather than guessing at a character class.
+  const SURFACE_ID = {
+    search: "5ea12c00-1111-2222-3333-444444444444",
+    recall: "5eca1100-5555-6666-7777-888888888888",
+    prepare_context: "9cc07e00-9999-aaaa-bbbb-cccccccccccc",
+    formatCompact: "c0m9ac70-dddd-eeee-ffff-000000000000",
+  } as const;
+
+  /** Every surface that emits the citation rule, rendered from one fixture set. */
+  async function allSurfaces(): Promise<Record<keyof typeof SURFACE_ID, string>> {
+    setupSearchRemote([makeSearchScar({ id: SURFACE_ID.search })]);
     const searchDisplay = (await search({ query: "consistency" })).display!;
 
-    setupRecallRemote([makeRecallScar()]);
+    setupRecallRemote([makeRecallScar({ id: SURFACE_ID.recall })]);
     const recallDisplay = (await recall({ plan: "consistency" })).display!;
 
-    setupPrepareRemote([makePrepareContextScar()]);
+    setupPrepareRemote([makePrepareContextScar({ id: SURFACE_ID.prepare_context })]);
     const pcPayload = (await prepareContext({ plan: "consistency", format: "full" }))
       .memory_payload;
 
-    for (const surface of [searchDisplay, recallDisplay, pcPayload]) {
-      expect(surface).toContain(CITATION_LINE);
+    const compactPayload = formatCompact(
+      [makeFormattableScar({ id: SURFACE_ID.formatCompact })],
+      "consistency",
+      2000,
+    ).payload;
+
+    return { search: searchDisplay, recall: recallDisplay, prepare_context: pcPayload, formatCompact: compactPayload };
+  }
+
+  it("all four surfaces emit the identical citation constant", async () => {
+    for (const [name, surface] of Object.entries(await allSurfaces())) {
+      expect(surface, `${name} must emit CITATION_LINE`).toContain(CITATION_LINE);
     }
   });
 
   it("no surface ships a second, drifted copy of the rule", async () => {
     // Catches the original defect class directly: a surface that keeps its own
     // literal alongside the import, or emits the rule twice.
-    setupSearchRemote([makeSearchScar()]);
-    const searchDisplay = (await search({ query: "duplication" })).display!;
-
-    setupRecallRemote([makeRecallScar()]);
-    const recallDisplay = (await recall({ plan: "duplication" })).display!;
-
-    setupPrepareRemote([makePrepareContextScar()]);
-    const pcPayload = (await prepareContext({ plan: "duplication", format: "full" }))
-      .memory_payload;
-
-    for (const surface of [searchDisplay, recallDisplay, pcPayload]) {
-      expect(surface.split(CITATION_LINE).length - 1).toBe(1);
+    for (const [name, surface] of Object.entries(await allSurfaces())) {
+      expect(surface.split(CITATION_LINE).length - 1, `${name} must emit it exactly once`).toBe(1);
       // The retired prose must not reappear anywhere alongside the constant.
       expect(surface).not.toContain("CITATION RULE: When referencing facts");
+      expect(surface).not.toContain("factual claims from these scars");
+    }
+  });
+
+  it("every surface that instructs citation also renders citable ids", async () => {
+    // GIT-74/R14, the invariant behind invariant (b): an instruction ships only
+    // on surfaces that render the capability to obey it. This is the test that
+    // makes a fifth id-less-but-instructing surface structurally impossible.
+    const surfaces = await allSurfaces();
+
+    for (const [name, surface] of Object.entries(surfaces)) {
+      const expectedId = `id:${SURFACE_ID[name as keyof typeof SURFACE_ID].slice(0, 8)}`;
+      expect(surface, `${name} instructs citation, so it must render ${expectedId}`).toContain(
+        expectedId,
+      );
     }
   });
 });

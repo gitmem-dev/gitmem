@@ -6,6 +6,8 @@
  *   - quick-retrieve.ts  (hook-invoked retrieval for auto-inject)
  */
 
+import { CITATION_LINE } from "../services/display-protocol.js";
+
 // --- Types ---
 
 export interface FormattableScar {
@@ -85,7 +87,10 @@ export function formatCompact(
     const emoji = SEVERITY_EMOJI[scar.severity] || "[?]";
     const label = SEVERITY_LABEL[scar.severity] || "UNKNOWN";
     const firstSentence = scar.description.split(/\.\s/)[0].slice(0, 120);
-    const line = `${emoji} ${label}: ${scar.title} \u2014 ${firstSentence}`;
+    // GIT-74/R14: the id travels with the scar. An instruction ships only on
+    // surfaces that render the capability to obey it \u2014 this line asks the
+    // sub-agent to cite record IDs, so the record ID has to be on it. ~3 tokens.
+    const line = `${emoji} ${label}: ${scar.title} \u2014 ${firstSentence}  id:${scar.id.slice(0, 8)}`;
 
     // Check token budget before adding (always include at least one)
     const candidate = [...lines, line].join("\n");
@@ -97,9 +102,12 @@ export function formatCompact(
     included++;
   }
 
-  // Citation reminder for sub-agent context (compact — one line)
+  // Citation reminder for sub-agent context (compact — one line).
+  // GIT-74/R14: this was the fourth un-unified literal. R12 unified recall,
+  // search and prepare_context and left this one behind, so the drift it fixed
+  // could reopen here. One constant, four surfaces.
   if (included > 0) {
-    lines.push("Cite record IDs for any factual claims from these scars.");
+    lines.push(CITATION_LINE);
   }
 
   return { payload: lines.join("\n"), included };

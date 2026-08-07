@@ -117,7 +117,10 @@ Proceed with caution — this may be new territory without documented lessons.`;
 
   for (const scar of scars) {
     const emoji = SEVERITY_EMOJI[scar.severity] || "[?]";
-    lines.push(`${emoji} **${scar.title}** (${scar.severity}, score: ${(scar.similarity || 0).toFixed(2)})`);
+    // GIT-74/R14: the id travels with the scar. This is the sub-agent injection
+    // path, where provenance matters most downstream — absorbed observations
+    // should carry citable ids home. ~3 tokens per record.
+    lines.push(`${emoji} **${scar.title}** (${scar.severity}, score: ${(scar.similarity || 0).toFixed(2)}) id:${scar.id.slice(0, 8)}`);
     lines.push(scar.description);
 
     if (scar.counter_arguments && scar.counter_arguments.length > 0) {

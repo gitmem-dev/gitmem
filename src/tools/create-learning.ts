@@ -132,8 +132,26 @@ export async function createLearning(
   // call in confirm_scars, so its absence degraded scar utility and not merely
   // fidelity — which is how the GIT-74 token audit found it: the compact tier
   // had nothing to render.
-  if (params.applies_when !== undefined) {
-    learningData.applies_when = params.applies_when;
+  // GIT-76/R13b: problem_context and solution_approach had the identical
+  // defect at the identical site — assigned only in the `win` branch, so a
+  // scar or pattern that submitted them had them validated, acknowledged and
+  // discarded. Fixing applies_when alone would have shipped the same bug twice
+  // beside its own fix, so all three are normalized together here.
+  //
+  // The rule this section now encodes: a field the schema accepts is a field
+  // the row stores, for every learning_type. Type-specific blocks below are for
+  // fields that are genuinely type-specific (counter_arguments on scars) or for
+  // per-type defaults — never for deciding whether a universal field survives.
+  const universalOptionalFields = [
+    "applies_when",
+    "problem_context",
+    "solution_approach",
+  ] as const;
+
+  for (const field of universalOptionalFields) {
+    if (params[field] !== undefined) {
+      learningData[field] = params[field];
+    }
   }
 
   // Add type-specific fields
@@ -144,13 +162,23 @@ export async function createLearning(
   }
 
   if (params.learning_type === "win") {
-    learningData.problem_context = params.problem_context || "";
-    learningData.solution_approach = params.solution_approach || "";
+    // Wins have always written these two as "" rather than leaving them absent.
+    // GIT-76's acceptance requires win behaviour unchanged, so the empty-string
+    // floor is preserved here rather than folded into the universal loop.
+    learningData.problem_context ??= "";
+    learningData.solution_approach ??= "";
     learningData.severity = params.severity || "medium";
   }
 
   if (params.learning_type === "pattern") {
     learningData.severity = params.severity || "low";
+  }
+
+  // GIT-76/R13b: anti_pattern had no branch at all, so it fell through with no
+  // severity — the same class of omission, one level up. "medium" matches win's
+  // neutral default; the value is a cheap correction if it should sit higher.
+  if (params.learning_type === "anti_pattern") {
+    learningData.severity = params.severity || "medium";
   }
 
   try {

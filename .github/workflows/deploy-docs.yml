@@ -6,6 +6,9 @@ on:
     paths:
       - 'apps/docs/**'
       - 'src/tools/definitions.ts'
+      # The docs changelog is generated from the root CHANGELOG.md at build time,
+      # so a release that only touches the changelog must still redeploy the docs.
+      - 'CHANGELOG.md'
   workflow_dispatch:
 
 jobs:

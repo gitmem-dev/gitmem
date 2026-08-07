@@ -217,23 +217,36 @@ beforeEach(() => {
 });
 
 describe("search: citation protocol", () => {
-  it("display includes CITATION RULE when results found (remote)", async () => {
+  it("emits the shared citation rule when results found (remote)", async () => {
     setupSearchRemote([makeSearchScar()]);
 
     const result = await search({ query: "EPS strategy" });
 
+    // Invariant, not prose: whatever CITATION_LINE says, search emits it.
     expect(result.display).toContain(CITATION_LINE);
-    expect(result.display).toContain("cite the record ID");
-    expect(result.display).toContain("not in institutional memory");
   });
 
-  it("display includes CITATION RULE when results found (free tier)", async () => {
+  it("emits the shared citation rule when results found (free tier)", async () => {
     setupSearchFreeTier([makeSearchScar()]);
 
     const result = await search({ query: "test query" });
 
     expect(result.display).toContain(CITATION_LINE);
-    expect(result.display).toContain("cite the record ID");
+  });
+
+  it("renders a citable record id for every result", async () => {
+    // The citation rule is only honourable if the ids it asks for are on the
+    // page. Assert the rendered id-form, not the worked example that used to
+    // sit inside the rule text.
+    setupSearchRemote([
+      makeSearchScar({ id: "aaaaaaaa-1111-2222-3333-444444444444", title: "First" }),
+      makeSearchScar({ id: "bbbbbbbb-5555-6666-7777-888888888888", title: "Second" }),
+    ]);
+
+    const result = await search({ query: "citable ids" });
+
+    expect(result.display).toContain("id:aaaaaaaa");
+    expect(result.display).toContain("id:bbbbbbbb");
   });
 
   it("display omits CITATION RULE when no results", async () => {
@@ -329,12 +342,11 @@ describe("prepare_context full: citation protocol", () => {
       format: "full",
     });
 
+    // Invariant, not prose: the payload carries the shared constant verbatim.
     expect(result.memory_payload).toContain(CITATION_LINE);
-    expect(result.memory_payload).toContain("cite the record ID");
-    expect(result.memory_payload).toContain("not in institutional memory");
   });
 
-  it("includes example with record ID format in full output", async () => {
+  it("emits the citation rule byte-identical to the other surfaces", async () => {
     setupPrepareRemote([makePrepareContextScar()]);
 
     const result = await prepareContext({
@@ -342,9 +354,13 @@ describe("prepare_context full: citation protocol", () => {
       format: "full",
     });
 
-    // The example shows how to properly cite: [id:48ebca14]
-    expect(result.memory_payload).toContain("[id:48ebca14]");
-    expect(result.memory_payload).toContain("not paraphrased numbers");
+    // prepare_context is the sub-agent injection path, so it pushes the rule
+    // without ANSI dimming while recall/search dim it. The *text* must still be
+    // the one constant — this is the assertion that would have caught the
+    // original three-way drift, which the old shared-prefix check did not.
+    const payload = result.memory_payload;
+    const occurrences = payload.split(CITATION_LINE).length - 1;
+    expect(occurrences).toBe(1);
   });
 
   it("omits CITATION RULE when no scars found (full format)", async () => {
@@ -459,6 +475,7 @@ function makeRecallScar(overrides: Record<string, unknown> = {}) {
     severity: overrides.severity ?? "medium",
     counter_arguments: overrides.counter_arguments ?? [],
     applies_when: overrides.applies_when ?? [],
+    why_this_matters: overrides.why_this_matters ?? undefined,
     similarity: overrides.similarity ?? 0.7,
     source_linear_issue: overrides.source_linear_issue ?? null,
     learning_type: overrides.learning_type ?? "scar",
@@ -471,18 +488,23 @@ describe("recall: citation protocol", () => {
 
     const result = await recall({ plan: "deploy edge function" });
 
+    // Invariant, not prose: whatever CITATION_LINE says, recall emits it.
     expect(result.display).toContain(CITATION_LINE);
-    expect(result.display).toContain("cite the record ID");
-    expect(result.display).toContain("not in institutional memory");
   });
 
-  it("display includes example with [id:] format", async () => {
-    setupRecallRemote([makeRecallScar()]);
+  it("renders a citable record id for every scar", async () => {
+    // Replaces the assertion on the retired worked example ("[id:48ebca14]").
+    // What actually has to hold is that each surfaced scar carries the id an
+    // agent is being told to cite, in the documented 8-char id: form.
+    setupRecallRemote([
+      makeRecallScar({ id: "cccccccc-1111-2222-3333-444444444444", title: "First" }),
+      makeRecallScar({ id: "dddddddd-5555-6666-7777-888888888888", title: "Second" }),
+    ]);
 
     const result = await recall({ plan: "check metrics" });
 
-    expect(result.display).toContain("[id:48ebca14]");
-    expect(result.display).toContain("not paraphrased numbers");
+    expect(result.display).toContain("id:cccccccc");
+    expect(result.display).toContain("id:dddddddd");
   });
 
   it("display includes CITATION RULE (free tier)", async () => {
@@ -569,24 +591,84 @@ describe("recall: confidence tiers", () => {
     expect(display).not.toContain("You might think");
   });
 
-  it("renders the full body for >=0.55 scars (description + counter_arguments present)", async () => {
+  // GIT-74/R11 replaced the flat "stub below 0.55, full body at or above it"
+  // split with four bands. The old assertion (full description at 0.7) now
+  // encodes a rule that no longer exists, so it is replaced by the band table
+  // itself, read off LOW_CONFIDENCE_THRESHOLD / EXTENDED_THRESHOLD rather than
+  // restated as literals.
+  //
+  //   stub      < 0.55                  header only
+  //   compact   0.55 – 0.75             + why_this_matters / applies_when
+  //   extended  >= 0.75 OR the top hit  + first counter-argument
+  //   full      blocking verification   + description
+  //
+  // NOTE: the top hit is escalated to extended regardless of score, so a
+  // single-scar fixture can never exercise the compact band. Each band test
+  // below therefore pins a decoy top hit above the scar under test.
+  it("compact band (0.55–0.75, not top hit): lesson fields render, counter-arguments do not", async () => {
     setupRecallRemote([
+      makeRecallScar({ id: "top-hit-decoy", title: "Decoy top hit", similarity: 0.9 }),
       makeRecallScar({
-        id: "strong-full",
-        title: "Strong full scar",
+        id: "compact-band",
+        title: "Compact band scar",
         similarity: 0.7,
-        description: "UNIQUE_FULL_BODY_should_render_for_high_confidence",
-        counter_arguments: ["UNIQUE_FULL_COUNTERARG_should_render"],
+        description: "UNIQUE_COMPACT_DESCRIPTION_must_not_render",
+        why_this_matters: "UNIQUE_COMPACT_WHY_must_render",
+        applies_when: ["UNIQUE_COMPACT_APPLIES_must_render"],
+        counter_arguments: ["UNIQUE_COMPACT_COUNTERARG_must_not_render"],
       }),
     ]);
 
-    const result = await recall({ plan: "full render test" });
-    const display = result.display!;
+    const display = (await recall({ plan: "compact band test" })).display!;
 
-    expect(display).toContain("UNIQUE_FULL_BODY_should_render_for_high_confidence");
-    expect(display).toContain("You might think");
-    expect(display).toContain("UNIQUE_FULL_COUNTERARG_should_render");
+    expect(display).toContain("Compact band scar");
+    expect(display).toContain("UNIQUE_COMPACT_WHY_must_render");
+    expect(display).toContain("UNIQUE_COMPACT_APPLIES_must_render");
+    // The heavy fields belong to deeper bands only.
+    expect(display).not.toContain("UNIQUE_COMPACT_DESCRIPTION_must_not_render");
+    expect(display).not.toContain("UNIQUE_COMPACT_COUNTERARG_must_not_render");
     expect(display).not.toContain("[low confidence]");
+  });
+
+  it("extended band (>=0.75): adds the first counter-argument", async () => {
+    setupRecallRemote([
+      makeRecallScar({ id: "top-hit-decoy", title: "Decoy top hit", similarity: 0.95 }),
+      makeRecallScar({
+        id: "extended-band",
+        title: "Extended band scar",
+        similarity: 0.8,
+        why_this_matters: "UNIQUE_EXTENDED_WHY_must_render",
+        counter_arguments: [
+          "UNIQUE_EXTENDED_COUNTERARG_first_must_render",
+          "UNIQUE_EXTENDED_COUNTERARG_second_must_not_render",
+        ],
+      }),
+    ]);
+
+    const display = (await recall({ plan: "extended band test" })).display!;
+
+    expect(display).toContain("UNIQUE_EXTENDED_WHY_must_render");
+    expect(display).toContain("You might think");
+    expect(display).toContain("UNIQUE_EXTENDED_COUNTERARG_first_must_render");
+    // "first counter-argument", singular — the band is capped, not unbounded.
+    expect(display).not.toContain("UNIQUE_EXTENDED_COUNTERARG_second_must_not_render");
+  });
+
+  it("the top hit is escalated to extended even below the extended threshold", async () => {
+    // This is the rule that makes single-scar fixtures misleading, so it gets
+    // its own test rather than living as an implicit assumption.
+    setupRecallRemote([
+      makeRecallScar({
+        id: "sole-top-hit",
+        title: "Sole top hit",
+        similarity: 0.6, // compact band by score alone
+        counter_arguments: ["UNIQUE_TOPHIT_COUNTERARG_must_render"],
+      }),
+    ]);
+
+    const display = (await recall({ plan: "top hit escalation test" })).display!;
+
+    expect(display).toContain("UNIQUE_TOPHIT_COUNTERARG_must_render");
   });
 
   it("never stubs blocking-verification scars, even below threshold", async () => {
@@ -637,44 +719,50 @@ describe("recall: confidence tiers", () => {
 // Part 5: Cross-cutting provenance guarantees
 // ============================================================
 
-describe("provenance: separator consistency", () => {
-  it("citation protocol uses consistent separator across all full-format paths", async () => {
-    const SEPARATOR = "───────────────────────────────────────────────────";
+describe("provenance: citation rule is one constant, not three copies", () => {
+  // The predecessors of these two tests asserted a box-drawing separator and a
+  // prose prefix ("CITATION RULE: When referencing facts from these"). The
+  // separator was retired from the retrieval surfaces by the GIT-74 token audit
+  // and the prose was compacted, so both tests were asserting chrome rather
+  // than the guarantee. Worse, the prefix check passed while the three literals
+  // had already drifted — a shared prefix is not shared text.
+  //
+  // The guarantee that actually matters: one exported constant, emitted whole
+  // by every surface. Assert that, and the tests survive the next rewording.
 
-    // Search
+  it("all three retrieval surfaces emit the identical citation constant", async () => {
     setupSearchRemote([makeSearchScar()]);
-    const searchResult = await search({ query: "separator test" });
-    expect(searchResult.display).toContain(SEPARATOR);
+    const searchDisplay = (await search({ query: "consistency" })).display!;
 
-    // Recall
     setupRecallRemote([makeRecallScar()]);
-    const recallResult = await recall({ plan: "separator test" });
-    expect(recallResult.display).toContain(SEPARATOR);
+    const recallDisplay = (await recall({ plan: "consistency" })).display!;
 
-    // Prepare context full
     setupPrepareRemote([makePrepareContextScar()]);
-    const pcResult = await prepareContext({ plan: "separator test", format: "full" });
-    expect(pcResult.memory_payload).toContain(SEPARATOR);
+    const pcPayload = (await prepareContext({ plan: "consistency", format: "full" }))
+      .memory_payload;
+
+    for (const surface of [searchDisplay, recallDisplay, pcPayload]) {
+      expect(surface).toContain(CITATION_LINE);
+    }
   });
-});
 
-describe("provenance: citation text consistency", () => {
-  it("all paths use the same citation rule text", async () => {
-    const CITATION_TEXT = "CITATION RULE: When referencing facts from these";
-
-    // Search
+  it("no surface ships a second, drifted copy of the rule", async () => {
+    // Catches the original defect class directly: a surface that keeps its own
+    // literal alongside the import, or emits the rule twice.
     setupSearchRemote([makeSearchScar()]);
-    const searchResult = await search({ query: "consistency" });
-    expect(searchResult.display).toContain(CITATION_TEXT);
+    const searchDisplay = (await search({ query: "duplication" })).display!;
 
-    // Recall
     setupRecallRemote([makeRecallScar()]);
-    const recallResult = await recall({ plan: "consistency" });
-    expect(recallResult.display).toContain(CITATION_TEXT);
+    const recallDisplay = (await recall({ plan: "duplication" })).display!;
 
-    // Prepare context full
     setupPrepareRemote([makePrepareContextScar()]);
-    const pcResult = await prepareContext({ plan: "consistency", format: "full" });
-    expect(pcResult.memory_payload).toContain(CITATION_TEXT);
+    const pcPayload = (await prepareContext({ plan: "duplication", format: "full" }))
+      .memory_payload;
+
+    for (const surface of [searchDisplay, recallDisplay, pcPayload]) {
+      expect(surface.split(CITATION_LINE).length - 1).toBe(1);
+      // The retired prose must not reappear anywhere alongside the constant.
+      expect(surface).not.toContain("CITATION RULE: When referencing facts");
+    }
   });
 });

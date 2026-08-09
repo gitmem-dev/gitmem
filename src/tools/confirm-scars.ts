@@ -21,6 +21,7 @@ import {
   getSurfacedScars,
   addConfirmations,
   getConfirmations,
+  getRecallFailure,
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getSessionPath } from "../services/gitmem-dir.js";
@@ -185,6 +186,39 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
 
   if (recallScars.length === 0) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
+
+    // GIT-93: an empty scar set has two causes and they are not interchangeable.
+    // Retrieval ran and matched nothing — safe to proceed. Or retrieval never
+    // reached the store, in which case nothing has been checked and "proceed
+    // freely" is an assurance nobody earned. This used to answer both the same
+    // way, which is how a retrieval path that 404'd on every call since it was
+    // written went unnoticed: the system reported success for a failure.
+    const failure = getRecallFailure();
+    if (failure) {
+      const failedMsg = [
+        `${STATUS.rejected} Cannot confirm — institutional memory was not reached.`,
+        "",
+        `recall() failed at ${failure.at}: ${failure.message}`,
+        "",
+        "This is NOT the same as no relevant scars. Nothing was checked, so any",
+        "warning that applies to this work is still unseen. Treat it as memory",
+        "being unavailable, not as a clean bill of health.",
+        "",
+        "Retry recall(). If it keeps failing, say so rather than proceeding as",
+        "though the check had passed.",
+      ].join("\n");
+
+      return {
+        valid: false,
+        errors: [`recall() failed — institutional memory unavailable: ${failure.message}`],
+        confirmations: [],
+        missing_scars: [],
+        formatted_response: failedMsg,
+        display: wrapDisplay(failedMsg),
+        performance,
+      };
+    }
+
     const noScarsMsg = `${STATUS.ok} No recall-surfaced scars to confirm. Proceed freely.`;
     return {
       valid: true,

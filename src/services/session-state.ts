@@ -38,6 +38,18 @@ interface SessionContext {
    * conflict rather than on agreement.
    */
   recoveryConflict?: boolean;
+  /**
+   * GIT-93: set when a recall() attempt failed to reach the store, cleared when
+   * one succeeds.
+   *
+   * "No scars surfaced" has two causes that used to be indistinguishable:
+   * retrieval ran and found nothing relevant, or retrieval never ran. Only the
+   * first is safe to proceed on. Without this, confirm_scars answered both with
+   * "Proceed freely" — a green result for a broken store, which is how a
+   * retrieval path that had never worked survived indefinitely (the *_scar_search
+   * RPC 404'd on every call since it was written and nothing downstream said so).
+   */
+  recallFailure?: { message: string; at: string } | null;
 }
 
 // Global session state (single active session per MCP server instance)
@@ -165,6 +177,13 @@ function recoverSessionFromDisk(): SessionContext | null {
       currentSession.recallCalled = true;
     }
 
+    // GIT-93: restore an unresolved retrieval failure too. A restart must not
+    // launder a broken store into a clean slate — otherwise the very event this
+    // session state exists to survive becomes a way to lose the warning.
+    if (currentSession && data.recall_failure) {
+      currentSession.recallFailure = data.recall_failure;
+    }
+
     console.error(
       `[session-state] Recovered session ${data.session_id.slice(0, 8)} from disk after MCP restart ` +
       `(${currentSession?.surfacedScars.length ?? 0} surfaced scars)`
@@ -263,6 +282,69 @@ export function setRecallCalled(): void {
     // Non-fatal: the flag still holds for this process.
     console.warn("[session-state] Failed to persist recall_called:", error);
   }
+}
+
+/**
+ * GIT-93: record that a recall() attempt could not reach the store.
+ *
+ * Persisted alongside recall_called so it survives an MCP restart, for the same
+ * reason: the failure outlives the process that observed it, and a restart must
+ * not turn a broken store into an apparently clean one.
+ */
+export function setRecallFailure(message: string): void {
+  const session = resolveCurrentSession();
+  if (!session) return;
+
+  const failure = { message, at: new Date().toISOString() };
+  session.recallFailure = failure;
+  console.error(`[session-state] recall() failure recorded: ${message.slice(0, 120)}`);
+
+  try {
+    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return;
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    data.recall_failure = failure;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    // Non-fatal: the flag still holds for this process.
+    console.warn("[session-state] Failed to persist recall_failure:", error);
+  }
+}
+
+/**
+ * GIT-93: clear the failure marker after a recall() that reached the store.
+ *
+ * Cleared on success rather than on attempt, and regardless of how many scars
+ * came back: a successful search returning nothing is a real answer, while a
+ * failed one is not an answer at all. Only the former should let confirm_scars
+ * say "proceed".
+ */
+export function clearRecallFailure(): void {
+  const session = resolveCurrentSession();
+  if (!session || !session.recallFailure) return;
+
+  session.recallFailure = null;
+
+  try {
+    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return;
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    if (!data.recall_failure) return; // nothing recorded — no write
+    delete data.recall_failure;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.warn("[session-state] Failed to clear recall_failure:", error);
+  }
+}
+
+/**
+ * GIT-93: the unresolved retrieval failure for this session, if any.
+ *
+ * Returns null when retrieval last succeeded — which is the only state in which
+ * an empty scar set means "nothing relevant" rather than "nothing was asked".
+ */
+export function getRecallFailure(): { message: string; at: string } | null {
+  return resolveCurrentSession()?.recallFailure ?? null;
 }
 
 /**

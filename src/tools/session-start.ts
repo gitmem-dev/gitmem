@@ -37,7 +37,7 @@ import { resolveThreadScope, computePanelOmission, formatOmissionLine } from "..
 import type { ThreadScopeCounts } from "../services/thread-scope.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
-import { registerSession, findSessionByHostPid, adoptSessionForCurrentProcess, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
+import { registerSession, findSessionByHostPid, findResumableSessionOnDisk, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import { productLine, dimText, boldText } from "../services/display-protocol.js";
@@ -711,11 +711,12 @@ function checkExistingSession(
     // GIT-20: Prune stale sessions from crashed/dead containers
     pruneStale();
 
-    // GIT-20: Check registry for THIS process's session (hostname + PID match).
-    // GIT-51: if the server restarted, the PID no longer matches — adopt the
-    // session this process left behind rather than starting a second one.
+    // GIT-89: resolve this process's session from the per-session directories.
+    // The registry check stays as a fast path, but a miss there is no longer an
+    // answer — a lost or diverged registry used to make an intact session on
+    // disk invisible, so session_start would open a second session alongside it.
     const mySession =
-      findSessionByHostPid(os.hostname(), process.pid) ?? adoptSessionForCurrentProcess();
+      findSessionByHostPid(os.hostname(), process.pid) ?? findResumableSessionOnDisk();
     if (mySession) {
       console.error(`[session_start] Found own session in registry: ${mySession.session_id} (host: ${mySession.hostname}, pid: ${mySession.pid})`);
       const data = readSessionFile(mySession.session_id);
@@ -759,8 +760,12 @@ function writeSessionFiles(
 
   // Preserve original started_at on resume/refresh to keep duration accurate
   let effectiveStartedAt = startedAt?.toISOString() || new Date().toISOString();
+  // GIT-89: recall_called is preserved for the same reason. This write replaces
+  // session.json wholesale, so a refresh would otherwise clear the flag and
+  // enforcement would warn that recall never ran in a session where it had.
+  let effectiveRecallCalled = false;
   if (isRefresh || startedAt) {
-    // On refresh or resume, try to read the existing started_at from the session file
+    // On refresh or resume, try to read the existing state from the session file
     try {
       const existingPath = getSessionPath(sessionId, "session.json");
       if (fs.existsSync(existingPath)) {
@@ -768,8 +773,9 @@ function writeSessionFiles(
         if (existing.started_at) {
           effectiveStartedAt = existing.started_at;
         }
+        effectiveRecallCalled = existing.recall_called === true;
       }
-    } catch { /* use calculated value */ }
+    } catch { /* use calculated values */ }
   }
 
   const data = {
@@ -781,6 +787,7 @@ function writeSessionFiles(
     pid: process.pid,
     gitmem_dir: gitmemDir,
     surfaced_scars: surfacedScars,
+    recall_called: effectiveRecallCalled,
     threads,
     ...(recordingPath && { recording_path: recordingPath }),
     ...(isRefresh && { last_refreshed: new Date().toISOString() }),

@@ -16,7 +16,7 @@ import * as path from "path";
 import * as os from "os";
 import { getGitmemDir, getSessionPath, sanitizePathComponent } from "./gitmem-dir.js";
 import { ActiveSessionsRegistrySchema } from "../schemas/active-sessions.js";
-import type { ActiveSessionEntry, ActiveSessionsRegistry } from "../types/index.js";
+import type { ActiveSessionEntry, ActiveSessionsRegistry, AgentIdentity } from "../types/index.js";
 import { withLockSync } from "./file-lock.js";
 
 const REGISTRY_FILENAME = "active-sessions.json";
@@ -61,15 +61,27 @@ function getRegistryPath(): string {
  * own CLI process (scar 55d1bccd) — so "I already failed to recover" is only
  * valid until someone else touches the file.
  *
- * Returns null when the registry does not exist, which is itself a stable
- * state worth caching against.
+ * Returns null when neither the registry nor the sessions directory exists,
+ * which is itself a stable state worth caching against.
+ *
+ * GIT-89: covers the sessions directory as well as the registry. Identity now
+ * resolves from sessions/<id>/session.json, so a fingerprint that watched only
+ * active-sessions.json would keep the "already failed" latch closed over a
+ * session that had since appeared on disk — reintroducing the permanent
+ * fail-closed behaviour the fingerprint was introduced to prevent.
  */
 export function getRegistryFingerprint(): number | null {
-  try {
-    return fs.statSync(getRegistryPath()).mtimeMs;
-  } catch {
-    return null;
+  const mtimes: number[] = [];
+  for (const target of [getRegistryPath(), path.join(getGitmemDir(), "sessions")]) {
+    try {
+      mtimes.push(fs.statSync(target).mtimeMs);
+    } catch {
+      // Missing target contributes nothing — absence is part of the fingerprint.
+    }
   }
+  if (mtimes.length === 0) return null;
+  // Sum, not concat: this only needs to change when either input changes.
+  return mtimes.reduce((a, b) => a + b, 0);
 }
 
 function getLockPath(): string {
@@ -213,62 +225,177 @@ function isPidAlive(pid: number): boolean {
 }
 
 /**
- * GIT-51: Adopt a session left behind by a previous incarnation of this MCP
- * server process, rebinding it to the current PID.
+ * GIT-89: Resolve this process's session from the per-session directories.
  *
- * The MCP server restarts routinely mid-session (context compaction, rebuild,
- * client restart). The hostname stays the same but the PID changes, so
- * findSessionByHostPid() no longer matches and the session looks gone. A
- * registry entry on this host whose PID is dead, with its session file still on
- * disk, is that session.
+ * This replaces registry-gated recovery (GIT-51's adoptSessionForCurrentProcess).
+ * That approach iterated `registry.sessions`, so an empty or diverged registry
+ * meant "no session" no matter what was on disk — and the registry is precisely
+ * the store that gets lost. Observed in the wild: active-sessions.json holding
+ * `{"sessions": []}` with intact sessions/<id>/session.json files beside it.
  *
- * Deliberately narrow:
- * - Adopts at most ONE entry. Rebinding every dead-PID entry would leave
- *   multiple rows sharing hostname+pid, which findSessionByHostPid() then
- *   resolves arbitrarily by array order.
- * - Never adopts a session whose PID is still alive (GIT-20: "never resume
- *   another process's session").
- * - Not gated on session age beyond the 24h stale horizon. The old 2h adoption
- *   window was shorter than a normal working session, so the sessions most in
- *   need of recovery were the ones excluded from it.
+ * `.gitmem/sessions/<id>/session.json` is the durable evidence. session_close
+ * deletes the directory (session-close.ts cleanupSessionFiles), so a directory
+ * that still exists is a session that was never closed. The registry is derived
+ * from this scan and repaired by it — it is an index, never an answer.
  *
- * Returns the adopted entry (with the updated PID), or null if there is nothing
- * to adopt.
+ * PID is no longer an identity key, only a disambiguator among candidates:
+ * - own PID          -> this process's session, no adoption needed
+ * - dead PID         -> orphaned by an MCP restart, adoptable
+ * - live foreign PID -> another concurrent server owns it, never touched
+ *   (GIT-20: "never resume another process's session"; keeps GIT-19..23
+ *   multi-session resolution intact)
+ *
+ * Returns the resolved entry (PID rebound to this process), or null when there
+ * is genuinely nothing to resume. Never invents a session.
  */
-export function adoptSessionForCurrentProcess(): ActiveSessionEntry | null {
+const AGENT_IDENTITIES = ["cli", "desktop", "autonomous", "local", "cloud"] as const;
+
+/**
+ * Coerce a session.json `agent` field to AgentIdentity.
+ *
+ * Case-insensitive because session files in the field carry values like "CLI"
+ * that never matched the lowercase union. Anything unrecognised becomes
+ * "Unknown" rather than being asserted through — a wrong agent label is a
+ * display problem, an invalid one is a type lie.
+ */
+function toAgentIdentity(value: unknown): AgentIdentity {
+  if (typeof value !== "string") return "Unknown";
+  const normalized = value.toLowerCase();
+  return AGENT_IDENTITIES.find((id) => id === normalized) ?? "Unknown";
+}
+
+export function findResumableSessionOnDisk(): ActiveSessionEntry | null {
   const currentHostname = os.hostname();
   const currentPid = process.pid;
   const gitmemDir = getGitmemDir();
+  const sessionsDir = path.join(gitmemDir, "sessions");
 
-  return withLockSync(getLockPath(), () => {
-    const registry = readRegistry();
-    const now = Date.now();
+  let dirNames: string[];
+  try {
+    if (!fs.existsSync(sessionsDir)) return null;
+    dirNames = fs.readdirSync(sessionsDir);
+  } catch (error) {
+    console.warn("[active-sessions] Failed to scan sessions directory:", error);
+    return null;
+  }
 
-    const candidates = registry.sessions
-      .filter((entry) => {
-        if (entry.hostname !== currentHostname) return false;
-        if (isPidAlive(entry.pid)) return false;
+  const now = Date.now();
+  const candidates: { entry: ActiveSessionEntry; pidAlive: boolean }[] = [];
 
-        const age = now - new Date(entry.started_at).getTime();
-        if (!Number.isFinite(age) || age > STALE_THRESHOLD_MS) return false;
+  for (const dirName of dirNames) {
+    const sessionFile = path.join(sessionsDir, dirName, "session.json");
+    let data: Record<string, unknown>;
+    try {
+      if (!fs.existsSync(sessionFile)) continue;
+      data = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+    } catch {
+      continue; // unreadable or corrupt session file — not resumable
+    }
 
-        // The session file is the evidence that the session is real and resumable.
-        const sessionFile = path.join(gitmemDir, "sessions", entry.session_id, "session.json");
-        return fs.existsSync(sessionFile);
-      })
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    // The directory name IS the session id (getSessionDir). A mismatch means the
+    // file was hand-edited or copied; refuse rather than resolve to the wrong id.
+    if (typeof data.session_id !== "string" || data.session_id !== dirName) continue;
 
-    const adopted = candidates[0];
-    if (!adopted) return null;
+    // Sessions are host-local. A session file synced from another machine
+    // (shared checkout, backup restore) is not ours to resume.
+    if (typeof data.hostname === "string" && data.hostname !== currentHostname) continue;
 
-    console.error(
-      `[active-sessions] Adopting orphaned session ${adopted.session_id.slice(0, 8)} (dead pid ${adopted.pid} → ${currentPid})`
-    );
-    adopted.pid = currentPid;
-    writeRegistry(registry);
+    const startedAt = typeof data.started_at === "string" ? data.started_at : "";
+    const age = now - new Date(startedAt).getTime();
+    if (!Number.isFinite(age) || age > STALE_THRESHOLD_MS) continue;
 
-    return { ...adopted };
-  });
+    const pid = typeof data.pid === "number" ? data.pid : -1;
+    candidates.push({
+      entry: {
+        session_id: data.session_id,
+        agent: toAgentIdentity(data.agent),
+        started_at: startedAt,
+        hostname: currentHostname,
+        pid,
+        project: typeof data.project === "string" ? data.project : "default",
+      },
+      pidAlive: pid > 0 && pid !== currentPid && isPidAlive(pid),
+    });
+  }
+
+  const newestFirst = (
+    a: { entry: ActiveSessionEntry },
+    b: { entry: ActiveSessionEntry }
+  ) => new Date(b.entry.started_at).getTime() - new Date(a.entry.started_at).getTime();
+
+  // 1. Our own PID — nothing to adopt, just rebuild in-memory state.
+  const mine = candidates.filter((c) => c.entry.pid === currentPid).sort(newestFirst)[0];
+  if (mine) {
+    reconcileRegistryEntry(mine.entry);
+    return { ...mine.entry };
+  }
+
+  // 2. Orphaned by a restart. Adopt at most one — rebinding every dead-PID
+  //    session would leave several rows sharing hostname+pid.
+  const orphaned = candidates.filter((c) => !c.pidAlive).sort(newestFirst)[0];
+  if (!orphaned) return null;
+
+  const rebound: ActiveSessionEntry = { ...orphaned.entry, pid: currentPid };
+  console.error(
+    `[active-sessions] Resuming session ${rebound.session_id.slice(0, 8)} from disk ` +
+    `(dead pid ${orphaned.entry.pid} → ${currentPid})`
+  );
+
+  persistSessionPid(rebound.session_id, currentPid);
+  reconcileRegistryEntry(rebound);
+  return rebound;
+}
+
+/**
+ * GIT-89: Write the resolved PID back into session.json so the next scan takes
+ * the own-PID fast path instead of re-adopting.
+ *
+ * Read-modify-write of only the pid field: session.json accumulates state from
+ * several writers (surfaced_scars from recall, threads from session_start), and
+ * rewriting the whole object from an ActiveSessionEntry would drop all of it.
+ */
+function persistSessionPid(sessionId: string, pid: number): void {
+  try {
+    const sessionFile = path.join(getGitmemDir(), "sessions", sessionId, "session.json");
+    const data = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+    data.pid = pid;
+    atomicWriteFileSync(sessionFile, JSON.stringify(data, null, 2));
+  } catch (error) {
+    // Non-fatal: identity is resolved either way, the next scan just re-adopts.
+    console.warn(`[active-sessions] Failed to persist pid for ${sessionId.slice(0, 8)}:`, error);
+  }
+}
+
+/**
+ * GIT-89: Repair the registry from a disk-resolved session.
+ *
+ * The registry is now derived state. When the scan finds a session the registry
+ * has lost or mis-keyed, this puts it back so registry consumers
+ * (findSessionByHostPid, list-sessions diagnostics) agree with disk again.
+ */
+function reconcileRegistryEntry(entry: ActiveSessionEntry): void {
+  try {
+    withLockSync(getLockPath(), () => {
+      const registry = readRegistry();
+      const existing = registry.sessions.find((s) => s.session_id === entry.session_id);
+      if (existing && existing.pid === entry.pid && existing.hostname === entry.hostname) {
+        return; // already agrees — no write
+      }
+      registry.sessions = registry.sessions.filter(
+        (s) =>
+          s.session_id !== entry.session_id &&
+          !(s.hostname === entry.hostname && s.pid === entry.pid)
+      );
+      registry.sessions.push(entry);
+      writeRegistry(registry);
+      console.error(
+        `[active-sessions] Registry reconciled from disk for ${entry.session_id.slice(0, 8)}`
+      );
+    });
+  } catch (error) {
+    // Non-fatal: the registry is an index, not the answer.
+    console.warn("[active-sessions] Failed to reconcile registry from disk:", error);
+  }
 }
 
 /**

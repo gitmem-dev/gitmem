@@ -55,6 +55,24 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    # A tag now BUILDS but does not publish. This environment requires a named
+    # reviewer to approve the deployment in the GitHub UI before npm publish
+    # runs, so the release hold exists mechanically rather than by convention.
+    #
+    # Why: the hold on releasing was an instruction, and an instruction-only
+    # hold on an irreversible action has no failure signal — nothing physically
+    # prevents the action, so nothing reports when it happens without the
+    # approval. That is the same shape as scar b6fa8f3c (a gate triggered only
+    # by human intent has no failure signal between uses), applied to release
+    # authority instead of to a test harness.
+    #
+    # SETUP REQUIRED before this has any effect — create the environment in
+    # GitHub and add the required reviewer:
+    #   Settings -> Environments -> New environment -> "npm-production"
+    #   -> Deployment protection rules -> Required reviewers -> add Chris
+    # Until that environment exists with a reviewer, this line names an
+    # unprotected environment and publish proceeds as before.
+    environment: npm-production
     permissions:
       contents: read
       packages: write

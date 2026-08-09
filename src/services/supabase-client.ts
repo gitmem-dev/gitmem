@@ -190,7 +190,7 @@ export async function upsertRecord<T = unknown>(
 /**
  * Semantic search across tables
  *
- * Generates an embedding for the query, then calls the gitmem_semantic_search
+ * Generates an embedding for the query, then calls the match_<table>
  * RPC function directly via PostgREST.
  */
 export async function semanticSearch<T = unknown>(
@@ -211,8 +211,11 @@ export async function semanticSearch<T = unknown>(
     return [];
   }
 
-  // Call the RPC function directly via PostgREST
-  const rpcName = `${getTableName("").replace(/_$/, "")}_semantic_search`;
+  // GIT-93: same defect as scarSearch below — this built `${prefix}_semantic_search`,
+  // which exists under no prefix. The deployed function is match_<table>, and it
+  // takes similarity_threshold (unlike the _weighted variant), which is what the
+  // body already sends.
+  const rpcName = `match_${getTableName("learnings")}`;
   const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
 
   const response = await fetch(url, {
@@ -579,7 +582,7 @@ export async function loadScarsWithEmbeddings<T = unknown>(
 /**
  * Scar search with severity weighting
  *
- * Generates an embedding for the query, then calls the gitmem_scar_search
+ * Generates an embedding for the query, then calls the match_<table>_weighted
  * RPC function directly via PostgREST. No Edge Function required.
  */
 export async function scarSearch<T = unknown>(
@@ -600,8 +603,20 @@ export async function scarSearch<T = unknown>(
     return [];
   }
 
-  // Call the RPC function directly via PostgREST
-  const rpcName = `${getTableName("").replace(/_$/, "")}_scar_search`;
+  // GIT-93: the RPC is named after the TABLE it searches, not after the prefix
+  // with a verb appended. This built `${prefix}_scar_search` — "orchestra_scar_search"
+  // under GITMEM_TABLE_PREFIX=orchestra_, and "gitmem_scar_search" by default.
+  // Neither exists: PostgREST exposes match_orchestra_learnings_weighted, and a
+  // survey of the deployed functions found no *_scar_search under any prefix. So
+  // this fallback returned PGRST202 on every call, on every deployment, since it
+  // was written — invisible because it is only reached while the local vector
+  // index is cold.
+  //
+  // _weighted is the right one of the pair: this function is documented as scar
+  // search WITH SEVERITY WEIGHTING, and it is the variant that returns
+  // decay_multiplier, which recall consumes. Note it takes match_threshold, not
+  // similarity_threshold — the unweighted variant takes the latter.
+  const rpcName = `match_${getTableName("learnings")}_weighted`;
   const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
 
   const response = await fetch(url, {
@@ -614,7 +629,12 @@ export async function scarSearch<T = unknown>(
     body: JSON.stringify({
       query_embedding: `[${embedding.join(",")}]`,
       match_count: matchCount,
-      similarity_threshold: 0.0,
+      match_threshold: 0.0,
+      // project_filter is deliberately not sent. The primary path this falls back
+      // from is the unified CROSS-PROJECT vector cache, so filtering here would
+      // make the fallback return a different, narrower result set than the path
+      // it stands in for — a silent behaviour change on exactly the cold-start
+      // calls that are hardest to notice.
     }),
     signal: AbortSignal.timeout(15_000),
   });

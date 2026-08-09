@@ -89,8 +89,21 @@ describe("SessionCloseParamsSchema", () => {
   });
 
   describe("required params missing", () => {
-    it("rejects missing session_id", () => {
+    // GIT-89 AC#4: session_id is optional — sessionClose() resolves the active
+    // session from disk when it is omitted. This test previously asserted the
+    // opposite, which is what kept the recovery branch unreachable: the MCP
+    // layer rejected the call with "session_id: Required" before sessionClose()
+    // ran, so an agent that lost the id to a restart could not close at all.
+    it("accepts missing session_id (resolved from disk at close time)", () => {
       const result = SessionCloseParamsSchema.safeParse({
+        close_type: "quick",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("still rejects a malformed session_id when one is supplied", () => {
+      const result = SessionCloseParamsSchema.safeParse({
+        session_id: "not-a-uuid",
         close_type: "quick",
       });
       expect(result.success).toBe(false);

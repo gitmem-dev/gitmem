@@ -16,7 +16,7 @@ import {
   listActiveSessions,
   findSessionByHostPid,
   findSessionById,
-  adoptSessionForCurrentProcess,
+  findResumableSessionOnDisk,
   pruneStale,
   migrateFromLegacy,
   resetMigrationFlag,
@@ -36,11 +36,33 @@ function makeEntry(overrides: Partial<ActiveSessionEntry> = {}): ActiveSessionEn
   };
 }
 
-/** Create per-session directory with session.json so pruneStale orphan check doesn't remove it */
-function createSessionFile(sessionId: string): void {
+/**
+ * Create per-session directory with session.json.
+ *
+ * GIT-89: session.json is now the identity source, not just a liveness sentinel
+ * for pruneStale, so it carries the full record a real session_start writes.
+ * Overrides let a test seed a session the registry has never heard of.
+ */
+function createSessionFile(sessionId: string, overrides: Record<string, unknown> = {}): void {
   const sessionDir = path.join(tmpDir, "sessions", sessionId);
   fs.mkdirSync(sessionDir, { recursive: true });
-  fs.writeFileSync(path.join(sessionDir, "session.json"), JSON.stringify({ session_id: sessionId }));
+  fs.writeFileSync(
+    path.join(sessionDir, "session.json"),
+    JSON.stringify({
+      session_id: sessionId,
+      agent: "cli",
+      started_at: new Date().toISOString(),
+      hostname: os.hostname(),
+      pid: process.pid,
+      project: "default",
+      ...overrides,
+    })
+  );
+}
+
+/** Seed a session that exists only on disk — no registry entry at all. */
+function seedDiskOnlySession(sessionId: string, overrides: Record<string, unknown> = {}): void {
+  createSessionFile(sessionId, overrides);
 }
 
 beforeEach(() => {
@@ -417,123 +439,201 @@ describe("pruneStale", () => {
   });
 });
 
-describe("adoptSessionForCurrentProcess (GIT-51)", () => {
-  it("adopts a session left by a previous incarnation of this process", () => {
-    const dead = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
-      hostname: os.hostname(),
-      pid: 99999999,
-      started_at: new Date().toISOString(),
-    });
-    registerSession(dead);
-    createSessionFile(dead.session_id);
+describe("findResumableSessionOnDisk (GIT-89)", () => {
+  const DEAD_PID = 99999999;
 
-    const adopted = adoptSessionForCurrentProcess();
+  it("resolves a session the registry has lost entirely", () => {
+    // The GIT-89 regression. Observed in the field: active-sessions.json holding
+    // {"sessions": []} with intact sessions/<id>/session.json beside it. Every
+    // registry-gated path answered "no session" while the evidence sat on disk.
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", { pid: DEAD_PID });
+    expect(listActiveSessions()).toHaveLength(0);
 
-    expect(adopted).not.toBeNull();
-    expect(adopted!.session_id).toBe(dead.session_id);
-    expect(adopted!.pid).toBe(process.pid);
-    expect(listActiveSessions()[0].pid).toBe(process.pid);
+    const resolved = findResumableSessionOnDisk();
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.session_id).toBe("11111111-1111-1111-1111-111111111111");
+    expect(resolved!.pid).toBe(process.pid);
   });
 
-  it("adopts a session older than 2 hours", () => {
+  it("repairs the registry from what it found on disk", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", { pid: DEAD_PID });
+
+    findResumableSessionOnDisk();
+
+    const sessions = listActiveSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe("11111111-1111-1111-1111-111111111111");
+    expect(sessions[0].pid).toBe(process.pid);
+  });
+
+  it("writes the rebound pid back to session.json so the next scan is a fast path", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", { pid: DEAD_PID });
+
+    findResumableSessionOnDisk();
+
+    const raw = fs.readFileSync(
+      path.join(tmpDir, "sessions", "11111111-1111-1111-1111-111111111111", "session.json"),
+      "utf-8"
+    );
+    expect(JSON.parse(raw).pid).toBe(process.pid);
+  });
+
+  it("preserves accumulated session state when rebinding the pid", () => {
+    // session.json accumulates surfaced_scars (recall) and threads
+    // (session_start). Rewriting the file from a registry entry would drop them.
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      pid: DEAD_PID,
+      surfaced_scars: [{ scar_id: "abc123", scar_title: "keep me" }],
+      threads: [{ id: "t1", status: "open" }],
+    });
+
+    findResumableSessionOnDisk();
+
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, "sessions", "11111111-1111-1111-1111-111111111111", "session.json"),
+        "utf-8"
+      )
+    );
+    expect(data.surfaced_scars).toHaveLength(1);
+    expect(data.surfaced_scars[0].scar_id).toBe("abc123");
+    expect(data.threads).toHaveLength(1);
+  });
+
+  it("takes the own-pid fast path without adopting", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", { pid: process.pid });
+
+    const resolved = findResumableSessionOnDisk();
+
+    expect(resolved!.session_id).toBe("11111111-1111-1111-1111-111111111111");
+    expect(resolved!.pid).toBe(process.pid);
+  });
+
+  it("resolves a session older than 2 hours", () => {
     // The old ADOPT_THRESHOLD_MS window was shorter than a normal working
     // session, so long sessions — the ones that most need recovery — were
     // excluded from it.
-    const dead = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
-      hostname: os.hostname(),
-      pid: 99999999,
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      pid: DEAD_PID,
       started_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
     });
-    registerSession(dead);
-    createSessionFile(dead.session_id);
 
-    expect(adoptSessionForCurrentProcess()?.session_id).toBe(dead.session_id);
+    expect(findResumableSessionOnDisk()?.session_id).toBe("11111111-1111-1111-1111-111111111111");
   });
 
-  it("adopts at most one entry — never leaves two rows sharing hostname+pid", () => {
-    const first = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
-      hostname: os.hostname(),
+  it("adopts at most one session — never leaves two rows sharing hostname+pid", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
       pid: 99999998,
       started_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     });
-    const second = makeEntry({
-      session_id: "22222222-2222-2222-2222-222222222222",
-      hostname: os.hostname(),
-      pid: 99999999,
+    seedDiskOnlySession("22222222-2222-2222-2222-222222222222", {
+      pid: DEAD_PID,
       started_at: new Date().toISOString(),
     });
-    registerSession(first);
-    registerSession(second);
-    createSessionFile(first.session_id);
-    createSessionFile(second.session_id);
 
-    const adopted = adoptSessionForCurrentProcess();
+    const resolved = findResumableSessionOnDisk();
 
-    // Most recently started wins — deterministic, not array order.
-    expect(adopted!.session_id).toBe(second.session_id);
+    // Most recently started wins — deterministic, not directory-listing order.
+    expect(resolved!.session_id).toBe("22222222-2222-2222-2222-222222222222");
 
-    const sessions = listActiveSessions();
-    const mine = sessions.filter((s) => s.hostname === os.hostname() && s.pid === process.pid);
+    const mine = listActiveSessions().filter(
+      (s) => s.hostname === os.hostname() && s.pid === process.pid
+    );
     expect(mine).toHaveLength(1);
-    expect(mine[0].session_id).toBe(second.session_id);
+    expect(mine[0].session_id).toBe("22222222-2222-2222-2222-222222222222");
   });
 
-  it("never claims a session whose PID is still alive", () => {
-    const live = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
-      hostname: os.hostname(),
-      pid: process.pid, // this process is alive
+  it("never claims a session owned by another live process", () => {
+    // GIT-20: never resume another process's session. This is what keeps
+    // GIT-19..23 multi-session resolution intact now that PID is not identity.
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      pid: 1, // init — alive, and definitely not us
     });
-    registerSession(live);
-    createSessionFile(live.session_id);
 
-    // findSessionByHostPid already resolves our own session; adoption must not
-    // also claim it (nor any other live process's session).
-    expect(adoptSessionForCurrentProcess()).toBeNull();
+    expect(findResumableSessionOnDisk()).toBeNull();
   });
 
-  it("ignores dead-PID sessions on other hosts", () => {
-    const remote = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
+  it("resolves its own orphan while leaving a live neighbour alone", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      pid: 1, // another live server's session
+      started_at: new Date().toISOString(),
+    });
+    seedDiskOnlySession("22222222-2222-2222-2222-222222222222", {
+      pid: DEAD_PID,
+      started_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    });
+
+    const resolved = findResumableSessionOnDisk();
+
+    expect(resolved!.session_id).toBe("22222222-2222-2222-2222-222222222222");
+
+    // The live neighbour's file is untouched.
+    const neighbour = JSON.parse(
+      fs.readFileSync(
+        path.join(tmpDir, "sessions", "11111111-1111-1111-1111-111111111111", "session.json"),
+        "utf-8"
+      )
+    );
+    expect(neighbour.pid).toBe(1);
+  });
+
+  it("ignores sessions from other hosts", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
       hostname: "some-other-container",
-      pid: 99999999,
+      pid: DEAD_PID,
     });
-    registerSession(remote);
-    createSessionFile(remote.session_id);
 
-    expect(adoptSessionForCurrentProcess()).toBeNull();
+    expect(findResumableSessionOnDisk()).toBeNull();
   });
 
-  it("ignores entries with no session file on disk", () => {
+  it("ignores sessions past the 24h stale horizon", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      pid: DEAD_PID,
+      started_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    });
+
+    expect(findResumableSessionOnDisk()).toBeNull();
+  });
+
+  it("ignores a registry entry with no session file on disk", () => {
+    // Inverted from the GIT-51 version: the registry is no longer evidence.
     registerSession(
       makeEntry({
         session_id: "11111111-1111-1111-1111-111111111111",
         hostname: os.hostname(),
-        pid: 99999999,
+        pid: DEAD_PID,
       })
     );
 
-    expect(adoptSessionForCurrentProcess()).toBeNull();
+    expect(findResumableSessionOnDisk()).toBeNull();
   });
 
-  it("ignores entries past the 24h stale horizon", () => {
-    const ancient = makeEntry({
-      session_id: "11111111-1111-1111-1111-111111111111",
-      hostname: os.hostname(),
-      pid: 99999999,
-      started_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+  it("refuses a session.json whose id disagrees with its directory name", () => {
+    // A hand-copied or hand-edited directory. Resolving it would bind this
+    // process to the wrong session id.
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", {
+      session_id: "99999999-9999-9999-9999-999999999999",
+      pid: DEAD_PID,
     });
-    registerSession(ancient);
-    createSessionFile(ancient.session_id);
 
-    expect(adoptSessionForCurrentProcess()).toBeNull();
+    expect(findResumableSessionOnDisk()).toBeNull();
   });
 
-  it("returns null on an empty registry", () => {
-    expect(adoptSessionForCurrentProcess()).toBeNull();
+  it("skips a corrupt session.json without failing the scan", () => {
+    const badDir = path.join(tmpDir, "sessions", "11111111-1111-1111-1111-111111111111");
+    fs.mkdirSync(badDir, { recursive: true });
+    fs.writeFileSync(path.join(badDir, "session.json"), "{ not json");
+
+    seedDiskOnlySession("22222222-2222-2222-2222-222222222222", { pid: DEAD_PID });
+
+    expect(findResumableSessionOnDisk()?.session_id).toBe(
+      "22222222-2222-2222-2222-222222222222"
+    );
+  });
+
+  it("returns null when there is nothing on disk", () => {
+    expect(findResumableSessionOnDisk()).toBeNull();
   });
 });
 

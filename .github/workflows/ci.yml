@@ -39,6 +39,15 @@ jobs:
       - name: Smoke test (free tier)
         run: npm run test:smoke:free
 
+      # GIT-89: session identity across a real MCP server restart. Runs the
+      # single e2e file rather than `npm run test:e2e`, because the Pro suites in
+      # that config gate on Docker/Supabase and hang rather than skip when
+      # neither is present (GIT-90). This file spawns the built server directly
+      # on the free tier — no Docker, no credentials — so it is safe in CI, and
+      # the publish job gates on this one passing.
+      - name: E2E — session identity survives MCP restart
+        run: npx vitest run --config vitest.e2e.config.ts tests/e2e/git-89-session-identity.test.ts
+
       - name: Dependency audit (no unused deps)
         run: npx depcheck --ignores="@types/*" --json | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); const unused=d.dependencies||[]; if(unused.length){console.error('Unused dependencies:',unused);process.exit(1)}"
 

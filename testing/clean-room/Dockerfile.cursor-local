@@ -22,8 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Keep npm current (suppresses upgrade nag for users)
-RUN npm install -g npm@latest
+# NOTE: previously `RUN npm install -g npm@latest` here, to suppress the npm
+# upgrade nag. It broke the image outright once npm@latest began requiring
+# node >=22.22.2 while this base is node 20 — every clean-room build failed at
+# this layer, which took out the pre-publish gate. The line was cosmetic; the
+# npm bundled with the base image is what a real user on node 20 would have.
 
 # Install Cursor CLI (as root, before user switch)
 RUN curl https://cursor.com/install -fsS | bash

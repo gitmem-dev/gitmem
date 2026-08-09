@@ -35,9 +35,6 @@ import {
 import { addSurfacedScars, getCurrentSession, setRecallCalled } from "../services/session-state.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { v4 as uuidv4 } from "uuid";
-import * as fs from "fs";
-import * as path from "path";
-import { getSessionPath } from "../services/gitmem-dir.js";
 import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI, CITATION_LINE } from "../services/display-protocol.js";
 import { formatNudgeHeader } from "../services/nudge-variants.js";
 import { fetchDismissalCounts, type DismissalCounts } from "../services/behavioral-decay.js";
@@ -162,6 +159,29 @@ export interface RecallResult {
   formatted_response: string;
   display?: string;
   performance: PerformanceData;
+}
+
+/**
+ * GIT-89: Tell the agent when surfacing was not recorded.
+ *
+ * recall and confirm_scars used to fail asymmetrically: recall returned scars
+ * with a soft "No active session" banner and dropped them from tracking, while
+ * confirm_scars hard-rejected. The agent had no way to tell a tracked recall
+ * from an untracked one, and a later confirm reported "no scars to confirm" —
+ * a green result that actually meant the scars were discarded (scar 810a1624).
+ *
+ * Returns "" on the tracked path, so a healthy recall costs no extra tokens.
+ */
+function untrackedSurfacingNotice(tracked: boolean, scarCount: number): string {
+  if (tracked || scarCount === 0) return "";
+  return [
+    "",
+    "--- gitmem enforcement ---",
+    `SURFACING NOT TRACKED — the ${scarCount} scar(s) above were not recorded against a session.`,
+    "confirm_scars will reject them and they will not count toward scar application.",
+    "Call session_start() to open a session, then re-run recall().",
+    "---",
+  ].join("\n");
 }
 
 /**
@@ -454,9 +474,10 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         surfaced_at: recallSurfacedAt,
         source: "recall" as const,
       }));
-      addSurfacedScars(recallSurfacedScars);
+      const tracked = addSurfacedScars(recallSurfacedScars);
 
-      const freeFormatted = formatResponse(scars, plan);
+      const freeFormatted =
+        formatResponse(scars, plan) + untrackedSurfacingNotice(tracked, scars.length);
       return {
         activated: scars.length > 0,
         plan,
@@ -651,23 +672,11 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       source: "recall" as const,
       variant_id: variantResults.get(scar.id)?.assignment?.variant_id,
     }));
-    addSurfacedScars(recallSurfacedScars);
-
-    // Update per-session dir with accumulated surfaced scars
-    try {
-      const session = getCurrentSession();
-      if (session) {
-        const sessionFilePath = getSessionPath(session.sessionId, "session.json");
-        if (fs.existsSync(sessionFilePath)) {
-          const sessionData = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-          sessionData.surfaced_scars = session.surfacedScars;
-          fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2));
-        }
-      }
-    } catch (error) {
-      // Non-fatal: surfaced scars still tracked in memory
-      console.warn("[recall] Failed to update per-session file with surfaced scars:", error);
-    }
+    // GIT-89: addSurfacedScars now writes through to the per-session file itself,
+    // so surfacing survives an MCP restart between recall and confirm_scars.
+    // The inline write that used to live here duplicated that and ran only on
+    // this path, leaving the free-tier path's surfacing memory-only.
+    const surfacingTracked = addSurfacedScars(recallSurfacedScars);
 
     const latencyMs = timer.stop();
     const memoriesSurfaced = scars.map((s) => s.id);
@@ -694,7 +703,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     });
 
     // Record metrics asynchronously
-    const mainFormatted = formatResponse(scars, plan, dismissalCounts);
+    const mainFormatted =
+      formatResponse(scars, plan, dismissalCounts) +
+      untrackedSurfacingNotice(surfacingTracked, scars.length);
     const result = {
       activated: scars.length > 0,
       plan,

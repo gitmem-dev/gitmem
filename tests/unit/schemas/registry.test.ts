@@ -44,12 +44,19 @@ describe("validateToolArgs", () => {
     expect(error).toBeNull();
   });
 
-  it("returns error for missing required field", () => {
+  // GIT-89 AC#4: session_close must be callable without session_id so it can
+  // resolve the active session itself after an MCP restart.
+  it("accepts session_close without session_id", () => {
     const error = validateToolArgs("session_close", {
       close_type: "quick",
     });
+    expect(error).toBeNull();
+  });
+
+  it("returns error for missing required field", () => {
+    const error = validateToolArgs("session_close", {});
     expect(error).not.toBeNull();
-    expect(error).toContain("session_id");
+    expect(error).toContain("close_type");
   });
 
   it("returns error for invalid close_type", () => {

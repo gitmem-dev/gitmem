@@ -8,7 +8,15 @@
  * - Advisory, not blocking: warnings append to responses, never prevent execution
  * - Zero overhead on compliant calls: only fires when state is missing
  * - Universal: works in ALL MCP clients, no IDE hooks needed
- * - Lightweight: pure in-memory checks, no I/O
+ * - Lightweight: in-memory once identity is bound; at most one disk scan per
+ *   process to recover it (GIT-89)
+ *
+ * The "no I/O" claim here predated GIT-89. getCurrentSession() now falls through
+ * to resolveCurrentSession(), which scans the per-session directories when
+ * in-memory identity is empty — the whole point being that a session survives an
+ * MCP restart. That scan is bounded, not per-call: it runs until identity binds,
+ * and a failed scan is memoised against the registry fingerprint so a genuinely
+ * session-less process does not re-scan on every tool call.
  */
 
 import { getCurrentSession, hasUnconfirmedScars, getSurfacedScars, isRecallCalled } from "./session-state.js";

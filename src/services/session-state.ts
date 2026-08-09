@@ -13,10 +13,9 @@
  */
 
 import fs from "fs";
-import * as os from "os";
 import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
 import { getSessionPath } from "./gitmem-dir.js";
-import { findSessionByHostPid, adoptSessionForCurrentProcess, getRegistryFingerprint } from "./active-sessions.js";
+import { findResumableSessionOnDisk, listActiveSessions, getRegistryFingerprint } from "./active-sessions.js";
 
 interface SessionContext {
   sessionId: string;
@@ -92,18 +91,27 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
  * active session" for the rest of a session that was alive and healthy — and
  * session_close couldn't resolve which session to close.
  *
- * Recovery runs here instead, so *any* tool call re-binds identity: match this
- * process's PID in the registry first, then adopt a session left by a previous
- * incarnation of this process.
+ * Recovery runs here instead, so *any* tool call re-binds identity.
+ *
+ * GIT-89: identity now resolves from the per-session directories rather than
+ * from the active-sessions registry. Registry-gated recovery could not rescue a
+ * session whose registry entry was lost or written under a different .gitmem
+ * root — the common case in practice — even with session.json intact on disk.
+ * The registry is repaired from the scan instead of gating it.
  *
  * Returns null when there is genuinely no session — never invents one.
  */
 function recoverSessionFromDisk(): SessionContext | null {
   try {
-    const entry =
-      findSessionByHostPid(os.hostname(), process.pid) ?? adoptSessionForCurrentProcess();
+    // GIT-89: snapshot the registry's view BEFORE resolving. Resolution repairs
+    // the registry from disk, so reading it afterwards would compare session.json
+    // against a copy of itself and never see a disagreement.
+    const registryBefore = listActiveSessions();
+
+    const entry = findResumableSessionOnDisk();
     if (!entry) return null;
 
+    const registryEntry = registryBefore.find((s) => s.session_id === entry.session_id) ?? null;
     const sessionFilePath = getSessionPath(entry.session_id, "session.json");
     if (!fs.existsSync(sessionFilePath)) return null;
 
@@ -123,15 +131,18 @@ function recoverSessionFromDisk(): SessionContext | null {
     // because it is written by the session itself, while the registry entry is
     // an index that can lag. The difference is that a conflict is now recorded
     // and logged rather than resolved in silence.
+    //
+    // GIT-89: compared against the pre-resolution registry snapshot. `entry` is
+    // derived from session.json now, so comparing the two would always agree.
     const recoveryConflict =
       Boolean(data.project) &&
-      Boolean(entry.project) &&
-      data.project !== entry.project;
+      Boolean(registryEntry?.project) &&
+      data.project !== registryEntry?.project;
 
     if (recoveryConflict) {
       console.error(
         `[session-state] RECOVERY CONFLICT for ${String(data.session_id).slice(0, 8)}: ` +
-        `session.json project "${data.project}" != registry project "${entry.project}". ` +
+        `session.json project "${data.project}" != registry project "${registryEntry?.project}". ` +
         `Using session.json (authoritative); registry entry is a lagging index.`
       );
     }
@@ -146,6 +157,13 @@ function recoverSessionFromDisk(): SessionContext | null {
       threads: Array.isArray(data.threads) ? data.threads : [],
       recoveryConflict,
     });
+
+    // GIT-89: restore the recall flag. setCurrentSession resets it to false,
+    // which would make enforcement Check 3 warn that recall never ran in a
+    // session where it had — a false alarm that survives the identity fix.
+    if (currentSession && data.recall_called === true) {
+      currentSession.recallCalled = true;
+    }
 
     console.error(
       `[session-state] Recovered session ${data.session_id.slice(0, 8)} from disk after MCP restart ` +
@@ -203,7 +221,10 @@ export function clearCurrentSession(): void {
  * Used by list_threads to inherit the correct project default.
  */
 export function getProject(): string | null {
-  return currentSession?.project || null;
+  // GIT-89: resolves rather than reading in-memory state. After a restart this
+  // returned null and callers silently fell back to project "default", scoping
+  // the rest of the session to the wrong namespace.
+  return resolveCurrentSession()?.project || null;
 }
 
 /**
@@ -216,11 +237,31 @@ export function hasActiveIssue(): boolean {
 /**
  * Mark that recall() was called this session (independent of whether it returned scars).
  * Called by recall tool before any early return.
+ *
+ * GIT-89: persisted to session.json. This flag drove enforcement Check 3 ("No
+ * recall() was run this session"), and it lived only in memory — so after an
+ * MCP restart every create_learning / create_decision / session_close warned
+ * that recall had never run, in sessions where it demonstrably had. That is the
+ * same class of false alarm as the "No active session" banner: a warning the
+ * agent learns to read past, which is what erodes the enforcement layer.
  */
 export function setRecallCalled(): void {
-  if (currentSession) {
-    currentSession.recallCalled = true;
-    console.error("[session-state] recall() marked as called");
+  const session = resolveCurrentSession();
+  if (!session) return;
+
+  session.recallCalled = true;
+  console.error("[session-state] recall() marked as called");
+
+  try {
+    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return;
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    if (data.recall_called === true) return; // already recorded — no write
+    data.recall_called = true;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    // Non-fatal: the flag still holds for this process.
+    console.warn("[session-state] Failed to persist recall_called:", error);
   }
 }
 
@@ -229,27 +270,66 @@ export function setRecallCalled(): void {
  * Used by enforcement to avoid false positives when recall returns 0 scars.
  */
 export function isRecallCalled(): boolean {
-  return currentSession?.recallCalled ?? false;
+  // GIT-89: resolves rather than reading in-memory state, so the flag restored
+  // from session.json is visible to callers that reach this directly.
+  return resolveCurrentSession()?.recallCalled ?? false;
 }
 
 /**
  * Add surfaced scars to tracking (deduplicates by scar_id)
  * Called by session_start and recall when scars are surfaced.
+ *
+ * GIT-89: returns whether the scars were actually tracked.
+ *
+ * This used to read `currentSession` directly and, when it was null, log a
+ * console warning and return. That was the silent discard behind the
+ * recall/confirm_scars asymmetry (scar 810a1624): recall printed scars to the
+ * agent, nothing recorded that it had, and confirm_scars later rejected with
+ * nothing to confirm. The agent saw a green "no scars to confirm" for scars it
+ * had just been shown.
+ *
+ * Two changes close that gap. Identity is resolved (so a session recovered
+ * after an MCP restart still tracks), and the outcome is returned so callers
+ * can fail as loudly as confirm_scars does instead of proceeding as if tracked.
  */
-export function addSurfacedScars(scars: SurfacedScar[]): void {
-  if (!currentSession) {
+export function addSurfacedScars(scars: SurfacedScar[]): boolean {
+  const session = resolveCurrentSession();
+  if (!session) {
     console.warn("[session-state] Cannot add surfaced scars: no active session");
-    return;
+    return false;
   }
 
   for (const scar of scars) {
-    const exists = currentSession.surfacedScars.some(s => s.scar_id === scar.scar_id);
+    const exists = session.surfacedScars.some(s => s.scar_id === scar.scar_id);
     if (!exists) {
-      currentSession.surfacedScars.push(scar);
+      session.surfacedScars.push(scar);
     }
   }
 
-  console.error(`[session-state] Surfaced scars tracked: ${currentSession.surfacedScars.length} total`);
+  console.error(`[session-state] Surfaced scars tracked: ${session.surfacedScars.length} total`);
+  persistSurfacedScars(session);
+  return true;
+}
+
+/**
+ * GIT-89: Write surfaced scars through to session.json.
+ *
+ * Surfacing has to outlive the process that did it. If it lives only in memory,
+ * an MCP restart between recall and confirm_scars loses it, and the identity
+ * break turns into a tracking break. Centralised here so there is exactly one
+ * writer — callers previously did this inline and only on their own success path.
+ */
+function persistSurfacedScars(session: SessionContext): void {
+  try {
+    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
+    if (!fs.existsSync(sessionFilePath)) return;
+    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+    data.surfaced_scars = session.surfacedScars;
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
+  } catch (error) {
+    // Non-fatal: scars remain tracked in memory for this process.
+    console.warn("[session-state] Failed to persist surfaced scars:", error);
+  }
 }
 
 /**

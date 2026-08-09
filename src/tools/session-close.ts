@@ -874,6 +874,32 @@ export async function sessionClose(
     // Legacy active-session.json fallback removed — registry is the source of truth
   }
 
+  // GIT-89 AC#4: resolution can still come up empty — no session was ever
+  // started, or its directory is gone. Fail here with something actionable
+  // rather than letting an undefined id reach Supabase and surface as a
+  // "session not found" that reads like data loss.
+  if (!params.session_id && params.close_type !== "retroactive") {
+    const latencyMs = timer.stop();
+    return {
+      success: false,
+      session_id: "",
+      close_compliance: {
+        close_type: params.close_type,
+        agent: "Unknown",
+        checklist_displayed: false,
+        questions_answered_by_agent: false,
+        human_asked_for_corrections: false,
+        learnings_stored: 0,
+        scars_applied: 0,
+      },
+      validation_errors: [
+        "No session_id provided and no active session could be resolved from disk. " +
+          "Run session_start first, or pass session_id explicitly.",
+      ],
+      performance: buildPerformanceData("session_close", latencyMs, 0),
+    };
+  }
+
   // 0a. File-based payload handoff: if .gitmem/closing-payload.json exists,
   // merge it with inline params (inline params take precedence).
   // This keeps the visible MCP tool call small: just session_id + close_type.

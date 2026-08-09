@@ -86,7 +86,14 @@ const SafeTranscriptPathSchema = z.string().refine(
 );
 
 export const SessionCloseParamsSchema = z.object({
-  session_id: SessionIdSchema,
+  // GIT-89 AC#4: optional, because session_close is expected to resolve the
+  // active session itself after an MCP restart. sessionClose() was always
+  // written for that — it guards `params.session_id &&` before validating and
+  // recovers identity when absent — but this field was required, so the MCP
+  // layer rejected the call with "session_id: Required" and the recovery branch
+  // could never execute. The agent had to already know the id, which is exactly
+  // what a restart (and context compaction) takes away.
+  session_id: SessionIdSchema.optional(),
   close_type: CloseTypeSchema,
   task_completion: TaskCompletionSchema.optional(),
   closing_reflection: ClosingReflectionSchema.optional(),

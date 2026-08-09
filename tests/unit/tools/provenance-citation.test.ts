@@ -156,6 +156,10 @@ vi.mock("../../../src/services/session-state.js", () => ({
   getCurrentSession: vi.fn(() => null),
   addSurfacedScars: vi.fn(),
   setRecallCalled: vi.fn(),
+  // GIT-93: recall records/clears a retrieval-failure marker so confirm_scars
+  // can tell "found nothing" from "never reached the store".
+  setRecallFailure: vi.fn(),
+  clearRecallFailure: vi.fn(),
 }));
 
 vi.mock("../../../src/services/agent-detection.js", () => ({

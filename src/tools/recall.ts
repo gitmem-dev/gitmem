@@ -32,7 +32,7 @@ import {
   formatVariantEnforcement,
   type ScarWithVariant,
 } from "../services/variant-assignment.js";
-import { addSurfacedScars, getCurrentSession, setRecallCalled } from "../services/session-state.js";
+import { addSurfacedScars, getCurrentSession, setRecallCalled, setRecallFailure, clearRecallFailure } from "../services/session-state.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { v4 as uuidv4 } from "uuid";
 import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI, CITATION_LINE } from "../services/display-protocol.js";
@@ -443,6 +443,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       const rawScars = await getStorage().search(plan, matchCount);
       const searchLatencyMs = searchTimer.stop();
 
+      // GIT-93: free-tier local search also answered — same rule as the Pro path.
+      clearRecallFailure();
+
       const scars: FormattedScar[] = rawScars
         .map((scar) => ({
           id: scar.id,
@@ -562,6 +565,11 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     }
 
     const searchLatencyMs = searchTimer.stop();
+
+    // GIT-93: the store answered. Clear any earlier failure regardless of how
+    // many scars came back — a search that ran and matched nothing is a real
+    // answer, and only that state may license confirm_scars to say "proceed".
+    clearRecallFailure();
 
     // Assign variants for A/B testing (dev tier only)
     // Agent identity is always available, so variants are always assigned
@@ -745,6 +753,12 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[recall] Search failed:", message);
+
+    // GIT-93: record the failure on the session, not just in stderr. This
+    // returns scars: [] with a warning banner, and a later confirm_scars sees
+    // only "no scars surfaced" — which it used to answer with "Proceed freely".
+    // The marker is what lets it tell an empty answer from no answer.
+    setRecallFailure(message);
 
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("recall", latencyMs, 0);

@@ -34,6 +34,9 @@ const CLI_COMMAND_ALLOWLIST = new Set([
   "src/commands/activate.ts",
   "src/commands/deactivate.ts",
   "src/commands/migrate-local.ts",
+  // GIT-91: invoked only via bin/gitmem.js `migrate-root`, never imported by the
+  // server, so its output cannot reach the MCP stdio stream.
+  "src/commands/migrate-root.ts",
 ]);
 
 describe("no console.log in src/", () => {

@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-09
+
+**No one loses any information.** Nothing is deleted, nothing is moved, nothing is overwritten.
+
+gitmem now reads one memory store — `~/.gitmem` — no matter which directory a process starts in.
+That has been the default since v1.0.10 in February, so for almost everyone this changes nothing
+visible. If you are one of the rare installs that still keeps memory in a project-local `.gitmem/`,
+your first `session_start` after upgrading will show you exactly where it is, how many learnings,
+threads and sessions are in it, and the one command that copies them across. `migrate-root` copies
+and leaves the original untouched. Pro users' Supabase memory is unaffected either way.
+
+The rest of this release is about a quieter problem: gitmem was reporting success for failures. A
+session that survived an MCP restart was told it had none. A scar search that never reached the
+store was answered with "proceed freely". Both are fixed, and both now say what actually happened.
+
+### Fixed
+
+- **A session no longer loses its identity when the MCP server restarts.** Identity was bound to
+  `process.pid` and looked up through the active-sessions registry, so any restart — an app update,
+  a rebuild, a relaunch — orphaned the entry and every session-required tool reported "No active
+  session" for the rest of the session, while writes continued to land correctly. Identity now
+  resolves from the durable per-session store on disk; PID is only a disambiguator, and the registry
+  is repaired from disk rather than gating access to it. A live session belonging to another server
+  is still never claimed, so concurrent sessions remain isolated. `session_close` also no longer
+  requires you to pass `session_id` — it resolves the session itself, which is the case a restart
+  exists to break. (GIT-89)
+- **Scar retrieval failed on every call whenever the local index was cold.** The Supabase fallback
+  built its RPC name from the table prefix and a verb, producing a function that exists under no
+  prefix, on any deployment — so a `recall` issued before the in-memory index finished loading
+  returned nothing at all. That window includes the first `recall` of a session. The RPCs are now
+  called by their deployed names. (GIT-93)
+- **`confirm_scars` reported a failed retrieval as a clean check.** With nothing surfaced it replied
+  "No recall-surfaced scars to confirm. Proceed freely" — the same answer whether the search had run
+  and matched nothing or had never reached the store. It now distinguishes the two and names the
+  underlying error, and the distinction survives a restart. This is why the retrieval defect above
+  could persist unnoticed. (GIT-93)
+- **The pre-publish clean-room images could not build.** Every clean-room Dockerfile installed
+  `npm@latest` onto a Node 20 base, which stopped working once npm began requiring Node 22.22+. The
+  gate that tests the packaged tarball the way a user installs it had been failing silently, because
+  a gate only run by hand has no failure signal between uses. (GIT-91)
+
+### Added
+
+- **`npx gitmem-mcp migrate-root`** — copies a project-local memory store into `~/.gitmem`. It copies
+  rather than moves, never overwrites a file that already exists at the destination, and reports
+  every file it skipped and why. `--dry-run` shows the exact plan first. (GIT-91)
+- **A first-run signpost for project-local stores.** If one is found, `session_start` names the path,
+  the record counts it holds, and the one command that copies it in. Detection only — the store is
+  never read from behind your back, and never silently unread either. (GIT-91)
+- **`GITMEM_HOME`** — relocates the developer-scoped root without short-circuiting resolution the way
+  `GITMEM_DIR` does. Useful for containers and CI. (GIT-91)
+
+### Changed
+
+- **The `.gitmem` root no longer depends on the working directory.** Resolution used to walk up from
+  `process.cwd()`, which meant the MCP server and the SessionStart hook — which do not share a
+  directory — could bind one session to two different stores, with writes landing where identity
+  resolution never looked. Project-local stores are still fully supported and are now selected
+  explicitly with `GITMEM_DIR`. (GIT-91)
+- **CI gates publishing on a real restart.** The release pipeline now runs an end-to-end test that
+  kills the MCP server process and drives a recovered session over the MCP protocol, so the identity
+  fix above cannot regress into a release. (GIT-89)
+
 ## [1.7.0] - 2026-08-07
 
 **No destructive changes, no data loss, no migration.** But if you start seeing errors after

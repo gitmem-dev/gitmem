@@ -36,7 +36,7 @@ import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../service
 import { resolveThreadScope, computePanelOmission, formatOmissionLine } from "../services/thread-scope.js";
 import type { ThreadScopeCounts } from "../services/thread-scope.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
-import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject, findStrandedProjectRoots } from "../services/gitmem-dir.js";
+import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject, findStrandedProjectRoots, describeGitmemRoot } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, findResumableSessionOnDisk, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
@@ -918,14 +918,28 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   // most MCP clients. A user whose memory silently emptied after an upgrade
   // would have no way to connect it to anything. Placed above threads so it is
   // not pushed off the end of a long block.
+  // R18: state the COUNTS, not just the path. "Your memory is at another path"
+  // is abstract enough to scroll past; "142 learnings are sitting here" is not.
+  // Detection-without-use only works if the detection says something the user
+  // can weigh — the store is never silently unread, it is loudly findable.
   const stranded = findStrandedProjectRoots();
   if (stranded.length > 0) {
     visual.push("");
-    visual.push(boldText("Memory store not being read"));
-    for (const root of stranded) visual.push(dimText(`  ${root}`));
-    visual.push(dimText(`  gitmem now reads ${getGitmemDir()} regardless of directory.`));
-    visual.push(dimText(`  Copy it over:  npx gitmem-mcp migrate-root --dry-run`));
-    visual.push(dimText(`  Or keep using it:  set GITMEM_DIR=<path>`));
+    visual.push(boldText("Memory store found but NOT being read"));
+    for (const root of stranded) {
+      const c = describeGitmemRoot(root);
+      const held = [
+        c.learnings > 0 ? `${c.learnings} learnings` : null,
+        c.threads > 0 ? `${c.threads} threads` : null,
+        c.sessions > 0 ? `${c.sessions} sessions` : null,
+      ].filter(Boolean).join(", ");
+      visual.push(dimText(`  ${root}`));
+      visual.push(dimText(`    holds: ${held || "no countable records"}`));
+    }
+    visual.push(dimText(`  gitmem reads ${getGitmemDir()} regardless of directory (1.8.0).`));
+    visual.push(dimText(`  Nothing was moved or deleted. Copy it in:`));
+    visual.push(dimText(`    npx gitmem-mcp migrate-root --dry-run`));
+    visual.push(dimText(`  Or keep using that store:  set GITMEM_DIR=<path>`));
   }
 
   // Threads section — top 5 by vitality, truncated to 60 chars

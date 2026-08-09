@@ -27,6 +27,7 @@ import {
   clearGitmemDirCache,
   getHomeGitmemDir,
   isLiveGitmemRoot,
+  describeGitmemRoot,
 } from "../../../src/services/gitmem-dir.js";
 
 const HOME_ROOT = getHomeGitmemDir();
@@ -178,5 +179,72 @@ describe("GIT-91: isLiveGitmemRoot only counts real evidence", () => {
 
   it("does not throw on a missing or unreadable candidate", () => {
     expect(isLiveGitmemRoot(path.join(tmp, "does-not-exist"))).toBe(false);
+  });
+});
+
+/**
+ * R18 acceptance: detection-without-use must state what the stranded store
+ * HOLDS, not merely that one exists.
+ *
+ * The ruling rejected a read-only compatibility fallback — reading the legacy
+ * path with a warning keeps the cross-process disagreement the fix exists to
+ * kill, because the hook and the server still resolve differently. Detection
+ * replaces it, and detection only works if the user can weigh what they are
+ * told: "your memory is at another path" is abstract enough to scroll past,
+ * "3 learnings, 2 sessions are sitting there" is not.
+ */
+describe("R18: describeGitmemRoot reports what a stranded store holds", () => {
+  let store: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gitmem-counts-"));
+    store = path.join(tmp, ".gitmem");
+  });
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  it("counts learnings, threads and sessions in a populated legacy store", () => {
+    fs.mkdirSync(path.join(store, "sessions", "s1"), { recursive: true });
+    fs.mkdirSync(path.join(store, "sessions", "s2"), { recursive: true });
+    fs.writeFileSync(path.join(store, "sessions", "s1", "session.json"), '{"session_id":"s1"}');
+    fs.writeFileSync(path.join(store, "sessions", "s2", "session.json"), '{"session_id":"s2"}');
+    fs.writeFileSync(path.join(store, "learnings.json"), JSON.stringify([{ id: 1 }, { id: 2 }, { id: 3 }]));
+    fs.writeFileSync(path.join(store, "threads.json"), JSON.stringify([{ id: "t1" }]));
+
+    const c = describeGitmemRoot(store);
+
+    expect(c.learnings).toBe(3);
+    expect(c.threads).toBe(1);
+    expect(c.sessions).toBe(2);
+  });
+
+  it("does not count a session directory with no session.json", () => {
+    fs.mkdirSync(path.join(store, "sessions", "test-session-2"), { recursive: true });
+
+    expect(describeGitmemRoot(store).sessions).toBe(0);
+  });
+
+  it("handles the {key: array} file shape as well as a bare array", () => {
+    fs.mkdirSync(store, { recursive: true });
+    fs.writeFileSync(
+      path.join(store, "learnings.json"),
+      JSON.stringify({ learnings: [{ id: 1 }, { id: 2 }] })
+    );
+
+    expect(describeGitmemRoot(store).learnings).toBe(2);
+  });
+
+  it("returns zeros rather than throwing on a malformed store", () => {
+    fs.mkdirSync(store, { recursive: true });
+    fs.writeFileSync(path.join(store, "learnings.json"), "not json at all");
+
+    // A notice that failed to render because one file is corrupt would
+    // reintroduce exactly the silence detection exists to prevent.
+    expect(() => describeGitmemRoot(store)).not.toThrow();
+    expect(describeGitmemRoot(store).learnings).toBe(0);
+  });
+
+  it("reports zeros for a root that does not exist", () => {
+    expect(describeGitmemRoot(path.join(tmp, "nope", ".gitmem")))
+      .toMatchObject({ learnings: 0, threads: 0, sessions: 0 });
   });
 });

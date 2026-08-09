@@ -126,6 +126,59 @@ let strandedWarningIssued = false;
  * this in its display, where the user will actually see it. Returns [] on any
  * error — a diagnostic must never break resolution.
  */
+/** What a stranded root actually holds, for the session_start notice (R18). */
+export interface GitmemRootContents {
+  root: string;
+  learnings: number;
+  threads: number;
+  sessions: number;
+}
+
+/** Count entries in a store file that may be a bare array or {key: array}. */
+function countCollection(file: string, key: string): number {
+  try {
+    if (!fs.existsSync(file)) return 0;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
+    if (Array.isArray(parsed)) return parsed.length;
+    if (parsed && Array.isArray(parsed[key])) return parsed[key].length;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * GIT-91 / R18: what a stranded root contains.
+ *
+ * The notice has to state counts, not just a path. "Your memory is at another
+ * path" is abstract enough to scroll past; "142 learnings, 6 threads are sitting
+ * at this path" is not. Detection-without-use only works if the detection says
+ * something a user can weigh.
+ *
+ * Counts are best-effort by design — an unreadable or unexpected file yields 0
+ * rather than throwing. A notice that fails to render because one file is
+ * malformed would reintroduce exactly the silence this exists to prevent.
+ */
+export function describeGitmemRoot(root: string): GitmemRootContents {
+  let sessions = 0;
+  try {
+    const sessionsDir = path.join(root, "sessions");
+    if (fs.existsSync(sessionsDir)) {
+      for (const entry of fs.readdirSync(sessionsDir)) {
+        if (fs.existsSync(path.join(sessionsDir, entry, "session.json"))) sessions++;
+      }
+    }
+  } catch {
+    // best-effort
+  }
+  return {
+    root,
+    learnings: countCollection(path.join(root, "learnings.json"), "learnings"),
+    threads: countCollection(path.join(root, "threads.json"), "threads"),
+    sessions,
+  };
+}
+
 export function findStrandedProjectRoots(): string[] {
   try {
     const home = getHomeGitmemDir();

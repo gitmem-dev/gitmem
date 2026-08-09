@@ -5,6 +5,7 @@
 #   bash testing/clean-room/verify-against.sh new        # local dist/ (this working tree)
 #   bash testing/clean-room/verify-against.sh old        # the published package npx has cached
 #   bash testing/clean-room/verify-against.sh cleanroom  # packaged tarball, installed in Docker
+#   bash testing/clean-room/verify-against.sh published [ver]  # clean install from the npm registry
 #
 # WHY THIS FILE EXISTS
 #
@@ -29,7 +30,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKDIR="${GITMEM_SMOKE_WORKDIR:-${TMPDIR:-/tmp}/gitmem-verify-$$}"
 
 usage() {
-  echo "usage: bash testing/clean-room/verify-against.sh <old|new|cleanroom>" >&2
+  echo "usage: bash testing/clean-room/verify-against.sh <old|new|cleanroom|published [version]>" >&2
   exit 2
 }
 
@@ -90,6 +91,31 @@ case "$TARGET" in
         echo
         GITMEM_SERVER=$PKG/dist/index.js node /tmp/restart-smoke.mjs /home/developer/.smoke
       '
+    ;;
+
+  published)
+    # What users actually get RIGHT NOW: a clean install straight from the
+    # registry, resolved fresh, with no local build and no npx cache in play.
+    # Every other target tests something we produced; this one tests what npm
+    # serves. Post-publish verification has to come from here or it proves
+    # nothing about the released artifact.
+    VER="${2:-latest}"
+    STAGE="$WORKDIR/registry"
+    mkdir -p "$STAGE"
+    cd "$STAGE"
+    npm init -y >/dev/null 2>&1
+    echo "installing gitmem-mcp@$VER from the registry..."
+    npm install --no-audit --no-fund "gitmem-mcp@$VER" >/dev/null 2>&1
+    SERVER="$STAGE/node_modules/gitmem-mcp/dist/index.js"
+    if [[ ! -f "$SERVER" ]]; then
+      echo "install failed or package layout unexpected: $SERVER missing" >&2
+      exit 2
+    fi
+    echo "target : registry install (clean, no cache)"
+    echo "version: $(node -p "require('$STAGE/node_modules/gitmem-mcp/package.json').version")"
+    echo "server : $SERVER"
+    echo
+    GITMEM_SERVER="$SERVER" node "$REPO_ROOT/testing/clean-room/restart-smoke.mjs" "$WORKDIR/smoke"
     ;;
 
   *) usage ;;

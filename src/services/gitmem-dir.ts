@@ -47,8 +47,12 @@ export function setGitmemDir(dir: string): void {
  * Resolution order:
  * 1. GITMEM_DIR env var (explicit override)
  * 2. Cached path from session_start (most reliable)
- * 3. Walk up from CWD looking for existing .gitmem/ sentinels (backward compat)
- * 4. Fall back to ~/.gitmem (developer-scoped, survives across projects/containers)
+ * 3. ~/.gitmem — authoritative, and independent of cwd.
+ *
+ * GIT-91 removed a cwd walk-up that sat between 2 and 3. Because it derived the
+ * answer from process.cwd(), the MCP server and the SessionStart hook — which do
+ * not share a cwd — resolved different roots for the same session. Project-scoped
+ * roots are still supported, but must be named explicitly via GITMEM_DIR.
  */
 export function getGitmemDir(): string {
   // 1. GITMEM_DIR env var (explicit override, highest priority)
@@ -66,30 +70,123 @@ export function getGitmemDir(): string {
     return cachedGitmemDir;
   }
 
-  // 3. Walk up from CWD looking for existing .gitmem directory
-  //    Backward compat: finds project-scoped .gitmem/ from older installations.
-  //    Sentinel files checked in priority order:
-  //    - active-sessions.json  (multi-session registry, GIT-19)
-  //    - config.json           (project-level gitmem config)
-  const sentinels = ["active-sessions.json", "config.json"];
-  let dir = process.cwd();
-  const root = path.parse(dir).root;
-  while (dir !== root) {
-    const candidate = path.join(dir, ".gitmem");
-    for (const sentinel of sentinels) {
-      if (fs.existsSync(path.join(candidate, sentinel))) {
-        cachedGitmemDir = candidate;
-        console.error(`[gitmem-dir] Found .gitmem via walk-up (${sentinel}): ${candidate}`);
-        return candidate;
+  // 3. ~/.gitmem is authoritative. Not a fallback — the answer.
+  //
+  //    GIT-91: resolution used to walk up from process.cwd() and adopt any
+  //    directory containing active-sessions.json or config.json. That makes the
+  //    answer a function of cwd, and the processes sharing a session do not
+  //    share a cwd: the MCP server runs from wherever the client launched it,
+  //    while the SessionStart hook runs in the repo. So one logical session bound
+  //    to two different stores, and writes landed in a root that identity
+  //    resolution never read.
+  //
+  //    No cwd-derived rule can fix that. Tightening the sentinel to require live
+  //    state was tried first and does not hold: stale test-written sessions carry
+  //    a structurally valid session.json (GIT-92), so the repo still qualified —
+  //    and even a perfect liveness test cannot make two processes with different
+  //    cwds agree. The only property that guarantees agreement is not depending
+  //    on cwd at all.
+  //
+  //    Project-scoped roots remain reachable, but only by saying so explicitly
+  //    via GITMEM_DIR. Nothing is moved or deleted; a project root that still
+  //    holds live state is reported loudly, with the exact way to select it.
+  const home = path.join(os.homedir(), ".gitmem");
+  warnAboutStrandedProjectRoots(home);
+  return home;
+}
+
+/** Report at most one stranded root per process — this runs on a hot path. */
+let strandedWarningIssued = false;
+
+/**
+ * GIT-91: warn when a project-scoped root still holds live state.
+ *
+ * Resolution no longer walks up, so such a root is no longer read. It is not
+ * touched either — moving a user's memory store is a far worse failure than not
+ * reading it. Instead: name the path and the one-line fix, once per process.
+ *
+ * Silence here would be the same defect as GIT-93's "Proceed freely" — a system
+ * reporting a clean state while a store it used to read sits unread.
+ */
+function warnAboutStrandedProjectRoots(home: string): void {
+  if (strandedWarningIssued) return;
+  strandedWarningIssued = true;
+
+  try {
+    const stranded: string[] = [];
+    let dir = process.cwd();
+    const root = path.parse(dir).root;
+    while (dir !== root) {
+      const candidate = path.join(dir, ".gitmem");
+      if (candidate !== home && isLiveGitmemRoot(candidate)) stranded.push(candidate);
+      dir = path.dirname(dir);
+    }
+    if (stranded.length === 0) return;
+
+    console.error(
+      `[gitmem-dir] Project-scoped .gitmem found with live state, NOT being used: ` +
+      `${stranded.join(", ")}. gitmem now resolves ${home} regardless of cwd, so every ` +
+      `process in a session agrees on one store (GIT-91). To use a project-scoped root, ` +
+      `set GITMEM_DIR=<path> explicitly. Nothing has been moved or deleted.`
+    );
+  } catch {
+    // Diagnostics must never break resolution.
+  }
+}
+
+/**
+ * GIT-91: does this directory hold a gitmem store that is actually in use?
+ *
+ * Presence of a file is not evidence. The registry in particular is present and
+ * empty on any tree a gitmem process has merely passed through, and empty means
+ * the opposite of "sessions live here". Test runs leave the same residue
+ * (GIT-92), so an unrelated repo can acquire a convincing-looking .gitmem/
+ * without ever having held a session.
+ *
+ * Any ONE of these counts:
+ *   - config.json           a deliberate project-scoped install
+ *   - a registered session  the registry names at least one
+ *   - a real session dir    sessions/<id>/session.json parses with a session_id
+ *
+ * Exported for tests and diagnostics; the resolution path is the only caller
+ * that matters.
+ */
+export function isLiveGitmemRoot(candidate: string): boolean {
+  try {
+    if (!fs.existsSync(candidate)) return false;
+
+    // A project-scoped install is deliberate — honour it even when idle.
+    if (fs.existsSync(path.join(candidate, "config.json"))) return true;
+
+    const registryPath = path.join(candidate, "active-sessions.json");
+    if (fs.existsSync(registryPath)) {
+      try {
+        const registry = JSON.parse(fs.readFileSync(registryPath, "utf-8"));
+        if (Array.isArray(registry.sessions) && registry.sessions.length > 0) return true;
+      } catch {
+        // Unreadable registry is not evidence of anything. Fall through to the
+        // session directories, which are the durable store (GIT-89).
       }
     }
-    dir = path.dirname(dir);
-  }
 
-  // 4. Fall back to ~/.gitmem (developer-scoped — survives across projects and containers)
-  const fallback = path.join(os.homedir(), ".gitmem");
-  console.error(`[gitmem-dir] Falling back to home dir: ${fallback}`);
-  return fallback;
+    const sessionsDir = path.join(candidate, "sessions");
+    if (!fs.existsSync(sessionsDir)) return false;
+    for (const entry of fs.readdirSync(sessionsDir)) {
+      const sessionFile = path.join(sessionsDir, entry, "session.json");
+      if (!fs.existsSync(sessionFile)) continue; // fixture dir, not a session
+      try {
+        const data = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
+        if (data && typeof data.session_id === "string" && data.session_id) return true;
+      } catch {
+        // Malformed session file — not evidence.
+      }
+    }
+    return false;
+  } catch {
+    // Unreadable candidate (permissions, race). Treat as not-live rather than
+    // throwing: resolution must always yield a usable root.
+    return false;
+  }
 }
 
 /**
@@ -175,4 +272,7 @@ export function getInstallId(): string | null {
  */
 export function clearGitmemDirCache(): void {
   cachedGitmemDir = null;
+  // GIT-91: the stranded-root notice is once-per-process, which would otherwise
+  // leak between tests that share a module instance.
+  strandedWarningIssued = false;
 }

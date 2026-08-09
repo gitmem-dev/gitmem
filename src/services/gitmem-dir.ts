@@ -90,13 +90,58 @@ export function getGitmemDir(): string {
   //    Project-scoped roots remain reachable, but only by saying so explicitly
   //    via GITMEM_DIR. Nothing is moved or deleted; a project root that still
   //    holds live state is reported loudly, with the exact way to select it.
-  const home = path.join(os.homedir(), ".gitmem");
+  const home = getHomeGitmemDir();
   warnAboutStrandedProjectRoots(home);
   return home;
 }
 
+/**
+ * The developer-scoped root: `<home>/.gitmem`.
+ *
+ * GITMEM_HOME overrides the base directory. It is distinct from GITMEM_DIR:
+ * GITMEM_DIR names the `.gitmem` directory itself and short-circuits resolution
+ * entirely, while GITMEM_HOME only relocates the home the fallback is computed
+ * from, leaving the precedence chain intact.
+ *
+ * It exists because os.homedir() reads the OS-level environment, which cannot be
+ * redirected from inside a worker thread — process.env there is a JS-level copy
+ * that never reaches getenv(). The test suite runs on `pool: "threads"` and
+ * writes real session state, so without this there is no way to keep it off the
+ * developer's store (GIT-92). The same lever is useful for containers and CI,
+ * where HOME is often not where state should live.
+ */
+export function getHomeGitmemDir(): string {
+  const base = process.env.GITMEM_HOME || os.homedir();
+  return path.join(base, ".gitmem");
+}
+
 /** Report at most one stranded root per process — this runs on a hot path. */
 let strandedWarningIssued = false;
+
+/**
+ * GIT-91: project-scoped roots above the cwd that hold live state and are no
+ * longer read.
+ *
+ * Exported because stderr is invisible in most MCP clients: session_start puts
+ * this in its display, where the user will actually see it. Returns [] on any
+ * error — a diagnostic must never break resolution.
+ */
+export function findStrandedProjectRoots(): string[] {
+  try {
+    const home = getHomeGitmemDir();
+    const stranded: string[] = [];
+    let dir = process.cwd();
+    const fsRoot = path.parse(dir).root;
+    while (dir !== fsRoot) {
+      const candidate = path.join(dir, ".gitmem");
+      if (candidate !== home && isLiveGitmemRoot(candidate)) stranded.push(candidate);
+      dir = path.dirname(dir);
+    }
+    return stranded;
+  } catch {
+    return [];
+  }
+}
 
 /**
  * GIT-91: warn when a project-scoped root still holds live state.
@@ -113,14 +158,7 @@ function warnAboutStrandedProjectRoots(home: string): void {
   strandedWarningIssued = true;
 
   try {
-    const stranded: string[] = [];
-    let dir = process.cwd();
-    const root = path.parse(dir).root;
-    while (dir !== root) {
-      const candidate = path.join(dir, ".gitmem");
-      if (candidate !== home && isLiveGitmemRoot(candidate)) stranded.push(candidate);
-      dir = path.dirname(dir);
-    }
+    const stranded = findStrandedProjectRoots();
     if (stranded.length === 0) return;
 
     console.error(

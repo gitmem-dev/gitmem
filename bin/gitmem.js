@@ -52,6 +52,8 @@ Other commands:
   npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)
   npx gitmem-mcp configure         Generate .mcp.json config for Claude Code / Cursor
   npx gitmem-mcp check             Run diagnostic health check
+  npx gitmem-mcp migrate-root      Copy a project-scoped .gitmem into ~/.gitmem
+  npx gitmem-mcp migrate-root --dry-run   Show what would be copied
   npx gitmem-mcp check --full      Full diagnostic with benchmarks
   npx gitmem-mcp install-hooks     Install hooks (standalone)
   npx gitmem-mcp uninstall-hooks   Remove hooks (standalone)
@@ -901,6 +903,9 @@ switch (command) {
     break;
   case "telemetry":
     import("../dist/commands/telemetry.js").then((m) => m.main(process.argv.slice(3)));
+    break;
+  case "migrate-root":
+    import("../dist/commands/migrate-root.js").then((m) => m.main(process.argv.slice(3)));
     break;
   case "install-hooks":
     cmdInstallHooks();

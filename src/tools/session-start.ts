@@ -36,7 +36,7 @@ import { loadActiveThreadsFromSupabase, archiveDormantThreads } from "../service
 import { resolveThreadScope, computePanelOmission, formatOmissionLine } from "../services/thread-scope.js";
 import type { ThreadScopeCounts } from "../services/thread-scope.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
-import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject } from "../services/gitmem-dir.js";
+import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject, findStrandedProjectRoots } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, findResumableSessionOnDisk, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
@@ -906,6 +906,26 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
       const scarSuffix = scarCount > 0 ? ` · ${scarCount} scars loaded from earlier` : "";
       visual.push(dimText(`Session active for: ${durationStr}${scarSuffix}`));
     }
+  }
+
+  // GIT-91: a project-scoped store that is no longer being read.
+  //
+  // Before v1.0.10 gitmem stored data in <project>/.gitmem, and a cwd walk-up
+  // kept finding it afterwards. GIT-91 removed that walk-up, so such a store is
+  // now unread — on the free tier that store IS the memory, learnings and all.
+  //
+  // This is reported here, not only to stderr, because stderr is invisible in
+  // most MCP clients. A user whose memory silently emptied after an upgrade
+  // would have no way to connect it to anything. Placed above threads so it is
+  // not pushed off the end of a long block.
+  const stranded = findStrandedProjectRoots();
+  if (stranded.length > 0) {
+    visual.push("");
+    visual.push(boldText("Memory store not being read"));
+    for (const root of stranded) visual.push(dimText(`  ${root}`));
+    visual.push(dimText(`  gitmem now reads ${getGitmemDir()} regardless of directory.`));
+    visual.push(dimText(`  Copy it over:  npx gitmem-mcp migrate-root --dry-run`));
+    visual.push(dimText(`  Or keep using it:  set GITMEM_DIR=<path>`));
   }
 
   // Threads section — top 5 by vitality, truncated to 60 chars

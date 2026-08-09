@@ -25,10 +25,11 @@ import * as os from "os";
 import {
   getGitmemDir,
   clearGitmemDirCache,
+  getHomeGitmemDir,
   isLiveGitmemRoot,
 } from "../../../src/services/gitmem-dir.js";
 
-const HOME_ROOT = path.join(os.homedir(), ".gitmem");
+const HOME_ROOT = getHomeGitmemDir();
 let tmp: string;
 const originalEnv = process.env.GITMEM_DIR;
 

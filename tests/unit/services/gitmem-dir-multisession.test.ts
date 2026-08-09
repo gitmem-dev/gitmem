@@ -14,6 +14,7 @@ import {
   getSessionPath,
   setGitmemDir,
   clearGitmemDirCache,
+  getHomeGitmemDir,
 } from "../../../src/services/gitmem-dir.js";
 
 let tmpDir: string;
@@ -94,7 +95,7 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
 
     vi.spyOn(process, "cwd").mockReturnValue(subDir);
 
-    expect(getGitmemDir()).toBe(path.join(os.homedir(), ".gitmem"));
+    expect(getGitmemDir()).toBe(getHomeGitmemDir());
   });
 
   it("ignores a config.json sentinel in a parent directory", () => {
@@ -108,7 +109,7 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
 
     vi.spyOn(process, "cwd").mockReturnValue(subDir);
 
-    expect(getGitmemDir()).toBe(path.join(os.homedir(), ".gitmem"));
+    expect(getGitmemDir()).toBe(getHomeGitmemDir());
   });
 
   it("does NOT use legacy active-session.json as sentinel (removed in multi-session)", () => {
@@ -122,7 +123,7 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
 
     vi.spyOn(process, "cwd").mockReturnValue(subDir);
 
-    expect(getGitmemDir()).toBe(path.join(os.homedir(), ".gitmem"));
+    expect(getGitmemDir()).toBe(getHomeGitmemDir());
   });
 
   it("selects a project-scoped root when GITMEM_DIR names it", () => {
@@ -153,6 +154,6 @@ describe("getGitmemDir walk-up with multiple sentinels", () => {
     vi.spyOn(process, "cwd").mockReturnValue(emptyDir);
 
     const result = getGitmemDir();
-    expect(result).toBe(path.join(os.homedir(), ".gitmem"));
+    expect(result).toBe(getHomeGitmemDir());
   });
 });

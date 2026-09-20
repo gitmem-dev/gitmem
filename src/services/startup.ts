@@ -15,7 +15,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { isConfigured, loadScarsWithEmbeddings } from "./supabase-client.js";
+import { isConfigured, loadScarsWithEmbeddings, getLearningsFingerprint, getSupabaseUrl } from "./supabase-client.js";
+import { computeStoreKey, readVectorCache, writeVectorCache, tryAcquireDownloadLock, waitForLeaderCache } from "./vector-disk-cache.js";
 import { getTableName } from "./tier.js";
 import { getGitmemDir } from "./gitmem-dir.js";
 import {
@@ -106,12 +107,50 @@ interface ScarWithEmbedding {
  * NOTE: Now loads all learning types (scars, patterns, wins, anti-patterns),
  * not just scars. This fixes the issue where ~64 patterns were being ignored.
  */
-async function loadScarsFromSupabase(): Promise<{
+async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean } = {}): Promise<{
   scars: ScarWithEmbedding[];
   latestUpdatedAt: string | null;
+  source: "disk" | "network";
 }> {
-  console.error(`[startup] Loading ALL learnings with embeddings from Supabase (cross-project)`);
   const startTime = Date.now();
+
+  // GIT-98: ask the store what it holds (one row, a few hundred bytes) before
+  // paying for the bulk download. Observed BEFORE the download on purpose: if
+  // the store changes mid-load the cache is merely stale and the next start
+  // reloads, which is the safe direction.
+  const storeKey = computeStoreKey(getSupabaseUrl(), getTableName("learnings"));
+  const fingerprint = await getLearningsFingerprint();
+
+  if (!options.bypassDiskCache) {
+    const cached = readVectorCache<ScarWithEmbedding>(storeKey, fingerprint);
+    if (cached.hit) {
+      console.error(
+        `[startup] Vector cache HIT: ${cached.rows.length} learnings from disk in ${Date.now() - startTime}ms ` +
+        `(${cached.bytesOnDisk} bytes on disk, bulk download skipped)`
+      );
+      return { scars: cached.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk" };
+    }
+    console.error(`[startup] Vector cache MISS: ${cached.reason}`);
+  }
+
+  // Single-flight the download across processes. A fan-out starts N workers at
+  // once and a single store write invalidates the cache for all of them, so
+  // without this a miss costs N identical downloads.
+  let releaseLock = tryAcquireDownloadLock(storeKey);
+  if (!releaseLock && !options.bypassDiskCache && fingerprint.count >= 0) {
+    console.error("[startup] Another process is downloading the index — waiting for its cache");
+    const fromLeader = await waitForLeaderCache<ScarWithEmbedding>(storeKey, fingerprint);
+    if (fromLeader) {
+      console.error(
+        `[startup] Vector cache HIT (via leader): ${fromLeader.rows.length} learnings in ${Date.now() - startTime}ms, bulk download skipped`
+      );
+      return { scars: fromLeader.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk" };
+    }
+    console.error("[startup] Leader did not produce a usable cache — downloading");
+  }
+  releaseLock = releaseLock ?? (() => {});
+
+  console.error(`[startup] Loading ALL learnings with embeddings from Supabase (cross-project)`);
 
   try {
     // Load ALL learnings across projects — semantic similarity handles relevance
@@ -127,10 +166,19 @@ async function loadScarsFromSupabase(): Promise<{
     // Get latest updated_at for staleness tracking
     const latestUpdatedAt = learnings.length > 0 ? learnings[0].updated_at || null : null;
 
-    return { scars: learnings, latestUpdatedAt };
+    // Never cache an empty result: an empty download is far more often a
+    // transient failure than a genuinely empty store, and caching it would make
+    // the failure sticky.
+    if (learnings.length > 0) {
+      writeVectorCache(storeKey, fingerprint, learnings);
+    }
+
+    return { scars: learnings, latestUpdatedAt, source: "network" };
   } catch (error) {
     console.error("[startup] Failed to load learnings:", error);
-    return { scars: [], latestUpdatedAt: null };
+    return { scars: [], latestUpdatedAt: null, source: "network" };
+  } finally {
+    releaseLock();
   }
 }
 
@@ -576,8 +624,9 @@ export async function flushCache(_project?: Project): Promise<CacheFlushResult> 
   const previousCount = getLocalVectorSearch().getScarCount();
 
   try {
-    // Load ALL fresh scars (cross-project)
-    const { scars, latestUpdatedAt } = await loadScarsFromSupabase();
+    // Load ALL fresh scars (cross-project). A flush is the user saying "I do not
+    // trust what you have" — bypass the disk cache (GIT-98) and rewrite it.
+    const { scars, latestUpdatedAt } = await loadScarsFromSupabase({ bypassDiskCache: true });
 
     // Reinitialize the unified index
     await reinitializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);

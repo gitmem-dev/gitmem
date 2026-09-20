@@ -580,6 +580,66 @@ export async function loadScarsWithEmbeddings<T = unknown>(
 }
 
 /**
+ * Cheap fingerprint of the learnings the local index is built from (GIT-98).
+ *
+ * One request, one row: `Prefer: count=exact` puts the total in Content-Range
+ * ("0-0/273") and the single row carries the newest updated_at. A few hundred
+ * bytes, versus megabytes for the bulk load it lets a warm start skip.
+ *
+ * The filters MUST stay identical to loadScarsWithEmbeddings, or the
+ * fingerprint describes a different set from the one that was cached.
+ *
+ * Returns count -1 on any failure; callers treat that as "unknown", never as a match.
+ */
+export async function getLearningsFingerprint(): Promise<{ count: number; latestUpdatedAt: string | null }> {
+  if (!isConfigured()) return { count: -1, latestUpdatedAt: null };
+
+  try {
+    const url = new URL(`${SUPABASE_REST_URL}/${getTableName("learnings")}`);
+    url.searchParams.set("select", "updated_at");
+    url.searchParams.set("learning_type", "in.(scar,pattern,win,anti_pattern)");
+    url.searchParams.set("is_active", "eq.true");
+    url.searchParams.set("order", "updated_at.desc");
+    url.searchParams.set("limit", "1");
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Accept-Profile": "public",
+        Prefer: "count=exact",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      console.error(`[supabase-direct] Fingerprint request failed: ${response.status}`);
+      return { count: -1, latestUpdatedAt: null };
+    }
+
+    // Content-Range: "0-0/273", or "*/0" for an empty set.
+    const range = response.headers.get("content-range") || "";
+    const total = Number(range.split("/")[1]);
+    if (!Number.isInteger(total) || total < 0) {
+      console.error(`[supabase-direct] Fingerprint: unparseable Content-Range "${range}"`);
+      return { count: -1, latestUpdatedAt: null };
+    }
+
+    const rows = (await response.json()) as Array<{ updated_at?: string }>;
+    return { count: total, latestUpdatedAt: rows[0]?.updated_at ?? null };
+  } catch (error) {
+    console.error("[supabase-direct] Fingerprint request error:", error instanceof Error ? error.message : error);
+    return { count: -1, latestUpdatedAt: null };
+  }
+}
+
+/** The configured Supabase URL, for keying per-store caches. Empty when unconfigured. */
+export function getSupabaseUrl(): string {
+  return SUPABASE_URL || "";
+}
+
+/**
  * Scar search with severity weighting
  *
  * Generates an embedding for the query, then calls the match_<table>_weighted

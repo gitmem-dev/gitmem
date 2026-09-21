@@ -335,4 +335,12 @@ export async function generateVariantsForScar(scar: ScarData): Promise<void> {
   console.error(
     `[variant-generation] ${generationSource}: created ${created}/2 variants for scar ${scar.id} (pipeline ${PIPELINE_VERSION})`
   );
+
+  // Surface partial failure to the effect tracker (GIT-104) instead of
+  // resolving as if both variants were written.
+  const firstFailure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (firstFailure) {
+    const reason = firstFailure.reason instanceof Error ? firstFailure.reason.message : String(firstFailure.reason);
+    throw new Error(`created ${created}/${variants.length} variants: ${reason}`);
+  }
 }

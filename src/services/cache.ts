@@ -180,27 +180,35 @@ export class CacheService {
    * Set cached result
    */
   async setResult<T>(key: string, data: T, ttlMs: number): Promise<void> {
-    if (!this.enabled) return;
-
     try {
-      const now = Date.now();
-      const entry: CacheEntry<T> = {
-        key,
-        created_at: now,
-        expires_at: now + ttlMs,
-        data,
-      };
-
-      const filename = this.keyToFilename(key);
-      const filepath = join(this.resultsDir, filename);
-      const content = JSON.stringify(entry, null, 2);
-
-      writeFileSync(filepath, content, { mode: 0o600 });
-      console.error(`[cache] SET: ${key} (TTL: ${ttlMs}ms)`);
+      await this.writeResult(key, data, ttlMs);
     } catch (error) {
       console.warn(`[cache] Error writing ${key}:`, error);
       // Don't disable cache on write errors - might be transient
     }
+  }
+
+  /**
+   * Like setResult, but rejects on a write error. Used under the effect
+   * tracker so cache write failures are counted (GIT-104).
+   */
+  private async writeResult<T>(key: string, data: T, ttlMs: number): Promise<void> {
+    if (!this.enabled) return;
+
+    const now = Date.now();
+    const entry: CacheEntry<T> = {
+      key,
+      created_at: now,
+      expires_at: now + ttlMs,
+      data,
+    };
+
+    const filename = this.keyToFilename(key);
+    const filepath = join(this.resultsDir, filename);
+    const content = JSON.stringify(entry, null, 2);
+
+    writeFileSync(filepath, content, { mode: 0o600 });
+    console.error(`[cache] SET: ${key} (TTL: ${ttlMs}ms)`);
   }
 
   /**
@@ -224,7 +232,7 @@ export class CacheService {
 
     // Cache the result (tracked, fire-and-forget)
     getEffectTracker().track("cache_set", "scar_search", () =>
-      this.setResult(key, data, TTL.SCAR_SEARCH)
+      this.writeResult(key, data, TTL.SCAR_SEARCH)
     );
 
     return { data, cache_hit: false };
@@ -250,7 +258,7 @@ export class CacheService {
 
     // Cache the result (tracked, fire-and-forget)
     getEffectTracker().track("cache_set", "decisions", () =>
-      this.setResult(key, data, TTL.DECISIONS)
+      this.writeResult(key, data, TTL.DECISIONS)
     );
 
     return { data, cache_hit: false };
@@ -276,7 +284,7 @@ export class CacheService {
 
     // Cache the result (tracked, fire-and-forget)
     getEffectTracker().track("cache_set", "wins", () =>
-      this.setResult(key, data, TTL.WINS)
+      this.writeResult(key, data, TTL.WINS)
     );
 
     return { data, cache_hit: false };
@@ -314,7 +322,7 @@ export class CacheService {
 
     const data = await fetcher();
     getEffectTracker().track("cache_set", "sessions", () =>
-      this.setResult(key, data, TTL.SESSIONS)
+      this.writeResult(key, data, TTL.SESSIONS)
     );
     return { data, cache_hit: false };
   }
@@ -337,7 +345,7 @@ export class CacheService {
 
     const data = await fetcher();
     getEffectTracker().track("cache_set", "scar_usage", () =>
-      this.setResult(key, data, TTL.SCAR_USAGE)
+      this.writeResult(key, data, TTL.SCAR_USAGE)
     );
     return { data, cache_hit: false };
   }

@@ -276,7 +276,11 @@ export function extractDecisionTriples(params: DecisionTripleParams): TripleCand
 
 /**
  * Write triples to knowledge_triples table.
- * Fire-and-forget: errors logged but never thrown to caller.
+ *
+ * Every candidate is attempted even if an earlier one fails. If any failed,
+ * rejects afterwards with a summary so the caller's effect tracker records the
+ * failure (GIT-104) — callers run this under getEffectTracker().track(), which
+ * never rethrows.
  */
 export async function writeTriples(candidates: TripleCandidate[]): Promise<number> {
   if (candidates.length === 0 || !hasSupabase()) {
@@ -284,6 +288,7 @@ export async function writeTriples(candidates: TripleCandidate[]): Promise<numbe
   }
 
   let written = 0;
+  const errors: string[] = [];
 
   for (const candidate of candidates) {
     try {
@@ -307,15 +312,21 @@ export async function writeTriples(candidates: TripleCandidate[]): Promise<numbe
       });
       written++;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(message);
       console.error(
         `[triple-writer] Failed to write triple: ${candidate.subject} ${candidate.predicate} ${candidate.object}`,
-        error instanceof Error ? error.message : error
+        message
       );
     }
   }
 
   if (written > 0) {
     console.error(`[triple-writer] Wrote ${written}/${candidates.length} triples`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`${errors.length}/${candidates.length} triples failed: ${errors[0]}`);
   }
 
   return written;
@@ -325,7 +336,7 @@ export async function writeTriples(candidates: TripleCandidate[]): Promise<numbe
 
 /**
  * Generate and write triples for a newly created learning.
- * Fire-and-forget — call with .catch(() => {}).
+ * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
 export function writeTriplesForLearning(params: LearningTripleParams): Promise<number> {
   const triples = extractLearningTriples(params);
@@ -334,7 +345,7 @@ export function writeTriplesForLearning(params: LearningTripleParams): Promise<n
 
 /**
  * Generate and write triples for a newly created decision.
- * Fire-and-forget — call with .catch(() => {}).
+ * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
 export function writeTriplesForDecision(params: DecisionTripleParams): Promise<number> {
   const triples = extractDecisionTriples(params);
@@ -430,7 +441,7 @@ export function extractThreadResolutionTriples(params: ThreadResolutionTriplePar
 
 /**
  * Generate and write triples for a newly created thread.
- * Fire-and-forget — call with .catch(() => {}).
+ * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
 export function writeTriplesForThreadCreation(params: ThreadCreationTripleParams): Promise<number> {
   const triples = extractThreadCreationTriples(params);
@@ -439,7 +450,7 @@ export function writeTriplesForThreadCreation(params: ThreadCreationTripleParams
 
 /**
  * Generate and write triples for a resolved thread.
- * Fire-and-forget — call with .catch(() => {}).
+ * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
 export function writeTriplesForThreadResolution(params: ThreadResolutionTripleParams): Promise<number> {
   const triples = extractThreadResolutionTriples(params);

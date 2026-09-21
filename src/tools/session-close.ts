@@ -1384,6 +1384,8 @@ export async function sessionClose(
             })
             .catch((err) => console.error("[session_close] Transcript processing failed:", err instanceof Error ? err.message : err));
         }
+        // Return the result so a { success: false } save is counted as a failure (GIT-104).
+        return saveResult;
       });
     }
   }

@@ -206,6 +206,7 @@ export async function recordScarUsageBatch(
 
     return {
       success: false,
+      error: error instanceof Error ? error.message : String(error),
       usage_ids: usageIds,
       resolved_count: resolvedCount,
       failed_count: params.scars.length - resolvedCount,

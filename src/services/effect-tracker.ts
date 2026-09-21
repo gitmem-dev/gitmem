@@ -92,6 +92,27 @@ class RingBuffer<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Result inspection
+// ---------------------------------------------------------------------------
+
+/**
+ * If a resolved value reports its own failure (`{ success: false }`), return a
+ * message describing it; otherwise null. Prefers the value's error, then
+ * message, then display text.
+ */
+function reportedFailure(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (v.success !== false) return null;
+  for (const key of ["error", "message", "display"] as const) {
+    const field = v[key];
+    if (field instanceof Error) return field.message;
+    if (typeof field === "string" && field.length > 0) return field;
+  }
+  return "resolved with success: false";
+}
+
+// ---------------------------------------------------------------------------
 // EffectTracker
 // ---------------------------------------------------------------------------
 
@@ -106,7 +127,10 @@ export class EffectTracker {
    * Wrap an async fire-and-forget operation for tracking.
    *
    * - On success: records success + duration, returns the result.
-   * - On failure: records failure + error message, returns undefined.
+   * - On a result of the form `{ success: false, ... }`: records a failure
+   *   (GIT-104 — many tools catch their own errors and resolve with that
+   *   shape), and still returns the result to the caller.
+   * - On rejection: records failure + error message, returns undefined.
    *   The error is **not** rethrown — this is intentionally fire-and-forget.
    */
   track<T>(
@@ -118,29 +142,36 @@ export class EffectTracker {
     const stats = this.getOrCreatePath(path);
     stats.attempted++;
 
+    const recordFailure = (errorMsg: string) => {
+      const duration = Date.now() - start;
+      stats.failed++;
+      stats.totalDurationMs += duration;
+      stats.lastFailure = {
+        error: errorMsg,
+        timestamp: new Date().toISOString(),
+      };
+      this.failures.push({
+        path,
+        target,
+        error: errorMsg,
+        timestamp: new Date().toISOString(),
+        durationMs: duration,
+      });
+    };
+
     return fn().then(
       (result) => {
-        const duration = Date.now() - start;
+        const reported = reportedFailure(result);
+        if (reported !== null) {
+          recordFailure(reported);
+          return result;
+        }
         stats.succeeded++;
-        stats.totalDurationMs += duration;
+        stats.totalDurationMs += Date.now() - start;
         return result;
       },
       (error) => {
-        const duration = Date.now() - start;
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        stats.failed++;
-        stats.totalDurationMs += duration;
-        stats.lastFailure = {
-          error: errorMsg,
-          timestamp: new Date().toISOString(),
-        };
-        this.failures.push({
-          path,
-          target,
-          error: errorMsg,
-          timestamp: new Date().toISOString(),
-          durationMs: duration,
-        });
+        recordFailure(error instanceof Error ? error.message : String(error));
         return undefined;
       },
     );

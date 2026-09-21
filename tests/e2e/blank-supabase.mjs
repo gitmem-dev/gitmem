@@ -36,7 +36,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -52,8 +53,6 @@ const DENY_REFS = new Set(["cjptxyezuxdiinufgrrm"]); // production GitMem — ne
 const EXPECTED_FAILURES = [
   { ticket: "GIT-73", what: "metrics/session_start FK race", method: "POST", path: /^\/rest\/v1\/gitmem_query_metrics$/, status: 409 },
   { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
-  { ticket: "GIT-106", what: "scar_enforcement_variants.active does not exist", method: "GET", path: /^\/rest\/v1\/scar_enforcement_variants$/, status: 400 },
-  { ticket: "GIT-84", what: "unprefixed scar_usage table (remove once GIT-84 merges)", method: null, path: /^\/rest\/v1\/scar_usage$/, status: 404 },
 ];
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -278,6 +277,15 @@ async function flow() {
   ];
   writeFileSync(join(gitmemDir, "threads.json"), JSON.stringify(localThreads, null, 2));
 
+  // A Claude Code transcript where session_close looks for one (~/.claude/projects/<cwd with / -> ->).
+  // Every real CLI/desktop close finds one, so the driver must too.
+  const claudeSessionId = randomUUID();
+  for (const cwd of new Set([home, realpathSync(home)])) {
+    const dir = join(home, ".claude", "projects", cwd.replace(/\//g, "-"));
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${claudeSessionId}.jsonl`), JSON.stringify({ type: "user", session_id: claudeSessionId, message: { role: "user", content: "hi" } }) + "\n");
+  }
+
   const seeded = {
     remote_threads_open: await count("gitmem_threads", "&status=eq.active"),
     local_threads_json: localThreads.length,
@@ -326,6 +334,12 @@ async function flow() {
     })),
   });
 
+  // Sub-agent observations: persisted with the session at close.
+  await step("absorb_observations", {
+    task_id: "VENUE-1",
+    observations: [{ source: "Sub-Agent: venue driver", text: "Driver observation for session persistence", severity: "info" }],
+  });
+
   const ct = await step("create_thread", { text: `Driver-created thread (${label}) ${new Date(now).toISOString()}` });
   const lt = await step("list_threads", { project: PROJECT });
   const ltOpen = Number((lt.match(/(\d+) open/) || [])[1] ?? -1);
@@ -340,6 +354,16 @@ async function flow() {
   });
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
+
+  // Did the close land? Is relevance readable from the store (GIT-109)?
+  const closedRows = sessionId
+    ? await rest("GET", `gitmem_sessions?select=id,closing_reflection&id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
+    : [];
+  const metricRows = sessionId
+    ? await rest("GET", `gitmem_query_metrics?select=tool_name,metadata&session_id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
+    : [];
+  const relevanceRows = metricRows.filter((m) => m.metadata && (m.metadata.memory_relevance || m.metadata.memories_applied));
+  const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));
   await waitQuiet(netlog, { minMs: 1000, quietMs: 2000 });
   await srv.close();
   ollama.close();
@@ -360,6 +384,9 @@ async function flow() {
     remote_threads_after: await count("gitmem_threads"),
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
+    session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
+    relevance,
     health_failed_total: failed,
     health_text: health,
     functions_v1_requests: vr.filter((r) => r.path.startsWith("/functions/v1/")).map((r) => `${r.method} ${r.path} -> ${r.status}`),
@@ -470,6 +497,12 @@ const failureCheck = checkFailures(allVenueRequests);
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && !result.session_close_persisted) {
+  failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);
+}
+if (mode === "flow" && result.recall_scar_ids > 0 && !result.relevance_readable) {
+  failureCheck.unexpected.push("confirm_scars relevance is not readable from gitmem_query_metrics.metadata (GIT-109)");
+}
 if (mode === "flow" && !result.thread_counts_match) {
   failureCheck.unexpected.push(
     `thread panel mismatch (GIT-97): session_start ${result.session_start_thread_count} != list_threads ${result.list_threads_open_right_after_session_start}`

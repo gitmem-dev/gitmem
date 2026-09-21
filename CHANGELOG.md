@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<!-- Release A. Version to be chosen at release (GIT-94). -->
+## [1.9.0] - 2026-09-20
 
 **No schema change. You do not need to re-run `setup.sql`.**
 

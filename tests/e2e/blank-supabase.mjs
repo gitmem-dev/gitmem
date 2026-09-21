@@ -29,7 +29,9 @@
  * ref is not on the deny list below.
  *
  * Exit status: 0 = every 4xx/5xx from /rest/v1/ or /functions/v1/ is on
- * EXPECTED_FAILURES; 1 = at least one unexpected failure; 2 = usage/config error.
+ * EXPECTED_FAILURES, no request reached /functions/v1/ at all, and (flow) the
+ * session_start thread count equals list_threads; 1 = any of those violated;
+ * 2 = usage/config error.
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -52,7 +54,6 @@ const EXPECTED_FAILURES = [
   { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
   { ticket: "GIT-106", what: "scar_enforcement_variants.active does not exist", method: "GET", path: /^\/rest\/v1\/scar_enforcement_variants$/, status: 400 },
   { ticket: "GIT-84", what: "unprefixed scar_usage table (remove once GIT-84 merges)", method: null, path: /^\/rest\/v1\/scar_usage$/, status: 404 },
-  { ticket: "GIT-97", what: "ww-mcp edge function absent on customer projects (remove once PR #30 merges)", method: "POST", path: /^\/functions\/v1\/ww-mcp$/, status: 404 },
 ];
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -465,6 +466,15 @@ async function egress() {
 
 const result = mode === "flow" ? await flow() : await egress();
 const failureCheck = checkFailures(allVenueRequests);
+// Invariants the edge-function removal (GIT-97) guarantees, whatever the status code.
+const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
+  .map((r) => `${r.method} ${r.path} -> ${r.status}`);
+if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && !result.thread_counts_match) {
+  failureCheck.unexpected.push(
+    `thread panel mismatch (GIT-97): session_start ${result.session_start_thread_count} != list_threads ${result.list_threads_open_right_after_session_start}`
+  );
+}
 writeFileSync(join(outDir, `failure-check-${label}-${mode}.json`), JSON.stringify(failureCheck, null, 2));
 console.log(JSON.stringify({ ...result, health_text: undefined, stderr_error_lines: undefined, failure_check: failureCheck }, null, 2));
 if (failureCheck.unexpected.length > 0) {

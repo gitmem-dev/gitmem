@@ -50,6 +50,27 @@ const DENY_REFS = new Set(["cjptxyezuxdiinufgrrm"]); // production GitMem — ne
  * when that ticket merges, so this list only shrinks. An entry allows a failure;
  * it does not require one (e.g. the GIT-73 race is intermittent).
  */
+/**
+ * Not defects: the store capability probe (src/services/store-columns.ts) is a
+ * read-only one-row SELECT that is SUPPOSED to 400/404 when a store lacks an
+ * optional column or table — that answer is how gitmem avoids writing it.
+ * Matched on exact shape only: GET ?select=<optional columns>&limit=1.
+ */
+const OPTIONAL_COLUMNS = new Set([
+  // production-only session columns (session-columns.ts PRODUCTION_ONLY_SESSION_COLUMNS)
+  "blocked_by", "children", "claude_code_session_id", "compacted", "compacted_at", "compacted_summary",
+  "handover_linear_slug", "insights", "metrics", "pre_compaction_summary", "task_observations",
+  "archived_at",
+]);
+function isCapabilityProbe(r) {
+  if (r.method !== "GET" || !(r.status === 400 || r.status === 404)) return false;
+  const q = new URLSearchParams(r.query);
+  if ([...q.keys()].sort().join(",") !== "limit,select" || q.get("limit") !== "1") return false;
+  const cols = (q.get("select") || "").split(",");
+  if (cols.length === 1 && cols[0] === "id") return /transcript_chunks$/.test(r.path); // table probe
+  return cols.every((c) => OPTIONAL_COLUMNS.has(c));
+}
+
 const EXPECTED_FAILURES = [
   { ticket: "GIT-73", what: "metrics/session_start FK race", method: "POST", path: /^\/rest\/v1\/gitmem_query_metrics$/, status: 409 },
   { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
@@ -223,7 +244,8 @@ const allVenueRequests = [];
 const expectedFor = (r) => EXPECTED_FAILURES.find((e) =>
   e.status === r.status && e.path.test(r.path) && (e.method === null || e.method === r.method));
 function checkFailures(reqs) {
-  const failures = reqs.filter((r) => r.status >= 400 && /^\/(rest|functions)\/v1\//.test(r.path));
+  const probes = reqs.filter(isCapabilityProbe).map((r) => `${r.method} ${r.path}${r.query} -> ${r.status}`);
+  const failures = reqs.filter((r) => r.status >= 400 && /^\/(rest|functions)\/v1\//.test(r.path) && !isCapabilityProbe(r));
   const unexpected = failures.filter((r) => !expectedFor(r))
     .map((r) => `${r.method} ${r.path}${r.query} -> ${r.status}`);
   const expectedSeen = {};
@@ -231,7 +253,7 @@ function checkFailures(reqs) {
     const e = expectedFor(r);
     if (e) expectedSeen[`${e.ticket} ${r.method} ${r.path} ${r.status}`] = (expectedSeen[`${e.ticket} ${r.method} ${r.path} ${r.status}`] || 0) + 1;
   }
-  return { unexpected, expected_seen: expectedSeen };
+  return { unexpected, expected_seen: expectedSeen, capability_probes: probes };
 }
 
 // ---------------------------------------------------------------- FLOW (runs 1 & 2)
@@ -360,7 +382,8 @@ async function flow() {
     ? await rest("GET", `gitmem_sessions?select=id,closing_reflection&id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
     : [];
   const metricRows = sessionId
-    ? await rest("GET", `gitmem_query_metrics?select=tool_name,metadata&session_id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
+    // recall rows carry the session in metadata.session_id (GIT-109), others in the column
+    ? await rest("GET", `gitmem_query_metrics?select=tool_name,metadata&or=(session_id.eq.${sessionId},metadata->>session_id.eq.${sessionId})`, undefined, { Prefer: "" }).then((r) => r.json())
     : [];
   const relevanceRows = metricRows.filter((m) => m.metadata && (m.metadata.memory_relevance || m.metadata.memories_applied));
   const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));

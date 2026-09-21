@@ -161,7 +161,7 @@ export async function recordScarUsageBatch(
     // Insert all usage records in parallel
     const insertPromises = usageRecords.map(async (record) => {
       const result = await supabase.directUpsert<{ id: string }>(
-        "scar_usage",
+        getTableName("scar_usage"),
         record
       );
       return result?.id || null;

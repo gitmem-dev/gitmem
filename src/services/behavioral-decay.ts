@@ -12,6 +12,7 @@
  */
 
 import { isConfigured, safeInFilter } from "./supabase-client.js";
+import { getTableName } from "./tier.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
@@ -98,7 +99,7 @@ export async function fetchDismissalCounts(
 
   try {
     // Query scar_usage for the given scar IDs (last 90 days)
-    const url = new URL(`${SUPABASE_REST_URL}/scar_usage`);
+    const url = new URL(`${SUPABASE_REST_URL}/${getTableName("scar_usage")}`);
     url.searchParams.set("select", "scar_id,reference_type");
     url.searchParams.set("scar_id", safeInFilter(scarIds));
     url.searchParams.set("surfaced_at", `gte.${new Date(Date.now() - 90 * 86400000).toISOString()}`);

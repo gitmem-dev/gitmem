@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<!-- Release B. Version to be chosen at release. -->
+## [1.10.0] - 2026-09-20
 
-**Re-run `setup.sql` after upgrading. It's safe to run more than once.** If you don't, everything
-still works. The one difference: the scar-scoring function keeps its old behaviour, rewriting every
-scored scar on each `session_start`. That makes the next process start re-download your embedding
-index instead of reading it from disk. Re-running `setup.sql` installs the version that only
-rewrites scars whose score actually changed.
+**Sessions that weren't being saved now save.** On your own Supabase project, a `session_close` was
+rejected by the database, and the session never saved, whenever it carried sub-agent observations,
+child-agent records, or a Claude Code session id. gitmem attaches that id whenever it finds the
+session's transcript, which is most Claude Code CLI and desktop sessions. The close reported
+`FAILED`, but the session was gone. Those closes now save. (GIT-110)
+
+**Re-running `setup.sql` is recommended, not required. It's safe to run more than once.** If you
+skip it, everything still works. The one difference: the scar-scoring function keeps its old
+behaviour, rewriting every scored scar on each `session_start`. That makes the next process start
+re-download your embedding index instead of reading it from disk. Re-running `setup.sql` installs
+the version that only rewrites scars whose score actually changed.
 
 **`health` will probably show more failures than before. That isn't a regression.** Those writes
 were already failing; `health` used to count them as successes. The ones that remain are listed
@@ -26,10 +32,11 @@ not you've re-run `setup.sql`.
 
 ### Fixed
 
-- **Session closes were being lost.** If a Claude Code CLI or desktop session found its transcript,
-  or recorded sub-agent observations, `session_close` sent columns your project doesn't have. The
-  database rejected the whole write, and the session was never saved (the close did report
-  `FAILED`). gitmem now checks once per process which optional columns your project has, using a
+- **Session closes were being lost (GIT-110).** If a Claude Code CLI or desktop session found its
+  transcript, or recorded sub-agent observations or child agents, `session_close` sent columns your
+  project doesn't have. The database rejected the whole write, and the session was never saved (the
+  close did report `FAILED`). gitmem now checks once per process which optional columns your
+  project has, using a
   small read-only query, and writes only those.
 - **Scar usage is recorded again.** Usage was written to a table name that doesn't exist on your
   project, so every usage record was lost. That also meant the scar-scoring and blindspot features

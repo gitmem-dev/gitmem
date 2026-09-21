@@ -201,11 +201,15 @@ export async function queryScarUsageByDateRange(
         surfaced_at: `gte.${startDate}`,
       };
 
-      return directQueryAll<ScarUsageRecord>(getTableName("scar_usage"), {
-        select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
+      // GIT-108: the usage table has no scar_title/scar_severity columns (selecting
+      // them was a 400 on every store). They come back null here and are filled
+      // from the learnings table by enrichScarUsageTitles(), which every caller runs.
+      const rows = await directQueryAll<Omit<ScarUsageRecord, "scar_title" | "scar_severity">>(getTableName("scar_usage"), {
+        select: "scar_id,agent,reference_type,execution_successful,surfaced_at",
         filters,
         order: "surfaced_at.desc",
       });
+      return rows.map((r) => ({ ...r, scar_title: null, scar_severity: null }));
     }
   );
 
@@ -244,8 +248,10 @@ export async function queryRepeatMistakes(
 }
 
 /**
- * Resolve scar titles and severities from the learnings table for scar_usage
- * records that have null/missing title data.
+ * Resolve scar titles and severities from the learnings table.
+ *
+ * Required after queryScarUsageByDateRange(): the usage table stores only
+ * scar_id, so every record arrives with null title/severity (GIT-108).
  */
 export async function enrichScarUsageTitles(
   usages: ScarUsageRecord[]

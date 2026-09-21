@@ -15,13 +15,13 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-const listRecords = vi.fn();
+const directQuery = vi.fn();
 const directPatch = vi.fn(async () => []);
 const directUpsert = vi.fn(async () => ({}));
 
 vi.mock("../../../src/services/supabase-client.js", () => ({
   isConfigured: () => true,
-  listRecords: (...a: unknown[]) => listRecords(...a),
+  directQuery: (...a: unknown[]) => directQuery(...a),
   directPatch: (...a: unknown[]) => directPatch(...a),
   directUpsert: (...a: unknown[]) => directUpsert(...a),
 }));
@@ -41,7 +41,7 @@ const C = "cccccccc-0000-4000-8000-000000000003";
 
 describe("updateRelevanceData (GIT-109)", () => {
   it("PATCHes metadata on the existing row and never writes a memories_applied column", async () => {
-    listRecords.mockResolvedValue([
+    directQuery.mockResolvedValue([
       { id: "m1", memories_surfaced: [A, B], metadata: { project: "p", match_count: 3 } },
       { id: "m2", memories_surfaced: [C], metadata: {} },
       { id: "m3", memories_surfaced: null, metadata: null },
@@ -49,10 +49,10 @@ describe("updateRelevanceData (GIT-109)", () => {
 
     await updateRelevanceData("session-1", [A], { A_unrelated: "high", [A]: "high", [B]: "noise" });
 
-    expect(listRecords).toHaveBeenCalledWith(expect.objectContaining({
-      table: "gitmem_query_metrics",
-      columns: "id,memories_surfaced,metadata",
-      filters: { session_id: "session-1" },
+    // recall rows carry the session in metadata.session_id (no FK race), others in the column.
+    expect(directQuery).toHaveBeenCalledWith("gitmem_query_metrics", expect.objectContaining({
+      select: "id,memories_surfaced,metadata",
+      filters: { or: "(session_id.eq.session-1,metadata->>session_id.eq.session-1)" },
     }));
     expect(directUpsert).not.toHaveBeenCalled();
     // Only m1 surfaced anything applied or rated; m2/m3 are left alone.

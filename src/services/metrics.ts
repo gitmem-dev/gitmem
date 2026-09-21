@@ -371,15 +371,16 @@ export async function updateRelevanceData(
   if (!hasSupabase()) return;
   const tracker = getEffectTracker();
   await tracker.track("relevance_update", sessionId, async () => {
-    // Get all metrics for this session that surfaced memories
-    const metrics = await supabase.listRecords<{
+    // Get all metrics for this session that surfaced memories. recall rows
+    // carry the session in metadata.session_id (no FK race); others in the column.
+    const metrics = await supabase.directQuery<{
       id: string;
       memories_surfaced?: string[] | null;
       metadata?: Record<string, unknown> | null;
-    }>({
-      table: "gitmem_query_metrics",
-      columns: "id,memories_surfaced,metadata",
-      filters: { session_id: sessionId },
+    }>("gitmem_query_metrics", {
+      select: "id,memories_surfaced,metadata",
+      filters: { or: `(session_id.eq.${sessionId},metadata->>session_id.eq.${sessionId})` },
+      limit: 200,
     });
 
     if (!metrics || !Array.isArray(metrics)) return;

@@ -739,6 +739,10 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       phase_tag: "recall",
       memories_surfaced: memoriesSurfaced,
       metadata: {
+        // GIT-109: lets session_close find this row to record which surfaced
+        // memories were applied. Kept in metadata rather than the session_id
+        // column, whose FK would race the session row's creation (cf. GIT-73).
+        ...(currentSession?.sessionId && { session_id: currentSession.sessionId }),
         project,
         match_count: matchCount,
         cache_hit,

@@ -11,6 +11,15 @@ const mockDirectPatch = vi.fn().mockResolvedValue(undefined);
 const mockDirectQuery = vi.fn().mockResolvedValue([]);
 const mockIsConfigured = vi.fn(() => true);
 
+// These tests model nTEG's store (orchestra_ prefix), which has the
+// production-only columns and tables. Customer-store behaviour (columns absent)
+// is covered in tests/unit/services/store-columns.test.ts.
+vi.mock("../../../src/services/store-columns.js", () => ({
+  supportedColumns: async (_table: string, candidates: string[]) => new Set(candidates),
+  storeHasTable: async () => true,
+  resetStoreColumnCache: () => {},
+}));
+
 vi.mock("../../../src/services/supabase-client.js", () => ({
   directPatch: (...args: unknown[]) => mockDirectPatch(...args),
   directQuery: (...args: unknown[]) => mockDirectQuery(...args),

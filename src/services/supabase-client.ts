@@ -1,10 +1,10 @@
 /**
- * Supabase MCP Client
+ * Supabase Client
  *
- * HTTP client for ww-mcp Edge Function following the pattern from
- * agents/coda/src/services/supabase-mcp.js
+ * Talks to Supabase over PostgREST only. GIT-97: every path here must work on
+ * a Supabase project provisioned from schema/setup.sql and nothing else. The
+ * package ships no edge function for data access, so none may be assumed.
  *
- * Uses JSON-RPC 2.0 protocol over HTTPS.
  * Integrates with CacheService for performance.
  */
 
@@ -74,90 +74,65 @@ export function isConfigured(): boolean {
 }
 
 /**
- * Get the ww-mcp Edge Function URL
+ * Build a PostgREST equality filter.
+ *
+ * Always emits an explicit `eq.` / `is.` operator. directQuery() guesses that a
+ * value containing "." already carries an operator, which misreads ordinary
+ * data such as a title ("Done != Deployed.") or a version ("1.8.0"). Callers of
+ * listRecords pass data, never operators, so nothing is guessed here.
  */
-function getMcpUrl(): string {
-  return `${SUPABASE_URL}/functions/v1/ww-mcp`;
+function toEqualityFilter(value: unknown): string {
+  if (value === null || value === undefined) return "is.null";
+  if (typeof value === "boolean") return `is.${value}`;
+  return `eq.${String(value)}`;
 }
 
 /**
- * Call the ww-mcp Edge Function
- */
-async function callMcp<T>(toolName: string, args: Record<string, unknown>): Promise<T> {
-  if (!isConfigured()) {
-    throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_KEY/SUPABASE_SERVICE_ROLE_KEY");
-  }
-
-  const mcpUrl = getMcpUrl();
-
-  const response = await fetch(mcpUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: `${toolName}-${Date.now()}`,
-      method: "tools/call",
-      params: {
-        name: toolName,
-        arguments: args,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`MCP HTTP error: ${response.status} - ${text.slice(0, 200)}`);
-  }
-
-  const result = await response.json() as {
-    error?: { message: string };
-    result?: {
-      content?: Array<{ text: string }>;
-    };
-  };
-
-  if (result.error) {
-    throw new Error(`MCP error: ${JSON.stringify(result.error)}`);
-  }
-
-  // Parse the result content
-  if (result.result?.content?.[0]?.text) {
-    return JSON.parse(result.result.content[0].text) as T;
-  }
-
-  return result.result as T;
-}
-
-/**
- * List records from a table with optional filters
+ * List records from a table with optional equality filters.
+ *
+ * GIT-97: previously routed through the ww-mcp edge function, which exists only
+ * on nTEG's Supabase project and 404s on every customer-owned one.
  */
 export async function listRecords<T = unknown>(
   options: SupabaseListOptions
 ): Promise<T[]> {
-  const { table, columns, filters, limit = 50, orderBy } = options;
-
-  const args: Record<string, unknown> = {
-    table,
-    limit,
-  };
-
-  if (columns) {
-    args.columns = columns;
+  if (!isConfigured()) {
+    throw new Error("Supabase not configured - check SUPABASE_URL and SUPABASE_KEY/SUPABASE_SERVICE_ROLE_KEY");
   }
 
-  if (filters) {
-    args.filters = filters;
+  const { table, columns, filters, limit = 50, orderBy } = options;
+
+  const url = new URL(`${SUPABASE_REST_URL}/${table}`);
+  url.searchParams.set("select", columns || "*");
+
+  for (const [key, value] of Object.entries(filters ?? {})) {
+    url.searchParams.set(key, toEqualityFilter(value));
   }
 
   if (orderBy) {
-    args.orderBy = orderBy;
+    url.searchParams.set("order", `${orderBy.column}.${orderBy.ascending ? "asc" : "desc"}`);
   }
 
-  const result = await callMcp<{ data: T[] }>("list_records", args);
-  return result.data || [];
+  url.searchParams.set("limit", String(limit));
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Accept-Profile": "public",
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase REST error: ${response.status} - ${text.slice(0, 200)}`);
+  }
+
+  const rows = (await response.json()) as T[];
+  return rows || [];
 }
 
 /**
@@ -167,24 +142,21 @@ export async function getRecord<T = unknown>(
   table: string,
   id: string
 ): Promise<T | null> {
-  const result = await callMcp<{ data: T }>("get_record", { table, id });
-  return result.data || null;
+  const rows = await listRecords<T>({ table, filters: { id }, limit: 1 });
+  return rows[0] ?? null;
 }
 
 /**
- * Upsert (insert or update) a record
+ * Upsert (insert or update) a record.
+ *
+ * Kept for API compatibility; delegates to directUpsert. Embeddings are
+ * generated client-side by the callers that need them (see embedding.ts).
  */
 export async function upsertRecord<T = unknown>(
   table: string,
   data: Record<string, unknown>
 ): Promise<T> {
-  const result = await callMcp<{ data: T; record?: T }>("upsert_record", {
-    table,
-    data,
-  });
-
-  // ww-mcp returns { data: record, operation: 'insert'|'update', embedding_generated: bool }
-  return result.data || (result as unknown as T);
+  return directUpsert<T>(table, data);
 }
 
 /**
@@ -243,7 +215,7 @@ export async function semanticSearch<T = unknown>(
 }
 
 // ============================================================================
-// DIRECT SUPABASE QUERIES (bypass ww-mcp for bulk operations)
+// DIRECT SUPABASE QUERIES
 // ============================================================================
 
 /**

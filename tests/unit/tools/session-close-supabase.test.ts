@@ -20,6 +20,15 @@ vi.mock("../../../src/services/agent-detection.js", () => ({
   detectAgent: () => ({ agent: "CLI", entrypoint: "cli", docker: true, hostname: "test" }),
 }));
 
+// These tests model nTEG's store (orchestra_ prefix), which has the
+// production-only columns and tables. Customer-store behaviour (columns absent)
+// is covered in tests/unit/services/store-columns.test.ts.
+vi.mock("../../../src/services/store-columns.js", () => ({
+  supportedColumns: async (_table: string, candidates: string[]) => new Set(candidates),
+  storeHasTable: async () => true,
+  resetStoreColumnCache: () => {},
+}));
+
 vi.mock("../../../src/services/supabase-client.js", () => ({
   listRecords: vi.fn(),
   getRecord: vi.fn(),
@@ -69,6 +78,7 @@ vi.mock("../../../src/services/storage.js", () => ({
 vi.mock("../../../src/services/session-state.js", () => ({
   clearCurrentSession: () => {},
   getSurfacedScars: () => [],
+  getConfirmations: () => [],
   getObservations: () => [],
   getChildren: () => [],
   getThreads: () => [],

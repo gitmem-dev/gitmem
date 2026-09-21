@@ -35,6 +35,7 @@ vi.mock("../../../src/services/tier.js", () => ({
   hasSupabase: vi.fn(() => true),
   getTableName: vi.fn((base: string) => `orchestra_${base}`),
   hasProInsights: () => false,
+  hasVariants: () => false,
 }));
 
 vi.mock("../../../src/services/embedding.js", () => ({

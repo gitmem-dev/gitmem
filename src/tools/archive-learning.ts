@@ -10,6 +10,7 @@
  */
 
 import { directPatch, directQuery, isConfigured } from "../services/supabase-client.js";
+import { supportedColumns } from "../services/store-columns.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { flushCache } from "../services/startup.js";
@@ -123,9 +124,14 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
 
     if (hasSupabase() && isConfigured()) {
       // Pro/dev: patch in Supabase
-      await directPatch(getTableName("learnings"), { id: `eq.${resolvedId}` }, {
+      // archived_at is not in setup.sql; sending it to a store without the
+      // column failed the whole PATCH, so the learning was never archived.
+      // updated_at (trigger) still records when it happened.
+      const learningsTable = getTableName("learnings");
+      const hasArchivedAt = (await supportedColumns(learningsTable, ["archived_at"])).has("archived_at");
+      await directPatch(learningsTable, { id: `eq.${resolvedId}` }, {
         is_active: false,
-        archived_at: archivedAt,
+        ...(hasArchivedAt && { archived_at: archivedAt }),
       });
 
       try {

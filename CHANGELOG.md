@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-21
+
+**Sessions that weren't being saved now save.** On your own Supabase project, a `session_close` was
+rejected by the database, and the session never saved, whenever it carried sub-agent observations,
+child-agent records, or a Claude Code session id. gitmem attaches that id whenever it finds the
+session's transcript, which is most Claude Code CLI and desktop sessions. The close reported
+`FAILED`, but the session was gone. Those closes now save. (GIT-110)
+
+**Re-running `setup.sql` is recommended, not required. It's safe to run more than once.** If you
+skip it, everything still works. The one difference: the scar-scoring function keeps its old
+behaviour, rewriting every scored scar on each `session_start`. That makes the next process start
+re-download your embedding index instead of reading it from disk. Re-running `setup.sql` installs
+the version that only rewrites scars whose score actually changed.
+
+**`health` will probably show more failures than before. That isn't a regression.** Those writes
+were already failing; `health` used to count them as successes. The ones that remain are listed
+under *Known issues*.
+
+This release is for Pro stores, meaning your own Supabase project. Before it, gitmem assumed columns
+and tables that a project set up from `setup.sql` doesn't have. Anything written to them failed, and
+in the worst case a whole session was lost. gitmem now writes only what your project has, whether or
+not you've re-run `setup.sql`.
+
+### Fixed
+
+- **Session closes were being lost (GIT-110).** If a Claude Code CLI or desktop session found its
+  transcript, or recorded sub-agent observations or child agents, `session_close` sent columns your
+  project doesn't have. The database rejected the whole write, and the session was never saved (the
+  close did report `FAILED`). gitmem now checks once per process which optional columns your
+  project has, using a
+  small read-only query, and writes only those.
+- **Scar usage is recorded again.** Usage was written to a table name that doesn't exist on your
+  project, so every usage record was lost. That also meant the scar-scoring and blindspot features
+  had nothing to work from. (GIT-84)
+- **`confirm_scars` relevance is now saved.** Which surfaced scars you applied, and how relevant you
+  rated each one, is now stored in the recall row of `gitmem_query_metrics`, inside its existing
+  `metadata` field (`memories_applied`, `memory_relevance`). Before, it went to a column that doesn't
+  exist and was matched against the wrong kind of value, so nothing was ever saved. (GIT-109)
+- **`archive_learning` now archives.** It also wrote an `archived_at` column your project doesn't
+  have, so the update was rejected and the scar stayed active. The column is now written only where
+  it exists; the row's `updated_at` still records when it was archived.
+- **Analytics, the `session_start` insights and the `session_close` blindspot check work again.**
+  They asked the usage table for title and severity columns it has never had. Those now come from
+  your learnings. (GIT-108)
+- **`health` reports failed writes as failures.** It used to count as a success any write that
+  failed but didn't throw an error. That's why the problems above went unnoticed. (GIT-104)
+- **`setup.sql` can be re-run.** A second run used to fail partway through. (GIT-84)
+
+### Changed
+
+- **A/B testing of scar enforcement variants is off outside dev tier.** It depends on tables
+  `setup.sql` doesn't create, so on your project every variant read and write failed. (GIT-106)
+- **Transcripts are uploaded only where the project is set up for them.** `setup.sql` creates
+  neither the Storage bucket nor the table transcript upload needs.
+- **`hook-scars.json` is now readable only by your user account** (mode `0600`), like the embedding
+  cache. It holds learning text. Existing files are tightened on the next start. (GIT-109)
+- **The scar-scoring function only rewrites scars whose score changed.** A scored scar stays cached
+  on disk across sessions unless its score actually moves. This needs the re-run `setup.sql`.
+  (GIT-84)
+
+### Known issues
+
+- **One `metrics` failure at `session_start` can appear in `health`.** A metrics row sometimes
+  arrives before its session row exists. Nothing is lost except that one metrics row. (GIT-73)
+- **A knowledge-graph link for new threads fails in `health`.** It writes a thread id where the
+  database expects a UUID. (GIT-105)
+
 ## [1.9.0] - 2026-09-20
 
 **No schema change. You do not need to re-run `setup.sql`.**

@@ -13,7 +13,8 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { hasSupabase, hasProInsights, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
-import { filterToSessionColumns } from "../services/session-columns.js";
+import { filterToStoreSessionColumns } from "../services/session-columns.js";
+import { storeHasTable } from "../services/store-columns.js";
 import { clearCurrentSession, resolveCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
 import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
@@ -67,6 +68,32 @@ function normalizeScarsApplied(scarsApplied: string | string[] | undefined | nul
   if (!trimmed) return [];
   const parts = trimmed.split(/(?:\.\s+|\;\s*|\s+—\s+)/).filter(p => p.trim().length > 0);
   return parts.length > 0 ? parts : [trimmed];
+}
+
+/**
+ * Which surfaced memories were applied this session, and how relevant each
+ * confirmed one was rated (GIT-109).
+ *
+ * APPLYING confirmations from confirm_scars are authoritative. Q6
+ * scars_applied is free text — usually titles — so an entry only counts when it
+ * names a surfaced scar by UUID or by exact (case-insensitive) title; it used to
+ * be compared to UUIDs verbatim and so almost never matched.
+ */
+export function buildRelevanceInput(
+  confirmations: ScarConfirmation[],
+  surfaced: SurfacedScar[],
+  scarsApplied: string[]
+): { appliedIds: string[]; relevanceById: Record<string, string> } {
+  const applied = new Set(confirmations.filter((c) => c.decision === "APPLYING").map((c) => c.scar_id));
+  for (const entry of scarsApplied) {
+    const key = entry.trim().toLowerCase();
+    if (!key) continue;
+    const match = surfaced.find((s) => s.scar_id.toLowerCase() === key || s.scar_title.trim().toLowerCase() === key);
+    if (match) applied.add(match.scar_id);
+  }
+  const relevanceById: Record<string, string> = {};
+  for (const c of confirmations) if (c.relevance) relevanceById[c.scar_id] = c.relevance;
+  return { appliedIds: [...applied], relevanceById };
 }
 
 /**
@@ -1364,9 +1391,15 @@ export async function sessionClose(
         console.error(`[session_close] Extracted Claude session ID: ${claudeSessionId}`);
       }
 
-      // Phase 2: Upload transcript (fire-and-forget — was blocking ~500-5000ms)
+      // Phase 2: Upload transcript (fire-and-forget — was blocking ~500-5000ms).
+      // Only where the store is provisioned for transcripts: setup.sql creates
+      // neither the storage bucket nor the transcript_chunks table, so on a
+      // customer store this wrote to objects that do not exist.
       const transcriptProject = isRetroactive ? "default" : (existingSession?.project as string | undefined);
-      getEffectTracker().track("transcript", "session_close", async () => {
+      const transcriptStoreReady = hasSupabase() && await storeHasTable(getTableName("transcript_chunks"));
+      if (!transcriptStoreReady) {
+        console.error("[session_close] Store has no transcript_chunks table; transcript not uploaded");
+      } else getEffectTracker().track("transcript", "session_close", async () => {
         const saveResult = await saveTranscript({
           session_id: sessionId,
           transcript: transcriptContent,
@@ -1384,6 +1417,8 @@ export async function sessionClose(
             })
             .catch((err) => console.error("[session_close] Transcript processing failed:", err instanceof Error ? err.message : err));
         }
+        // Return the result so a { success: false } save is counted as a failure (GIT-104).
+        return saveResult;
       });
     }
   }
@@ -1425,8 +1460,14 @@ export async function sessionClose(
     // LOCAL file record — a different shape, carrying rendering fields like
     // `display`. One unknown key fails the whole upsert (PGRST204) and the
     // close reports FAILED, which is honest but fatal on a fresh install.
+    //
+    // Overriding rule: production-only columns (observations, child agents, the
+    // Claude Code session id) are sent only if THIS store has them. On a store
+    // provisioned from setup.sql they used to fail the entire close with PGRST204.
+    const sessionsTable = getTableName("sessions");
+    const sessionRow = await filterToStoreSessionColumns(sessionData, sessionsTable);
     await Promise.all([
-      supabase.directUpsert(getTableName("sessions"), filterToSessionColumns(sessionData)),
+      supabase.directUpsert(sessionsTable, sessionRow),
       blindspotPromise,
     ]);
 
@@ -1492,9 +1533,12 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 1);
 
-    // Update relevance data for memories applied during session
-    if (normalizedScarsApplied.length > 0) {
-      updateRelevanceData(sessionId, normalizedScarsApplied).catch((err) => console.error("[session_close] updateRelevanceData failed:", err instanceof Error ? err.message : err));
+    // Update relevance data for memories applied during session (GIT-109).
+    // Structured confirm_scars decisions are the primary signal; Q6 scars_applied
+    // entries count when they name a surfaced scar by id or exact title.
+    const relevanceInput = buildRelevanceInput(getConfirmations(), getSurfacedScars(), normalizedScarsApplied);
+    if (relevanceInput.appliedIds.length > 0 || Object.keys(relevanceInput.relevanceById).length > 0) {
+      updateRelevanceData(sessionId, relevanceInput.appliedIds, relevanceInput.relevanceById).catch((err) => console.error("[session_close] updateRelevanceData failed:", err instanceof Error ? err.message : err));
     }
 
     // Compute timing breakdown from task_completion timestamps.

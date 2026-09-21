@@ -352,40 +352,50 @@ export async function withMetrics<T>(
 /**
  * Update metrics with relevance data (called at session close)
  *
+ * For every metric row of the session that surfaced memories, records which of
+ * those memories were applied and how relevant each confirmed one was rated.
+ * Stored inside the row's existing `metadata` JSONB as `memories_applied`
+ * (UUIDs) and `memory_relevance` ({ uuid: "high" | "low" | "noise" }).
+ *
+ * GIT-109: this used to upsert a `memories_applied` column that
+ * gitmem_query_metrics has never had. It now PATCHes the existing row and
+ * merges into `metadata`, so no column beyond the 1.8.0 schema is written.
+ *
  * Wrapped by Effect Tracker — failures are visible in health reports.
  */
 export async function updateRelevanceData(
   sessionId: string,
-  memoriesApplied: string[]
+  memoriesApplied: string[],
+  relevanceById: Record<string, string> = {}
 ): Promise<void> {
   if (!hasSupabase()) return;
   const tracker = getEffectTracker();
   await tracker.track("relevance_update", sessionId, async () => {
-    // Get all metrics for this session that surfaced memories
-    const metrics = await supabase.listRecords<{
+    // Get all metrics for this session that surfaced memories. recall rows
+    // carry the session in metadata.session_id (no FK race); others in the column.
+    const metrics = await supabase.directQuery<{
       id: string;
-      memories_surfaced?: string[];
-    }>({
-      table: "gitmem_query_metrics",
-      filters: { session_id: sessionId },
+      memories_surfaced?: string[] | null;
+      metadata?: Record<string, unknown> | null;
+    }>("gitmem_query_metrics", {
+      select: "id,memories_surfaced,metadata",
+      filters: { or: `(session_id.eq.${sessionId},metadata->>session_id.eq.${sessionId})` },
+      limit: 200,
     });
 
     if (!metrics || !Array.isArray(metrics)) return;
 
-    // Update each metric with applied memories
     for (const metric of metrics) {
-      if (metric.memories_surfaced && Array.isArray(metric.memories_surfaced)) {
-        const applied = metric.memories_surfaced.filter((id: string) =>
-          memoriesApplied.includes(id)
-        );
+      const surfaced = Array.isArray(metric.memories_surfaced) ? metric.memories_surfaced : [];
+      const applied = surfaced.filter((id) => memoriesApplied.includes(id));
+      const relevance = Object.fromEntries(
+        surfaced.filter((id) => id in relevanceById).map((id) => [id, relevanceById[id]])
+      );
+      if (applied.length === 0 && Object.keys(relevance).length === 0) continue;
 
-        if (applied.length > 0) {
-          await supabase.directUpsert("gitmem_query_metrics", {
-            id: metric.id,
-            memories_applied: applied,
-          });
-        }
-      }
+      await supabase.directPatch("gitmem_query_metrics", { id: `eq.${metric.id}` }, {
+        metadata: { ...(metric.metadata ?? {}), memories_applied: applied, memory_relevance: relevance },
+      });
     }
   });
 }

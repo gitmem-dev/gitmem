@@ -480,6 +480,8 @@ export interface RecordScarUsageBatchResult {
   resolved_count: number;
   failed_count: number;
   failed_identifiers?: string[];
+  /** Why the batch failed (set when success is false) */
+  error?: string;
   display?: string;
   performance: PerformanceData;
 }

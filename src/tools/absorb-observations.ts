@@ -17,6 +17,7 @@ import { wrapDisplay } from "../services/display-protocol.js";
 import { addObservations, getObservations, getCurrentSession } from "../services/session-state.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
 import * as supabase from "../services/supabase-client.js";
+import { supportedColumns } from "../services/store-columns.js";
 import {
   Timer,
   recordMetrics,
@@ -64,13 +65,18 @@ export async function absorbObservations(
 
   // 3. Optionally persist to Supabase (fire-and-forget, non-fatal)
   const session = getCurrentSession();
+  // task_observations exists on nTEG's store but not in setup.sql, so only
+  // persist where the store has the column. Observations stay in local session
+  // state either way and go out with session_close where supported.
   if (hasSupabase() && supabase.isConfigured() && session) {
-    supabase.directUpsert(getTableName("sessions"), {
-      id: session.sessionId,
-      task_observations: getObservations(),
-    }).catch((err) => {
-      console.error("[absorb_observations] Supabase persist failed (non-fatal):", err);
-    });
+    const sessionsTable = getTableName("sessions");
+    supportedColumns(sessionsTable, ["task_observations"])
+      .then((present) => present.has("task_observations")
+        ? supabase.directUpsert(sessionsTable, { id: session.sessionId, task_observations: getObservations() })
+        : undefined)
+      .catch((err) => {
+        console.error("[absorb_observations] Supabase persist failed (non-fatal):", err);
+      });
   }
 
   const latencyMs = timer.stop();

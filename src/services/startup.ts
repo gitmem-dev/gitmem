@@ -50,7 +50,8 @@ let backgroundRefreshInterval: ReturnType<typeof setInterval> | null = null;
  * cache. This writes a stripped-down scar file (no embeddings) that hook
  * processes can read for keyword search.
  */
-function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
+/** @internal exported for tests */
+export function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
   try {
     const gitmemDir = path.join(getGitmemDir(), "cache");
     if (!fs.existsSync(gitmemDir)) {
@@ -71,8 +72,12 @@ function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
       self_check_criteria: s.self_check_criteria,
     }));
 
+    // Owner-only, like the vector disk cache: this holds learning text (GIT-109).
+    // chmod as well, because `mode` only applies when the file is first created
+    // and installs before this fix already have a 0644 file.
     const cachePath = path.join(gitmemDir, "hook-scars.json");
-    fs.writeFileSync(cachePath, JSON.stringify(stripped));
+    fs.writeFileSync(cachePath, JSON.stringify(stripped), { mode: 0o600 });
+    fs.chmodSync(cachePath, 0o600);
     console.error(`[startup] Persisted ${stripped.length} scars to ${cachePath} for hook processes`);
   } catch (error) {
     // Non-fatal — hooks will just return nothing

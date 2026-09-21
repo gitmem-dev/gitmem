@@ -597,8 +597,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         variantResults.set(scarId, variantInfo);
       }
 
-      // Record enforcement metrics for variants (dev only)
-      if (hasMetrics()) {
+      // Record enforcement metrics for variants. Nested under hasVariants() (dev
+      // only, GIT-106): variant_performance_metrics is not provisioned by setup.sql.
+      if (hasVariants() && hasMetrics()) {
         const metricsPromises = results
           .filter(({ variantInfo }) => variantInfo.has_variants && variantInfo.variant)
           .map(async ({ scarId, variantInfo }) => {
@@ -738,6 +739,10 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
       phase_tag: "recall",
       memories_surfaced: memoriesSurfaced,
       metadata: {
+        // GIT-109: lets session_close find this row to record which surfaced
+        // memories were applied. Kept in metadata rather than the session_id
+        // column, whose FK would race the session row's creation (cf. GIT-73).
+        ...(currentSession?.sessionId && { session_id: currentSession.sessionId }),
         project,
         match_count: matchCount,
         cache_hit,

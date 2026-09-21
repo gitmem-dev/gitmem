@@ -17,7 +17,7 @@ import { flushCache } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
 import { generateVariantsForScar } from "../services/variant-generation.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
-import { hasSupabase, getTableName } from "../services/tier.js";
+import { hasSupabase, hasVariants, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { getProject } from "../services/session-state.js";
 import {
@@ -253,8 +253,9 @@ export async function createLearning(
         })
       );
 
-      // Auto-generate A/B testing variants for scars (tracked fire-and-forget)
-      if (params.learning_type === "scar") {
+      // Auto-generate A/B testing variants for scars (tracked fire-and-forget).
+      // Dev tier only (GIT-106): customer schemas do not provision the variant tables.
+      if (params.learning_type === "scar" && hasVariants()) {
         getEffectTracker().track("variant_generation", "learning", () =>
           generateVariantsForScar({
             id: learningId,

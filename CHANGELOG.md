@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.10.0] - 2026-09-20
+## [1.10.0] - 2026-09-21
 
 **Sessions that weren't being saved now save.** On your own Supabase project, a `session_close` was
 rejected by the database, and the session never saved, whenever it carried sub-agent observations,

@@ -201,7 +201,7 @@ export async function queryScarUsageByDateRange(
         surfaced_at: `gte.${startDate}`,
       };
 
-      return directQueryAll<ScarUsageRecord>("scar_usage", {
+      return directQueryAll<ScarUsageRecord>(getTableName("scar_usage"), {
         select: "scar_id,scar_title,scar_severity,agent,reference_type,execution_successful,surfaced_at",
         filters,
         order: "surfaced_at.desc",

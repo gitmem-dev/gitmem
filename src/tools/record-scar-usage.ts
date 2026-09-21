@@ -10,7 +10,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { wrapDisplay } from "../services/display-protocol.js";
 import * as supabase from "../services/supabase-client.js";
-import { hasSupabase } from "../services/tier.js";
+import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { detectAgent } from "../services/agent-detection.js";
 import { getCurrentSession } from "../services/session-state.js";
@@ -61,7 +61,7 @@ export async function recordScarUsage(
 
     if (hasSupabase()) {
       const upsertStart = Date.now();
-      await supabase.directUpsert("scar_usage", usageData);
+      await supabase.directUpsert(getTableName("scar_usage"), usageData);
       breakdown.upsert = {
         latency_ms: Date.now() - upsertStart,
         source: "supabase",

@@ -404,7 +404,12 @@ BEGIN
       updated_at = NOW()
   FROM usage_stats us
   WHERE l.id = us.scar_id
-    AND COALESCE(l.is_active, true) = true;
+    AND COALESCE(l.is_active, true) = true
+    -- Only touch rows whose multiplier actually changes. Rewriting unchanged
+    -- rows bumped updated_at on every session_start, which invalidates every
+    -- client's on-disk embedding cache (GIT-98) for no reason.
+    AND l.decay_multiplier IS DISTINCT FROM
+        GREATEST(0.1, 1.0 - (us.times_dismissed::FLOAT / us.times_surfaced::FLOAT) * 0.8);
 
   GET DIAGNOSTICS v_updated = ROW_COUNT;
 
@@ -529,9 +534,12 @@ CREATE TABLE IF NOT EXISTS gitmem_license_activations (
 ALTER TABLE gitmem_licenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gitmem_license_activations ENABLE ROW LEVEL SECURITY;
 
+-- Drop-then-create so setup.sql can be re-applied (CREATE POLICY has no IF NOT EXISTS)
+DROP POLICY IF EXISTS "Service role full access" ON gitmem_licenses;
 CREATE POLICY "Service role full access" ON gitmem_licenses
   FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access" ON gitmem_license_activations;
 CREATE POLICY "Service role full access" ON gitmem_license_activations
   FOR ALL USING (auth.role() = 'service_role');
 

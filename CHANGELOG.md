@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-20
+
+**No schema change. You do not need to re-run `setup.sql`.**
+
+This release is about Pro stores, meaning your own Supabase project. It covers two things: gitmem now
+works fully on a project that has only `setup.sql` in it, which is every customer project. And it
+no longer downloads your whole memory every time a process starts.
+
+### Fixed
+
+- **gitmem no longer depends on an edge function your project doesn't have.** Some reads went
+  through `/functions/v1/ww-mcp`, an edge function that exists only on nTEG's own Supabase project
+  and was never shipped with the package. On your project every one of those reads returned 404,
+  and gitmem quietly carried on without the data. Every read and write now goes directly to your
+  project's REST API (PostgREST). What you'll notice:
+  - **The `session_start` thread panel now matches `list_threads`.** It used to fall back to the
+    local `threads.json` file, which can be stale, while `list_threads` read your Supabase table,
+    so the two could show different threads. Both now show the same threads from Supabase. A failed
+    session-history read also no longer throws away a successful thread read.
+  - **Your last session and recent decisions load at `session_start` again.** Before, that step
+    failed silently with `Failed to load last session`.
+  - Filter values containing a `.`, such as a title or a version string, are now always treated as
+    data. (GIT-97)
+
+### Added
+
+- **An on-disk copy of your embedding index, so short-lived processes stop re-downloading it.** In
+  local search mode, every gitmem process downloaded every learning with its 1536-number embedding
+  at startup and threw it away on exit. Sub-agents, parallel workers and CI jobs each paid that cost
+  again, and one user used up a Supabase egress allowance this way.
+  - **How it works now:** each start asks your store one small question, how many learnings it holds
+    and when the newest changed (about 100 bytes). If that matches the copy on disk, gitmem loads
+    from disk and skips the download. With 250 learnings, a second start went from about 920 KB
+    received to about 100 bytes.
+  - **Staleness:** any mismatch, corruption or unreadable file counts as a miss, and gitmem
+    downloads fresh. It never serves a copy it can't confirm is current.
+  - **Parallel starts:** when several processes start at once, one of them downloads and the others
+    wait for its copy, instead of all downloading at the same time.
+  - **`cache-flush`** skips the disk copy and rewrites it.
+  - **Where it lives:** `<gitmem dir>/cache/learnings-vectors-<hash>.json`. The gitmem dir is
+    `~/.gitmem`, or `GITMEM_DIR` if you set it. `<hash>` is derived from your Supabase URL, so
+    different stores never share a file.
+  - **What it contains:** a local copy of your learnings, including titles, descriptions and
+    embeddings. The file is written with mode `0600`, so only your user account can read it.
+    Deleting it is always safe; gitmem downloads again on the next start.
+  - **Opting out:** set `GITMEM_VECTOR_DISK_CACHE=0` (or `false`) to download on every start, as
+    before. (GIT-98)
+
+### Known issues
+
+- **A session that changes scar scores can still cause one re-download.** At `session_start`, gitmem
+  recalculates scar scores from their usage history. Any scar whose score changes gets a new
+  timestamp, and the next process start downloads the index again. Stores with no usage history
+  aren't affected. This goes away when per-row delta sync lands.
+- **Scar usage and `confirm_scars` relevance aren't recorded on your project yet.** The usage write
+  still targets a table name that doesn't exist on customer stores. It's fixed separately (GIT-84)
+  and isn't part of this release.
+
 ## [1.8.0] - 2026-08-09
 
 **No one loses any information.** Nothing is deleted, nothing is moved, nothing is overwritten.

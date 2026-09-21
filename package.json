@@ -1,6 +1,6 @@
 {
   "name": "gitmem-mcp",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "mcpName": "io.github.gitmem-dev/gitmem",
   "description": "Persistent learning memory for AI coding agents. Memory that compounds.",
   "type": "module",
@@ -25,7 +25,7 @@
     "test:all": "npm run test:unit && npm run test:smoke && npm run test:integration && npm run test:perf && npm run test:e2e",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsc",
+    "prepublishOnly": "rm -rf dist && tsc",
     "release-status": "bash scripts/release-status.sh"
   },
   "dependencies": {

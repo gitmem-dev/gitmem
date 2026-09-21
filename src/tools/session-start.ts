@@ -180,7 +180,13 @@ async function loadLastSession(
   try {
     // Parallel load: sessions + threads are independent queries
     // (was sequential — ~200-300ms saved by parallelizing)
-    const [sessions, supabaseThreads] = await Promise.all([
+    //
+    // GIT-97: allSettled, not all. These reads are independent, and with
+    // Promise.all a failed session-history read rejected the pair and threw away
+    // a successful thread read — the panel then fell back to the local
+    // threads.json while list_threads showed the durable store. A failed half is
+    // named on stderr and degrades only itself.
+    const [sessionsResult, threadsResult] = await Promise.allSettled([
       supabase.listRecords<SessionRecord>({
         table: getTableName("sessions_lite"),
         filters: { agent, project },
@@ -189,6 +195,20 @@ async function loadLastSession(
       }),
       loadActiveThreadsFromSupabase(resolveThreadScope({ project })),
     ]);
+
+    let sessions: SessionRecord[] = [];
+    if (sessionsResult.status === "fulfilled") {
+      sessions = sessionsResult.value;
+    } else {
+      console.error("[session_start] Session history read failed (threads unaffected):", sessionsResult.reason);
+    }
+
+    let supabaseThreads: Awaited<ReturnType<typeof loadActiveThreadsFromSupabase>> = null;
+    if (threadsResult.status === "fulfilled") {
+      supabaseThreads = threadsResult.value;
+    } else {
+      console.error("[session_start] Thread read failed (session history unaffected):", threadsResult.reason);
+    }
 
     let aggregated_open_threads: ThreadObject[];
     let displayInfo: ThreadDisplayInfo[] = [];

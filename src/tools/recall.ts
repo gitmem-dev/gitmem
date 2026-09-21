@@ -597,8 +597,9 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         variantResults.set(scarId, variantInfo);
       }
 
-      // Record enforcement metrics for variants (dev only)
-      if (hasMetrics()) {
+      // Record enforcement metrics for variants. Nested under hasVariants() (dev
+      // only, GIT-106): variant_performance_metrics is not provisioned by setup.sql.
+      if (hasVariants() && hasMetrics()) {
         const metricsPromises = results
           .filter(({ variantInfo }) => variantInfo.has_variants && variantInfo.variant)
           .map(async ({ scarId, variantInfo }) => {

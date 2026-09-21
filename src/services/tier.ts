@@ -101,9 +101,17 @@ export function hasCompliance(): boolean {
   return getTier() === "dev";
 }
 
-/** Whether scar variant A/B testing is active (pro, dev — needs Supabase for assignment storage) */
+/**
+ * Whether scar variant A/B testing is active (dev only).
+ *
+ * GIT-106: the variant tables (scar_enforcement_variants.active,
+ * variant_assignments, variant_performance_metrics) are not provisioned by
+ * schema/setup.sql, so on a customer (pro) store every variant read and write
+ * failed. Every variant path — assignment in recall, generation in
+ * create_learning, and the performance-metrics write — gates on this.
+ */
 export function hasVariants(): boolean {
-  return getTier() !== "free";
+  return getTier() === "dev";
 }
 
 /** Whether transcript storage/retrieval is available (dev only) */
@@ -126,7 +134,7 @@ export function hasProInsights(): boolean {
   return getTier() !== "free";
 }
 
-/** Whether detailed performance metrics recording is active (pro, dev — aligned with hasVariants) */
+/** Whether detailed performance metrics recording is active (pro, dev) */
 export function hasMetrics(): boolean {
   return getTier() !== "free";
 }

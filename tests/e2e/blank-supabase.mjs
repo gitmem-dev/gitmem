@@ -408,6 +408,9 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    // GIT-107: the driver creates no stranded store; its GITMEM_DIR lives under
+    // $TMPDIR, i.e. /var/... vs /private/var/... on macOS.
+    false_stranded_notice: /NOT being read/.test(ss),
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -520,6 +523,9 @@ const failureCheck = checkFailures(allVenueRequests);
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && result.false_stranded_notice) {
+  failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);
 }

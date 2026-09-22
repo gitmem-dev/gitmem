@@ -448,6 +448,9 @@ async function flow() {
     health_has_write_path: healthHasWritePath,
     thread_triples: threadTriples.length,
     thread_triples_linked: threadTriplesLinked,
+    // GIT-107: the driver creates no stranded store; its GITMEM_DIR lives under
+    // $TMPDIR, i.e. /var/... vs /private/var/... on macOS.
+    false_stranded_notice: /NOT being read/.test(ss),
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -641,6 +644,9 @@ if (mode === "flow" && !result.health_has_write_path) {
 }
 if (mode === "flow" && !result.thread_triples_linked) {
   failureCheck.unexpected.push(`thread triples missing or not linked to a gitmem_threads row (GIT-105): ${result.thread_triples} found`);
+}
+if (mode === "flow" && result.false_stranded_notice) {
+  failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

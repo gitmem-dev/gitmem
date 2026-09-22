@@ -12,6 +12,8 @@ import * as supabase from "../services/supabase-client.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getProject } from "../services/session-state.js";
 import type { Project, PerformanceData, PerformanceBreakdown } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
+import type { WriteResult } from "../types/index.js";
 
 export interface SaveTranscriptParams {
   session_id: string;
@@ -20,8 +22,7 @@ export interface SaveTranscriptParams {
   project?: Project;
 }
 
-export interface SaveTranscriptResult {
-  success: boolean;
+export interface SaveTranscriptResult extends WriteResult {
   transcript_path?: string;
   size_bytes?: number;
   size_kb?: number;
@@ -43,7 +44,7 @@ export async function saveTranscript(
   if (!params.session_id) {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       error: "session_id is required",
       performance: buildPerformanceData("save_transcript", latencyMs, 0),
     };
@@ -52,7 +53,7 @@ export async function saveTranscript(
   if (!params.transcript) {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       error: "transcript content is required",
       performance: buildPerformanceData("save_transcript", latencyMs, 0),
     };
@@ -108,7 +109,8 @@ export async function saveTranscript(
     const estimatedTokens = Math.ceil(result.size_bytes / 4);
 
     return {
-      success: true,
+      // Transcripts only go to the durable store; reaching here means it took them.
+      ...writeResult(true),
       transcript_path: result.transcript_path,
       size_bytes: result.size_bytes,
       size_kb: Math.round(result.size_bytes / 1024 * 10) / 10,
@@ -122,7 +124,7 @@ export async function saveTranscript(
     const latencyMs = timer.stop();
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
-      success: false,
+      ...notStored(),
       error: `Failed to save transcript: ${errorMessage}`,
       performance: buildPerformanceData("save_transcript", latencyMs, 0),
     };

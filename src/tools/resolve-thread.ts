@@ -44,6 +44,8 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import { wrapDisplay } from "../services/display-protocol.js";
+import { writeResult, notStored } from "../services/write-result.js";
+import { hasSupabase } from "../services/tier.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ResolveThreadParams, ResolveThreadResult, ThreadObject } from "../types/index.js";
 
@@ -57,7 +59,7 @@ export async function resolveThread(
   if (!params.thread_id && !params.text_match) {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       error: "Either thread_id or text_match is required",
       performance: buildPerformanceData("resolve_thread", latencyMs, 0),
       display: wrapDisplay(`Either thread_id or text_match is required`),
@@ -87,7 +89,7 @@ export async function resolveThread(
     if (pos < 1 || pos > openThreads.length) {
       const latencyMs = timer.stop();
       return {
-        success: false,
+        ...notStored(),
         error: `Thread #${pos} out of range (${openThreads.length} open threads)`,
         performance: buildPerformanceData("resolve_thread", latencyMs, 0),
         display: wrapDisplay(`Thread #${pos} out of range (${openThreads.length} open threads)`),
@@ -162,7 +164,7 @@ export async function resolveThread(
       : `Thread not found: "${searchKey}"`;
 
     return {
-      success: false,
+      ...notStored(),
       error: message,
       performance: buildPerformanceData("resolve_thread", latencyMs, 0),
       display: wrapDisplay(message),
@@ -193,7 +195,9 @@ export async function resolveThread(
   // Persist to local file (cache)
   saveThreadsFile(threads);
 
-  // Update Supabase (source of truth) — graceful fallback on failure
+  // Update Supabase (source of truth). GIT-101: the outcome is the result —
+  // it used to be computed, logged to metrics and then dropped, so a resolve
+  // the durable store never saw still answered success: true.
   let supabaseSynced = false;
   const supabaseSuccess = await resolveThreadInSupabase(resolved.id, {
     resolvedAt: resolved.resolved_at,
@@ -275,8 +279,18 @@ export async function resolveThread(
 
   if (alsoResolved.length > 0) resolveMsg += `\nAlso resolved: ${alsoResolved.map(t => t.id).join(", ")}`;
 
+  // The local file was written above either way; on pro that alone is not a success.
+  const outcome = writeResult(supabaseSynced, true);
+  if (hasSupabase() && !outcome.durable) {
+    resolveMsg =
+      `RESOLVED LOCALLY ONLY — not durable (stored_in: local_only, durable: false).\n` +
+      `${resolveMsg}\n` +
+      `The durable store did not accept this resolve, so other sessions still see ${resolved.id} as open. ` +
+      `Retry when the store is reachable.`;
+  }
+
   return {
-    success: true,
+    ...outcome,
     resolved_thread: formatThreadForDisplay(resolved),
     ...(alsoResolved.length > 0 && {
       also_resolved: alsoResolved.map(formatThreadForDisplay),

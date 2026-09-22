@@ -22,6 +22,8 @@ import {
   buildPerformanceData,
 } from "../services/metrics.js";
 import type { ThreadObject, PerformanceData, Project, ThreadSuggestion } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
+import type { WriteResult } from "../types/index.js";
 
 // --- Types ---
 
@@ -30,8 +32,7 @@ export interface PromoteSuggestionParams {
   project?: Project;
 }
 
-export interface PromoteSuggestionResult {
-  success: boolean;
+export interface PromoteSuggestionResult extends WriteResult {
   thread?: ThreadObject;
   suggestion?: ThreadSuggestion;
   error?: string;
@@ -49,7 +50,7 @@ export async function promoteSuggestion(
   if (!params.suggestion_id) {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       error: "suggestion_id is required",
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
       display: wrapDisplay(`Failed: suggestion_id is required`),
@@ -64,7 +65,7 @@ export async function promoteSuggestion(
   if (!target) {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       error: `Pending suggestion not found: "${params.suggestion_id}"`,
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
       display: wrapDisplay(`Suggestion not found: ${params.suggestion_id}`),
@@ -79,8 +80,12 @@ export async function promoteSuggestion(
 
   if (!threadResult.success || !threadResult.thread) {
     const latencyMs = timer.stop();
+    // GIT-101: pass create_thread's own outcome through (a local_only thread
+    // is not a promotion), rather than restating it.
     return {
-      success: false,
+      ...notStored(),
+      durable: threadResult.durable,
+      stored_in: threadResult.stored_in,
       error: `Thread creation failed: ${threadResult.error || "unknown"}`,
       performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 0),
       display: wrapDisplay(`Failed to promote suggestion`),
@@ -93,7 +98,9 @@ export async function promoteSuggestion(
 
   const latencyMs = timer.stop();
   return {
-    success: true,
+    success: threadResult.success,
+    durable: threadResult.durable,
+    stored_in: threadResult.stored_in,
     thread: threadResult.thread,
     suggestion: target,
     performance: buildPerformanceData("promote_suggestion" as any, latencyMs, 1),

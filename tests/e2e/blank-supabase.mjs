@@ -373,6 +373,17 @@ async function flow() {
   const lt = await step("list_threads", { project: PROJECT });
   const ltOpen = Number((lt.match(/(\d+) open/) || [])[1] ?? -1);
 
+  // GIT-101: resolve a second driver thread; the durable store must record it
+  // and the response must not claim a local-only resolve as done.
+  const ct2 = await step("create_thread", { text: `Close out the quarterly vendor audit checklist (${label})`, allow_duplicate: true });
+  const resolveId = (ct2.match(/\bt-[0-9a-f]{8}\b/) || [])[0] ?? null;
+  const rt = resolveId ? await step("resolve_thread", { thread_id: resolveId, resolution_note: "venue driver" }) : "";
+  const resolvedRow = resolveId
+    ? await rest("GET", `gitmem_threads?select=status,resolved_by_session&thread_id=eq.${resolveId}`, undefined, { Prefer: "" }).then((r) => r.json())
+    : [];
+  const resolveDurable = !!resolveId && /Thread resolved/.test(rt) && !/LOCALLY ONLY/.test(rt)
+    && resolvedRow[0]?.status === "resolved";
+
   // GIT-99: a standard close with no payload file and no inline reflection
   // names the absolute path this server reads, instead of "requires N answers".
   const expectedPayloadPath = join(gitmemDir, "closing-payload.json");
@@ -423,6 +434,7 @@ async function flow() {
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
     missing_payload_named: missingPayloadNamed,
+    resolve_thread_durable: resolveDurable,
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -593,6 +605,9 @@ const failureCheck = checkFailures(allVenueRequests);
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && !result.resolve_thread_durable) {
+  failureCheck.unexpected.push("resolve_thread did not land durably in gitmem_threads, or claimed it did not (GIT-101)");
+}
 if (mode === "flow" && !result.missing_payload_named) {
   failureCheck.unexpected.push("session_close without a payload did not name the absolute closing-payload.json path (GIT-99)");
 }

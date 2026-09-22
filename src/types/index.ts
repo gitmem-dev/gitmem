@@ -296,8 +296,21 @@ export interface CloseCompliance {
   retroactive?: boolean; // Optional: marks sessions created post-mortem
 }
 
-export interface SessionCloseResult {
+/**
+ * GIT-101: the contract every write tool answers with — where the record
+ * landed and whether it survives this machine. See services/write-result.ts.
+ */
+export type StoredIn = "supabase" | "local" | "local_only" | null;
+export interface WriteResult {
+  /** durable || !hasSupabase(), and false when nothing was stored. */
   success: boolean;
+  /** Whether what was stored survives this machine. */
+  durable: boolean;
+  /** Names the store in-band. */
+  stored_in: StoredIn;
+}
+
+export interface SessionCloseResult extends WriteResult {
   session_id: string;
   close_compliance: CloseCompliance;
   validation_errors?: string[];
@@ -330,8 +343,7 @@ export interface CreateLearningParams {
   self_check_criteria?: string[];
 }
 
-export interface CreateLearningResult {
-  success: boolean;
+export interface CreateLearningResult extends WriteResult {
   learning_id: string;
   embedding_generated: boolean;
   /** Error details when success=false */
@@ -353,8 +365,7 @@ export interface CreateDecisionParams {
   project?: Project;
 }
 
-export interface CreateDecisionResult {
-  success: boolean;
+export interface CreateDecisionResult extends WriteResult {
   decision_id: string;
   display?: string;
   performance: PerformanceData;
@@ -450,8 +461,7 @@ export interface RecordScarUsageParams {
   variant_id?: string; // UUID of assigned variant for A/B testing
 }
 
-export interface RecordScarUsageResult {
-  success: boolean;
+export interface RecordScarUsageResult extends WriteResult {
   usage_id: string;
   /** Error details when success=false */
   errors?: string[];
@@ -479,8 +489,7 @@ export interface RecordScarUsageBatchParams {
   project?: Project;
 }
 
-export interface RecordScarUsageBatchResult {
-  success: boolean;
+export interface RecordScarUsageBatchResult extends WriteResult {
   usage_ids: string[];
   resolved_count: number;
   failed_count: number;
@@ -603,8 +612,7 @@ export interface ResolveThreadParams {
   resolution_note?: string;
 }
 
-export interface ResolveThreadResult {
-  success: boolean;
+export interface ResolveThreadResult extends WriteResult {
   resolved_thread?: ThreadObject;
   /** Threads that were also resolved via duplicate cascade */
   also_resolved?: ThreadObject[];

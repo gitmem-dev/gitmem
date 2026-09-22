@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Just upgrade the package. Nothing to change on your database.** Every fix in this release works on
+a project still on the `setup.sql` you first ran, back to 1.8.0. Each one was checked against a
+project on exactly that schema.
+
+**A chat in one project no longer continues another project's session.** The desktop app runs one
+gitmem process for every chat. Starting a session for project Y while a project X chat was open used
+to resume X's session, swapping the project you asked for for X's and saying so only on stderr.
+`session_start(project: Y)` now starts a Y session and leaves X open and resumable. Called with no
+project, it resumes the most recent session and names that session's project in its output.
+`force: true` carries activity forward only from a session of the same project. (GIT-86)
+
+**Every write now says whether it was actually saved.** `create_learning`, `create_decision`,
+`create_thread`, `resolve_thread`, `archive_learning`, `record_scar_usage` (single and batch),
+`session_close`, `promote_suggestion` and `save_transcript` now report `durable` and `stored_in`
+alongside `success`. `success` means the record reached your database. Before this,
+`resolve_thread` reported success even when your database never recorded the resolve, so other
+sessions still saw the thread as open. Now it says `RESOLVED LOCALLY ONLY — not durable`. (GIT-101)
+
+**Stop enforcement was inactive on machines without jq; fixed.** (GIT-112)
+
+### Fixed
+
+- **Sessions start without re-downloading the whole index.** On Pro, nearly every `session_start`
+  changes a few scar scores, and the next start used to download every learning with its embedding
+  again. Now only the changed rows are fetched: in testing, 42 KB instead of 922 KB for 250
+  learnings. (GIT-98)
+- **The hooks read the same store as the server.** They looked for `.gitmem` in the current directory
+  instead of `GITMEM_DIR`, then `GITMEM_HOME`, then `~/.gitmem`, so they could see no session or
+  someone else's. They now skip sessions whose server process has exited, and the Stop hook prints
+  the exact path of `closing-payload.json`. (GIT-99)
+- **`session_close` says where it looked for your payload.** With no `closing-payload.json` and no
+  inline reflection, it now reports `closing-payload.json not found at <path>` instead of asking you
+  to answer the closing questions again. (GIT-99)
+- **The startup write check can no longer hang silently.** It gives up after 10 seconds and reports
+  "timed out, durability UNVERIFIED", and a database that refuses the connection is reported as
+  unreachable rather than OK. `health` now shows the latest verdict. (GIT-102)
+- **`session_close` warnings say what failed.** Each warning names the part that failed and why, and
+  says whether the session itself was saved. Before, a close showed only `WARN N write failures`.
+  (GIT-102)
+- **No more `metrics` failure at `session_start`.** A metrics row now waits for its session row to
+  exist. (GIT-73, listed under *Known issues* in 1.10.0)
+- **Knowledge-graph links for threads are saved.** They wrote a thread id where the database expects a
+  UUID, so every one was rejected. (GIT-105, listed under *Known issues* in 1.10.0)
+- **`migrate-root` merges your memory instead of skipping it.** If your home store already had
+  learnings, threads, decisions or sessions, the project store's were skipped as "already exists". They
+  are now merged record by record: the newer version wins and the other is written to
+  `migrate-root-conflicts.json`, after a backup. Running it again changes nothing. (GIT-100)
+- **No false "Memory store found but NOT being read" on macOS.** Paths under `/var` and
+  `/private/var` (and any symlink) were compared as text, so the store gitmem was reading could be
+  reported as unread. (GIT-107)
+
+### Changed
+
+- **Releases are gated on a database still on 1.8.0's `setup.sql`, and on the hooks passing
+  without jq.** Nothing is published unless both pass. (GIT-83, GIT-109)
+
 ## [1.10.0] - 2026-09-21
 
 **Sessions that weren't being saved now save.** On your own Supabase project, a `session_close` was

@@ -44,6 +44,13 @@ trap "rm -rf $TMPDIR" EXIT
 
 cd "$TMPDIR"
 
+# GIT-99: the hooks resolve .gitmem like the server does (GITMEM_DIR, then
+# GITMEM_HOME/.gitmem, then ~/.gitmem), no longer from cwd. These tests used to
+# rely on cwd = $TMPDIR finding $TMPDIR/.gitmem; point the hooks there
+# explicitly instead — and, unpointed, they would read the developer's ~/.gitmem.
+export GITMEM_DIR="$TMPDIR/.gitmem"
+unset GITMEM_HOME
+
 # ============================================================================
 # Helpers: multi-session registry format
 # ============================================================================
@@ -621,6 +628,103 @@ fi
 
 # Clean up
 rm -rf /tmp/gitmem-hooks-*
+
+# ============================================================================
+# TEST GROUP: .gitmem root resolution (GIT-99)
+# ============================================================================
+
+echo ""
+echo -e "${YELLOW}=== Root Resolution (GIT-99) ===${NC}"
+
+# Resolve in a clean subshell and print GITMEM_ROOT.
+resolve_root() {
+    ( cd "$1" && shift && env -u GITMEM_DIR -u GITMEM_HOME "$@" bash -c '. "$0/scripts/resolve-root.sh"; printf "%s" "$GITMEM_ROOT"' "$SCRIPT_DIR" )
+}
+R_HOME="$TMPDIR/r-home"; R_GH="$TMPDIR/r-gh"; R_DIR="$TMPDIR/r-dir/.gitmem"; R_CWD="$TMPDIR/r-cwd"
+mkdir -p "$R_HOME" "$R_GH" "$R_DIR" "$R_CWD/.gitmem"
+
+GOT=$(resolve_root "$R_CWD" HOME="$R_HOME" GITMEM_HOME="$R_GH" GITMEM_DIR="$R_DIR")
+[ "$GOT" = "$R_DIR" ] && pass "GITMEM_DIR wins over GITMEM_HOME and HOME" \
+    || fail "GITMEM_DIR precedence" "$R_DIR" "$GOT"
+
+GOT=$(resolve_root "$R_CWD" HOME="$R_HOME" GITMEM_HOME="$R_GH")
+[ "$GOT" = "$R_GH/.gitmem" ] && pass "GITMEM_HOME/.gitmem wins over HOME" \
+    || fail "GITMEM_HOME precedence" "$R_GH/.gitmem" "$GOT"
+
+GOT=$(resolve_root "$R_CWD" HOME="$R_HOME")
+[ "$GOT" = "$R_HOME/.gitmem" ] && pass "falls back to ~/.gitmem — never cwd/.gitmem" \
+    || fail "HOME fallback" "$R_HOME/.gitmem" "$GOT"
+
+GOT=$(resolve_root "$R_CWD" HOME="$R_HOME" GITMEM_DIR="rel/.gitmem")
+[ "$GOT" = "$R_CWD/rel/.gitmem" ] && pass "relative GITMEM_DIR is made absolute" \
+    || fail "relative GITMEM_DIR" "$R_CWD/rel/.gitmem" "$GOT"
+
+# Hooks find the store from any cwd, and ignore a decoy .gitmem in cwd.
+setup_state 10 60
+create_session_registry "test-session"
+echo '{"sessions":[]}' > "$R_CWD/.gitmem/active-sessions.json"
+OUTPUT=$( cd "$R_CWD" && echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null )
+echo "$OUTPUT" | grep -q '"decision": "block"' && pass "Stop hook reads GITMEM_DIR from an unrelated cwd (decoy cwd/.gitmem ignored)" \
+    || fail "Stop hook cwd independence" "block" "$OUTPUT"
+
+# The Stop hook names the absolute payload path it resolved.
+PAYLOAD_EXPECTED="$GITMEM_DIR/closing-payload.json"
+echo "$OUTPUT" | grep -qF "WRITE structured payload to $PAYLOAD_EXPECTED (this exact absolute path" \
+    && pass "Stop hook text prints the resolved absolute payload path" \
+    || fail "Stop hook payload path" "$PAYLOAD_EXPECTED" "$OUTPUT"
+echo "$OUTPUT" | (command -v node >/dev/null && node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{JSON.parse(d)})' 2>/dev/null) \
+    && pass "Stop hook output with the path is valid JSON" \
+    || fail "Stop hook JSON" "parseable JSON" "$OUTPUT"
+
+# A path that needs escaping still yields valid JSON.
+Q_DIR="$TMPDIR/q\"uote/.gitmem"; mkdir -p "$Q_DIR"
+echo '{"sessions":[{"session_id":"q"}]}' > "$Q_DIR/active-sessions.json"
+setup_state 10 60
+OUTPUT=$( GITMEM_DIR="$Q_DIR" bash -c 'echo "{}" | bash "$0/scripts/session-close-check.sh"' "$SCRIPT_DIR" 2>/dev/null )
+echo "$OUTPUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d);if(!j.reason.includes(process.argv[1]))process.exit(1)})' "$Q_DIR/closing-payload.json" 2>/dev/null \
+    && pass "payload path with a quote is JSON-escaped" \
+    || fail "payload path escaping" "valid JSON containing $Q_DIR/closing-payload.json" "$OUTPUT"
+
+# Registry entries whose pid is dead on this host are skipped.
+DEAD_PID=99999999
+while kill -0 "$DEAD_PID" 2>/dev/null; do DEAD_PID=$((DEAD_PID - 1)); done
+HOST=$(hostname)
+setup_state 10 60
+echo "{\"sessions\":[{\"session_id\":\"dead-one\",\"pid\":$DEAD_PID,\"hostname\":\"$HOST\",\"started_at\":\"2026-09-21T00:00:00Z\"}]}" > "$GITMEM_DIR/active-sessions.json"
+OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
+! echo "$OUTPUT" | grep -q "block" && pass "Stop hook ignores a registry entry whose server pid is dead" \
+    || fail "dead pid skipped (Stop)" "no block" "$OUTPUT"
+
+setup_state 10 60
+echo "{\"sessions\":[{\"session_id\":\"dead-one\",\"pid\":$DEAD_PID,\"hostname\":\"other-host-$HOST\",\"started_at\":\"2026-09-21T00:00:00Z\"}]}" > "$GITMEM_DIR/active-sessions.json"
+OUTPUT=$(echo '{}' | bash "$SCRIPT_DIR/scripts/session-close-check.sh" 2>/dev/null)
+echo "$OUTPUT" | grep -q "block" && pass "an entry from another host is kept (its pid cannot be checked here)" \
+    || fail "other-host entry kept" "block" "$OUTPUT"
+
+# recall-check uses the newest LIVE session, not sessions[0].
+remove_session_registry
+echo "{\"sessions\":[
+  {\"session_id\":\"live-old\",\"pid\":$$,\"hostname\":\"$HOST\",\"started_at\":\"2026-09-21T00:00:00Z\"},
+  {\"session_id\":\"dead-new\",\"pid\":$DEAD_PID,\"hostname\":\"$HOST\",\"started_at\":\"2026-09-21T09:00:00Z\"}]}" > "$GITMEM_DIR/active-sessions.json"
+create_session_data "live-old" '[{"scar_id":"s1","scar_title":"Unconfirmed","source":"recall"}]' '[]'
+create_session_data "dead-new" '[]' '[]'
+GOT=$(bash -c '. "$0/scripts/resolve-root.sh"; gitmem_live_session_ids | tr "\n" " "' "$SCRIPT_DIR")
+[ "$GOT" = "live-old " ] && pass "gitmem_live_session_ids: newest first, dead pid skipped" \
+    || fail "live session ids" "live-old" "$GOT"
+setup_state 0 0
+OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+echo "$OUTPUT" | grep -q "block" && pass "recall-check reads the live session's scars (dead newer entry skipped)" \
+    || fail "recall-check live session" "block on unconfirmed scar of live-old" "$OUTPUT"
+
+# The pid check needs no `ps` (minimal images have none).
+GOT=$(PATH="$TMPDIR/no-ps-bin" "$BASH" -c '. "$0/scripts/resolve-root.sh"; gitmem_pid_alive $$ && echo alive; gitmem_pid_alive '"$DEAD_PID"' || echo dead' "$SCRIPT_DIR" 2>/dev/null | tr "\n" " ")
+[ "$GOT" = "alive dead " ] && pass "gitmem_pid_alive works with no ps on PATH" \
+    || fail "pid check without ps" "alive dead" "$GOT"
+GOT=$(bash -c '. "$0/scripts/resolve-root.sh"; gitmem_pid_alive 1 && echo alive' "$SCRIPT_DIR")
+[ "$GOT" = "alive" ] && pass "a live pid owned by another user (EPERM) counts as alive" \
+    || fail "EPERM pid alive" "alive" "$GOT"
+
+remove_session_registry
 
 # ============================================================================
 # Summary

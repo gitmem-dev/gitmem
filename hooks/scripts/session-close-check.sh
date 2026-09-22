@@ -35,16 +35,12 @@ fi
 
 IS_MEANINGFUL=false
 
-ACTIVE_SESSIONS=".gitmem/active-sessions.json"
+# GIT-99: resolve .gitmem the way the server does, not from cwd.
+. "$(dirname "${BASH_SOURCE[0]}")/resolve-root.sh"
+# A live registry entry means a session is open. Entries whose server pid is
+# dead are skipped: nobody can close those from here (GIT-99).
 SESSION_STARTED=false
-if [ -f "$ACTIVE_SESSIONS" ]; then
-    # Check if registry has active session entries
-    if command -v jq &>/dev/null; then
-        [ "$(jq '.sessions | length' "$ACTIVE_SESSIONS" 2>/dev/null || echo 0)" -gt 0 ] 2>/dev/null && SESSION_STARTED=true
-    elif command -v node &>/dev/null; then
-        [ "$(node -e "const fs=require('fs');try{const r=JSON.parse(fs.readFileSync('$ACTIVE_SESSIONS','utf8'));process.stdout.write(String((r.sessions||[]).length))}catch(e){process.stdout.write('0')}" 2>/dev/null)" -gt 0 ] 2>/dev/null && SESSION_STARTED=true
-    fi
-fi
+[ -n "$(gitmem_live_session_ids)" ] && SESSION_STARTED=true
 
 # Without state dir, we have no tracking data — can't determine meaningfulness.
 # This happens when the SessionStart hook didn't fire (plugin hooks issue).
@@ -98,10 +94,11 @@ if [ "$SESSION_STARTED" = "true" ]; then
     mkdir -p "$STATE_DIR"
     touch "$STATE_DIR/stop_hook_active"
 
-    cat <<'HOOKJSON'
+    PAYLOAD_JSON=$(gitmem_json_escape "$GITMEM_PAYLOAD_PATH")
+    cat <<HOOKJSON
 {
   "decision": "block",
-  "reason": "GITMEM SESSION STILL OPEN — Run the standard closing ceremony:\n\n1. YOU (the agent) ANSWER these 7 reflection questions based on the session. Display your answers to the human:\n   - what_broke: What broke that you didn't expect?\n   - what_took_longer: What took longer than it should have?\n   - do_differently: What would you do differently next time?\n   - what_worked: What pattern or approach worked well?\n   - wrong_assumption: What assumption was wrong?\n   - scars_applied: Which scars or institutional knowledge did you apply?\n   - institutional_memory: What from this session should be captured?\n\n2. ASK the human: 'Any corrections or additions to my answers?' WAIT for their response.\n\n3. WRITE structured payload to .gitmem/closing-payload.json with closing_reflection (7 fields above, incorporating human corrections), task_completion (timestamps), and human_corrections.\n\n4. CALL session_close with session_id and close_type: 'standard'.\n\nFor trivial sessions (< 30min, exploratory only), use close_type: 'quick' instead — no questions needed."
+  "reason": "GITMEM SESSION STILL OPEN — Run the standard closing ceremony:\n\n1. YOU (the agent) ANSWER these 7 reflection questions based on the session. Display your answers to the human:\n   - what_broke: What broke that you didn't expect?\n   - what_took_longer: What took longer than it should have?\n   - do_differently: What would you do differently next time?\n   - what_worked: What pattern or approach worked well?\n   - wrong_assumption: What assumption was wrong?\n   - scars_applied: Which scars or institutional knowledge did you apply?\n   - institutional_memory: What from this session should be captured?\n\n2. ASK the human: 'Any corrections or additions to my answers?' WAIT for their response.\n\n3. WRITE structured payload to ${PAYLOAD_JSON} (this exact absolute path — it is where session_close reads) with closing_reflection (7 fields above, incorporating human corrections), task_completion (timestamps), and human_corrections.\n\n4. CALL session_close with session_id and close_type: 'standard'.\n\nFor trivial sessions (< 30min, exploratory only), use close_type: 'quick' instead — no questions needed."
 }
 HOOKJSON
     exit 0

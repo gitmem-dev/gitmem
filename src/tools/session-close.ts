@@ -932,6 +932,7 @@ export async function sessionClose(
   // This keeps the visible MCP tool call small: just session_id + close_type.
   const payloadPath = getGitmemPath("closing-payload.json");
   let payloadConsumed = false;
+  let payloadReadError: string | null = null;
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
@@ -944,6 +945,36 @@ export async function sessionClose(
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
+    payloadReadError =
+      `closing-payload.json at ${path.resolve(payloadPath)} could not be read: ` +
+      `${error instanceof Error ? error.message : String(error)}. Fix or rewrite it, then call session_close again.`;
+  }
+
+  // GIT-99: a standard close with no reflection at all. The agent almost always
+  // wrote the payload — to a root this server does not read (the hook and the
+  // server resolved .gitmem differently). Validation would then report
+  // "requires task_completion" / "requires closing_reflection with N answers",
+  // which sends the agent to rewrite answers it already wrote. Name the path.
+  if (params.close_type === "standard" && !payloadConsumed && !params.closing_reflection) {
+    return {
+      success: false,
+      session_id: params.session_id || "",
+      close_compliance: {
+        close_type: "standard",
+        agent: detectAgent().agent,
+        checklist_displayed: false,
+        questions_answered_by_agent: false,
+        human_asked_for_corrections: false,
+        learnings_stored: 0,
+        scars_applied: 0,
+      },
+      validation_errors: [
+        payloadReadError ??
+          `closing-payload.json not found at ${path.resolve(payloadPath)}. ` +
+          `Write the closing payload to exactly that path (or pass closing_reflection inline), then call session_close again.`,
+      ],
+      performance: buildPerformanceData("session_close", timer.stop(), 0),
+    };
   }
 
   // Sanitize scars_to_record: agents frequently write create_learning shape

@@ -42,7 +42,7 @@ import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import { productLine, dimText, boldText } from "../services/display-protocol.js";
 // Suggested threads removed from start display
-import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, Observation, SessionChild } from "../types/index.js";
+import type { PerformanceBreakdown, ComponentPerformance, SurfacedScar, ScarConfirmation, Observation, SessionChild } from "../types/index.js";
 import {
   querySessionsByDateRange,
   queryScarUsageByDateRange,
@@ -515,7 +515,7 @@ async function sessionStartFree(
   metricsId: string,
   existingSessionId?: string,
   existingStartedAt?: Date,
-  forceCarryActivity?: { surfacedScars: SurfacedScar[]; observations: Observation[]; children: SessionChild[] },
+  forceCarryActivity?: { surfacedScars: SurfacedScar[]; confirmations: ScarConfirmation[]; observations: Observation[]; children: SessionChild[] },
 ): Promise<SessionStartResult> {
   const storage = getStorage();
   const isResuming = !!existingSessionId;
@@ -613,7 +613,8 @@ async function sessionStartFree(
   // writeSessionFiles merges with existing file threads to preserve mid-session creations
   let freeMergedThreads = freeAggregatedThreads;
   try {
-    freeMergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads, undefined, false, false, isResuming ? existingStartedAt : undefined);
+    // existingStartedAt is set only on resume or a same-project force carry-forward.
+    freeMergedThreads = writeSessionFiles(sessionId, agent, project, surfacedScars, freeAggregatedThreads, undefined, false, false, existingStartedAt);
   } catch (error) {
     console.warn("[session_start] Failed to persist session files:", error);
   }
@@ -624,8 +625,12 @@ async function sessionStartFree(
     sessionId,
     linearIssue: params.linear_issue,
     agent,
-    startedAt: (isResuming && existingStartedAt) || new Date(),
+    project,
+    // GIT-86: the force carry-forward startedAt was passed in but only honoured
+    // on resume, so a forced free-tier session restarted its duration clock.
+    startedAt: existingStartedAt || new Date(),
     surfacedScars: freeMergedScars,
+    confirmations: forceCarryActivity?.confirmations,
     observations: forceCarryActivity?.observations,
     children: forceCarryActivity?.children,
     threads: freeMergedThreads,
@@ -636,6 +641,7 @@ async function sessionStartFree(
     session_id: sessionId,
     agent,
     ...(isResuming && { resumed: true }),
+    ...(isResuming && !params.project && { project_from_resumed_session: true }),
     detected_environment: env,
     last_session: lastSession,
     ...(projectState && { project_state: projectState }),
@@ -714,10 +720,16 @@ function restoreSessionState(
  * Uses the active-sessions registry (hostname+PID) to identify THIS process's
  * session, preventing cross-process session theft on shared filesystems.
  * Falls back to legacy active-session.json for backward compatibility.
+ *
+ * GIT-86: `project` is the project the caller asked for. When set, only a
+ * session of that project is resumed; one desktop process serves every chat,
+ * so this process's other sessions belong to other conversations. When
+ * absent, the most recent session is resumed, whatever its project.
  */
 function checkExistingSession(
   agent: AgentIdentity,
-  force?: boolean
+  force?: boolean,
+  project?: Project
 ): { sessionId: string; agent: AgentIdentity; linearIssue?: string; startedAt?: Date; project?: Project } | null {
   if (force) {
     console.error("[session_start] force=true, skipping active session guard");
@@ -736,7 +748,7 @@ function checkExistingSession(
     // answer — a lost or diverged registry used to make an intact session on
     // disk invisible, so session_start would open a second session alongside it.
     const mySession =
-      findSessionByHostPid(os.hostname(), process.pid) ?? findResumableSessionOnDisk();
+      findSessionByHostPid(os.hostname(), process.pid, project) ?? findResumableSessionOnDisk(project);
     if (mySession) {
       console.error(`[session_start] Found own session in registry: ${mySession.session_id} (host: ${mySession.hostname}, pid: ${mySession.pid})`);
       const data = readSessionFile(mySession.session_id);
@@ -913,6 +925,12 @@ function formatStartDisplay(result: SessionStartResult, displayInfoMap?: Map<str
   if (result.project) parts.push(result.project);
   visual.push(dimText(parts.join(" · ")));
 
+  // GIT-86: resumed without a project — say which one, so a chat that meant a
+  // different project is not silently working in this one.
+  if (result.project_from_resumed_session) {
+    visual.push(`Resumed project: ${result.project} (no project was passed — pass project to start a session in another)`);
+  }
+
   // Line 3: duration + surfaced scars for resumed/refreshed sessions
   if (result.resumed || result.refreshed) {
     const session = getCurrentSession();
@@ -1064,34 +1082,40 @@ export async function sessionStart(
   const agent = params.agent_identity || env.agent;
   let project: Project = params.project || getConfigProject() || "default";
 
-  // Check for existing active session — reuse session_id but still load full context
-  const existingSession = checkExistingSession(agent, params.force);
+  // Check for existing active session — reuse session_id but still load full context.
+  // GIT-86: an explicit project only ever resumes a session of that project; a
+  // miss starts a new session and leaves this process's other sessions open.
+  const existingSession = checkExistingSession(agent, params.force, params.project);
   const isResuming = existingSession !== null;
 
-  // When resuming, prefer the stored project from the existing session.
-  // This prevents project drift after context compaction — the agent may pass
-  // the wrong project (e.g., from CLAUDE.md defaults) but the stored session
-  // knows the real project.
-  if (isResuming && existingSession?.project) {
-    if (existingSession.project !== project) {
-      console.error(`[session_start] Project override on resume: ${project} → ${existingSession.project} (from stored session)`);
-    }
+  // No project requested: the resumed session's project stands, and the
+  // display names it (project_from_resumed_session). With a project requested
+  // the lookup only matched that project, so there is nothing to override.
+  if (isResuming && existingSession?.project && !params.project) {
     project = existingSession.project;
   }
 
   // t-f7c2fa01: When force:true kills an existing session, carry forward its startedAt
   // so session_close duration reflects the full conversation, not just the new session.
   // Also carry forward activity counts (recalls, observations) so standard close isn't rejected.
-  const priorSession = params.force ? getCurrentSession() : null;
+  // GIT-86: only from a session of the same project. The in-memory session may
+  // belong to another chat served by this process; its scars, observations and
+  // children are that conversation's, and it stays open.
+  const inMemorySession = params.force ? getCurrentSession() : null;
+  const priorSession = inMemorySession && inMemorySession.project === project ? inMemorySession : null;
+  if (inMemorySession && !priorSession) {
+    console.error(`[session_start] force=true: prior session ${inMemorySession.sessionId.slice(0, 8)} is project ${inMemorySession.project ?? "(none)"}, not ${project} — nothing carried forward, prior session left open`);
+  }
   const forceCarryStartedAt = priorSession?.startedAt;
   const forceCarrySurfacedScars = priorSession?.surfacedScars || [];
+  const forceCarryConfirmations = priorSession?.confirmations || [];
   const forceCarryObservations = priorSession?.observations || [];
   const forceCarryChildren = priorSession?.children || [];
 
   // Free tier: all-local path
   if (!hasSupabase()) {
     return sessionStartFree(params, env, agent, project, timer, metricsId, existingSession?.sessionId, existingSession?.startedAt || forceCarryStartedAt,
-      priorSession ? { surfacedScars: forceCarrySurfacedScars, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
+      priorSession ? { surfacedScars: forceCarrySurfacedScars, confirmations: forceCarryConfirmations, observations: forceCarryObservations, children: forceCarryChildren } : undefined);
   }
 
   // 2. Load last session + decisions + analytics in parallel (was sequential)
@@ -1203,6 +1227,7 @@ export async function sessionStart(
     project,
     startedAt: (isResuming && existingSession?.startedAt) || forceCarryStartedAt || new Date(),
     surfacedScars: mergedScars,
+    confirmations: forceCarryConfirmations,
     observations: forceCarryObservations,
     children: forceCarryChildren,
     threads: mergedThreads,
@@ -1222,6 +1247,7 @@ export async function sessionStart(
     session_id: sessionId,
     agent,
     ...(isResuming && { resumed: true }),
+    ...(isResuming && !params.project && { project_from_resumed_session: true }),
     detected_environment: env,
     last_session: slimLastSession,
     ...(projectState && { project_state: projectState }),
@@ -1311,7 +1337,7 @@ export async function sessionRefresh(
     project = params.project || currentSession.project || "default";
   } else {
     // Fallback — check registry for this process, then legacy file
-    const mySession = findSessionByHostPid(os.hostname(), process.pid);
+    const mySession = findSessionByHostPid(os.hostname(), process.pid, params.project);
     let raw: Record<string, unknown> | null = null;
 
     if (mySession) {

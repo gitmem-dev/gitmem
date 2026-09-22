@@ -198,6 +198,11 @@ export interface SessionStartResult {
   performance?: PerformanceData;
   /** Whether this session was resumed from an existing active session */
   resumed?: boolean;
+  /**
+   * GIT-86: no project was passed, so the resumed session's project was used.
+   * The display names it, so the caller can see which namespace it is in.
+   */
+  project_from_resumed_session?: boolean;
   /** Whether this result is from a mid-session refresh (no new session created) */
   refreshed?: boolean;
   /** Message explaining session state */

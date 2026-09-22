@@ -127,24 +127,37 @@ function writeRegistry(registry: ActiveSessionsRegistry): void {
 // --- CRUD operations ---
 
 /**
+ * GIT-86: the slot a session occupies in the registry is hostname+pid+project.
+ *
+ * One desktop process serves every chat, so hostname+pid alone does not name a
+ * session — two chats in two projects share it. Keying the slot on pid alone
+ * let session_start(Y) displace an open X session, mark it superseded, and
+ * leave its directory for pruneOrphanedDirs to delete.
+ */
+function sameSlot(a: ActiveSessionEntry, b: ActiveSessionEntry): boolean {
+  return a.hostname === b.hostname && a.pid === b.pid && a.project === b.project;
+}
+
+/**
  * Register a new session in the active-sessions registry.
  * Idempotent: re-registering the same session_id replaces the entry.
- * Returns session IDs that were displaced (different session_id, same hostname+pid).
+ * Returns session IDs that were displaced (different session_id, same
+ * hostname+pid+project). Sessions of other projects on the same process are
+ * left open (GIT-86).
  */
 export function registerSession(entry: ActiveSessionEntry): string[] {
   const displaced: string[] = [];
   withLockSync(getLockPath(), () => {
     const registry = readRegistry();
-    // Collect displaced session IDs (same hostname+pid, different session_id)
+    // Collect displaced session IDs (same slot, different session_id)
     for (const s of registry.sessions) {
-      if (s.session_id !== entry.session_id && s.hostname === entry.hostname && s.pid === entry.pid) {
+      if (s.session_id !== entry.session_id && sameSlot(s, entry)) {
         displaced.push(s.session_id);
       }
     }
-    // Remove by session_id AND by hostname+pid to prevent duplicates
+    // Remove by session_id AND by slot to prevent duplicates
     registry.sessions = registry.sessions.filter((s) =>
-      s.session_id !== entry.session_id &&
-      !(s.hostname === entry.hostname && s.pid === entry.pid)
+      s.session_id !== entry.session_id && !sameSlot(s, entry)
     );
     registry.sessions.push(entry);
     writeRegistry(registry);
@@ -197,10 +210,16 @@ export function listActiveSessions(): ActiveSessionEntry[] {
 /**
  * Find a session by hostname and PID.
  * Used by session_start to detect if this process already has a registered session.
+ *
+ * GIT-86: with `project`, only a session of that project matches — a process
+ * can hold one open session per project. Without it, the most recently started
+ * session of the process is returned.
  */
-export function findSessionByHostPid(hostname: string, pid: number): ActiveSessionEntry | null {
+export function findSessionByHostPid(hostname: string, pid: number, project?: string): ActiveSessionEntry | null {
   const registry = readRegistry();
-  return registry.sessions.find((s) => s.hostname === hostname && s.pid === pid) || null;
+  return registry.sessions
+    .filter((s) => s.hostname === hostname && s.pid === pid && (project === undefined || s.project === project))
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0] || null;
 }
 
 /**
@@ -264,7 +283,7 @@ function toAgentIdentity(value: unknown): AgentIdentity {
   return AGENT_IDENTITIES.find((id) => id === normalized) ?? "Unknown";
 }
 
-export function findResumableSessionOnDisk(): ActiveSessionEntry | null {
+export function findResumableSessionOnDisk(project?: string): ActiveSessionEntry | null {
   const currentHostname = os.hostname();
   const currentPid = process.pid;
   const gitmemDir = getGitmemDir();
@@ -304,6 +323,11 @@ export function findResumableSessionOnDisk(): ActiveSessionEntry | null {
     const age = now - new Date(startedAt).getTime();
     if (!Number.isFinite(age) || age > STALE_THRESHOLD_MS) continue;
 
+    // GIT-86: a session of another project is never the answer to a request
+    // for this one, whatever its pid says.
+    const sessionProject = typeof data.project === "string" ? data.project : "default";
+    if (project !== undefined && sessionProject !== project) continue;
+
     const pid = typeof data.pid === "number" ? data.pid : -1;
     candidates.push({
       entry: {
@@ -312,7 +336,7 @@ export function findResumableSessionOnDisk(): ActiveSessionEntry | null {
         started_at: startedAt,
         hostname: currentHostname,
         pid,
-        project: typeof data.project === "string" ? data.project : "default",
+        project: sessionProject,
       },
       pidAlive: pid > 0 && pid !== currentPid && isPidAlive(pid),
     });
@@ -331,7 +355,7 @@ export function findResumableSessionOnDisk(): ActiveSessionEntry | null {
   }
 
   // 2. Orphaned by a restart. Adopt at most one — rebinding every dead-PID
-  //    session would leave several rows sharing hostname+pid.
+  //    session would leave several rows sharing hostname+pid+project.
   const orphaned = candidates.filter((c) => !c.pidAlive).sort(newestFirst)[0];
   if (!orphaned) return null;
 
@@ -382,9 +406,7 @@ function reconcileRegistryEntry(entry: ActiveSessionEntry): void {
         return; // already agrees — no write
       }
       registry.sessions = registry.sessions.filter(
-        (s) =>
-          s.session_id !== entry.session_id &&
-          !(s.hostname === entry.hostname && s.pid === entry.pid)
+        (s) => s.session_id !== entry.session_id && !sameSlot(s, entry)
       );
       registry.sessions.push(entry);
       writeRegistry(registry);

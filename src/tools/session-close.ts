@@ -43,7 +43,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { getGitmemPath, getGitmemDir, getSessionPath, getSessionDir } from "../services/gitmem-dir.js";
-import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
+import { unregisterSession, findSessionByHostPid, findSessionById } from "../services/active-sessions.js";
 import { loadSuggestions, saveSuggestions, detectSuggestedThreads, loadRecentSessionEmbeddings } from "../services/thread-suggestions.js";
 import { writeAgentBriefing } from "../services/agent-briefing.js";
 import type {
@@ -1285,8 +1285,10 @@ export async function sessionClose(
     // Fall back to active-sessions registry as last resort
     if (!existingSession) {
       try {
-        const mySession = findSessionByHostPid(os.hostname(), process.pid);
-        if (mySession && mySession.session_id === sessionId) {
+        // GIT-86: look up by id — a process can hold one session per project,
+        // so "this process's session" is not a single entry.
+        const mySession = findSessionById(sessionId);
+        if (mySession && mySession.hostname === os.hostname() && mySession.pid === process.pid) {
           existingSession = {
             id: sessionId,
             session_date: mySession.started_at?.split("T")[0] || new Date().toISOString().split("T")[0],

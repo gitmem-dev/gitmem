@@ -17,8 +17,13 @@ import type {
 
 // ---------- Helpers ----------
 
+// GIT-105: source_id is the thread's row id (gitmem_threads.id, a UUID), not
+// its "t-" thread_id — knowledge_triples.source_id is a UUID column.
+const THREAD_ROW_ID = "7d1c9a52-3f4e-4b8a-9c21-5e6f7a8b9c0d";
+
 const BASE_CREATION_PARAMS: ThreadCreationTripleParams = {
   thread_id: "t-abc12345",
+  thread_row_id: THREAD_ROW_ID,
   text: "Fix auth timeout in production",
   session_id: "550e8400-e29b-41d4-a716-446655440000",
   linear_issue: "PROJ-123",
@@ -28,6 +33,7 @@ const BASE_CREATION_PARAMS: ThreadCreationTripleParams = {
 
 const BASE_RESOLUTION_PARAMS: ThreadResolutionTripleParams = {
   thread_id: "t-abc12345",
+  thread_row_id: THREAD_ROW_ID,
   text: "Fix auth timeout in production",
   resolution_note: "Fixed by increasing timeout to 30s",
   session_id: "660e8400-e29b-41d4-a716-446655440000",
@@ -88,7 +94,8 @@ describe("extractThreadCreationTriples", () => {
 
     for (const triple of triples) {
       expect(triple.source_type).toBe("thread");
-      expect(triple.source_id).toBe("t-abc12345");
+      // GIT-105: was "t-abc12345", which the UUID column rejects (22P02).
+      expect(triple.source_id).toBe(THREAD_ROW_ID);
       expect(triple.half_life_days).toBe(9999);
       expect(triple.project).toBe("test-project");
       expect(triple.created_by).toBe("CLI");
@@ -129,7 +136,17 @@ describe("extractThreadResolutionTriples", () => {
     expect(triple.subject).toMatch(/^Session: /);
     expect(triple.object).toMatch(/^Thread: /);
     expect(triple.source_type).toBe("thread");
-    expect(triple.source_id).toBe("t-abc12345");
+    // GIT-105: was "t-abc12345", which the UUID column rejects (22P02).
+    expect(triple.source_id).toBe(THREAD_ROW_ID);
+  });
+
+  it("without a row id, source_id is null — never the thread_id (GIT-105)", () => {
+    for (const t of [
+      ...extractThreadCreationTriples({ ...BASE_CREATION_PARAMS, thread_row_id: null }),
+      ...extractThreadResolutionTriples({ ...BASE_RESOLUTION_PARAMS, thread_row_id: undefined }),
+    ]) {
+      expect(t.source_id).toBeNull();
+    }
   });
 });
 

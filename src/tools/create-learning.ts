@@ -32,6 +32,7 @@ import type {
   PerformanceBreakdown,
   ComponentPerformance,
 } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
 
 /**
  * Validate scar-specific requirements
@@ -85,7 +86,7 @@ export async function createLearning(
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("create_learning", latencyMs, 0);
       return {
-        success: false,
+        ...notStored(),
         learning_id: "",
         embedding_generated: false,
         errors,
@@ -314,7 +315,7 @@ export async function createLearning(
     const se = params.severity ? (SEV[params.severity] || "") + " " : "";
 
     return {
-      success: true,
+      ...writeResult(hasSupabase()),
       learning_id: learningId,
       embedding_generated: embeddingGenerated,
       performance: perfData,
@@ -327,7 +328,7 @@ export async function createLearning(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("create_learning", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       learning_id: "",
       embedding_generated: false,
       errors: [errorMsg],

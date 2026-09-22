@@ -41,7 +41,7 @@ import {
 import { wrapDisplay, truncate } from "../services/display-protocol.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ThreadWithEmbedding } from "../services/thread-dedup.js";
-import type { ThreadObject, PerformanceData, Project } from "../types/index.js";
+import type { ThreadObject, PerformanceData, Project, WriteResult, StoredIn } from "../types/index.js";
 
 // --- Types ---
 
@@ -73,21 +73,17 @@ export type NotStoredReason =
 /**
  * Where a thread actually landed (R3: every response names its store).
  * `local_only` is the honest middle state from R4 — written somewhere, but
- * not somewhere durable.
+ * not somewhere durable. GIT-101: this contract is now shared by every write
+ * tool (WriteResult).
  */
-export type StoredIn = "supabase" | "local" | "local_only" | null;
+export type { StoredIn } from "../types/index.js";
 
-export interface CreateThreadResult {
-  success: boolean;
+export interface CreateThreadResult extends WriteResult {
   /**
    * Whether a row exists. Distinct from `success` on purpose: a dedup refusal
    * is a well-formed answer to a well-formed request, not a crash.
    */
   stored: boolean;
-  /** Whether what was stored survives this machine. */
-  durable: boolean;
-  /** R3: names the store in-band, which also kills the f104e10d silent-local trap. */
-  stored_in: StoredIn;
   reason?: NotStoredReason;
   thread?: ThreadObject;
   error?: string;

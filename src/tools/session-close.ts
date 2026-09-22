@@ -36,6 +36,7 @@ import {
 import { wrapDisplay, truncate, productLine, boldText, dimText, STATUS, ANSI } from "../services/display-protocol.js";
 import { queryScarUsageByDateRange, enrichScarUsageTitles, formatBlindspotSnippet } from "../services/analytics.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
+import { writeResult, notStored } from "../services/write-result.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
 import { processTranscript } from "../services/transcript-chunker.js";
@@ -318,7 +319,7 @@ async function sessionCloseFree(
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true);
 
     return {
-      success: true,
+      ...writeResult(false),
       session_id: sessionId,
       close_compliance: closeCompliance,
       performance: perfData,
@@ -332,7 +333,7 @@ async function sessionCloseFree(
     const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
 
     return {
-      success: false,
+      ...notStored(),
       session_id: sessionId,
       close_compliance: closeCompliance,
       validation_errors: [`Failed to persist session: ${errorMessage}`],
@@ -862,7 +863,7 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id,
       close_compliance: {
         close_type: params.close_type,
@@ -908,7 +909,7 @@ export async function sessionClose(
   if (!params.session_id && params.close_type !== "retroactive") {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       session_id: "",
       close_compliance: {
         close_type: params.close_type,
@@ -932,6 +933,9 @@ export async function sessionClose(
   // This keeps the visible MCP tool call small: just session_id + close_type.
   const payloadPath = getGitmemPath("closing-payload.json");
   let payloadConsumed = false;
+  // GIT-101: whether the session row reached the durable store. Set only after
+  // the upsert resolves, so every exit below can say so.
+  let sessionRowStored = false;
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
@@ -1066,7 +1070,7 @@ export async function sessionClose(
     // Hard gate: quick close requires session under 30 minutes
     if (params.close_type === "quick" && activity.duration_min >= 30) {
       return {
-        success: false,
+        ...notStored(),
         session_id: params.session_id || "",
         close_compliance: {
           close_type: "quick",
@@ -1099,7 +1103,7 @@ export async function sessionClose(
   // Exemptions: quick (micro sessions), autonomous (CODA-1), hasReflection (agent already wrote full reflection)
   if (params.close_type === "standard" && !isRecallCalled() && !hasReflection) {
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id || "",
       close_compliance: {
         close_type: "standard",
@@ -1155,7 +1159,7 @@ export async function sessionClose(
         const latencyMs = timer.stop();
         const perfData = buildPerformanceData("session_close", latencyMs, 0);
         return {
-          success: false,
+          ...notStored(),
           session_id: "",  // Empty string when no session found
           close_compliance: {
             close_type: params.close_type,
@@ -1179,7 +1183,7 @@ export async function sessionClose(
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("session_close", latencyMs, 0);
       return {
-        success: false,
+        ...notStored(),
         session_id: "",  // Empty string when search fails
         close_compliance: {
           close_type: params.close_type,
@@ -1206,7 +1210,7 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id,
       close_compliance: {
         close_type: params.close_type,
@@ -1304,7 +1308,7 @@ export async function sessionClose(
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("session_close", latencyMs, 0);
       return {
-        success: false,
+        ...notStored(),
         session_id: sessionId,
         close_compliance: closeCompliance,
         validation_errors: [`Session ${sessionId} not found in Supabase, local files, or registry. Was session_start called?`],
@@ -1470,6 +1474,7 @@ export async function sessionClose(
       supabase.directUpsert(sessionsTable, sessionRow),
       blindspotPromise,
     ]);
+    sessionRowStored = true;
 
     // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
@@ -1645,6 +1650,8 @@ export async function sessionClose(
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet);
 
     return {
+      // The session row is durable; success also requires every thread to sync.
+      ...writeResult(true),
       success: !partialPersist,
       session_id: sessionId,
       close_compliance: closeCompliance,
@@ -1663,6 +1670,7 @@ export async function sessionClose(
     const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet);
 
     return {
+      ...writeResult(sessionRowStored),
       success: false,
       session_id: sessionId,
       close_compliance: closeCompliance,

@@ -28,6 +28,7 @@ import type {
   CreateDecisionResult,
   PerformanceBreakdown,
 } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
 
 /**
  * Execute create_decision tool
@@ -141,7 +142,7 @@ export async function createDecision(
     }).catch(() => {});
 
     return {
-      success: true,
+      ...writeResult(hasSupabase()),
       decision_id: decisionId,
       performance: perfData,
       display: wrapDisplay(`Decision logged: "${params.title}"\nID: ${decisionId}`),
@@ -151,7 +152,7 @@ export async function createDecision(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("create_decision", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       decision_id: "",
       performance: perfData,
       display: wrapDisplay(`Failed to log decision`),

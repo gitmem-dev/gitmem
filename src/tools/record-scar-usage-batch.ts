@@ -15,6 +15,7 @@ import type {
   ScarUsageEntry,
   Project,
 } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
 
 const TARGET_LATENCY_MS = 2000; // Target for batch operation
 
@@ -98,9 +99,13 @@ export async function recordScarUsageBatch(
   const metricsId = uuidv4();
 
   if (!hasSupabase()) {
-    // Free tier: scar usage tracked locally via record-scar-usage (single), not batch
+    // Free tier: scar usage tracked locally via record-scar-usage (single), not batch.
+    // GIT-101: nothing is stored here, and the result says so (stored_in: null);
+    // success stays true because there is no durable store to have missed.
     return {
       success: true,
+      durable: false,
+      stored_in: null,
       usage_ids: [],
       resolved_count: 0,
       failed_count: 0,
@@ -191,7 +196,7 @@ export async function recordScarUsageBatch(
     });
 
     return {
-      success: true,
+      ...writeResult(hasSupabase()),
       usage_ids: usageIds,
       resolved_count: resolvedCount,
       failed_count: failedIdentifiers.length,
@@ -205,7 +210,7 @@ export async function recordScarUsageBatch(
     console.error("[record-scar-usage-batch] Error recording batch:", error);
 
     return {
-      success: false,
+      ...notStored(),
       error: error instanceof Error ? error.message : String(error),
       usage_ids: usageIds,
       resolved_count: resolvedCount,

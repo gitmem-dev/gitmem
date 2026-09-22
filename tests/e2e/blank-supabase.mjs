@@ -402,6 +402,12 @@ async function flow() {
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
 
+  // GIT-102: every WARN on the close names a subsystem and cause and says
+  // whether the session content was stored; health reports the write-path verdict.
+  const closeWarns = sc.replace(/\x1b\[[0-9;]*m/g, "").split("\n").filter((l) => /^WARN /.test(l));
+  const closeWarnsSelfDescribing = closeWarns.every((l) => /^WARN .+: \d+ of \d+ writes? failed — .+ · session content (stored OK|NOT stored)/.test(l));
+  const healthHasWritePath = /^Write path: /m.test(health);
+
   // Did the close land? Is relevance readable from the store (GIT-109)?
   const closedRows = sessionId
     ? await rest("GET", `gitmem_sessions?select=id,closing_reflection&id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
@@ -435,6 +441,9 @@ async function flow() {
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
+    close_warns: closeWarns,
+    close_warns_self_describing: closeWarnsSelfDescribing,
+    health_has_write_path: healthHasWritePath,
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -619,6 +628,12 @@ if (mode === "egress") {
       failureCheck.unexpected.push(`full index download after the cold start (GIT-98): ${st.start}, ${st.total_bytes} B`);
     }
   }
+}
+if (mode === "flow" && !result.close_warns_self_describing) {
+  failureCheck.unexpected.push(`session_close WARN is not self-describing (GIT-102): ${result.close_warns.join(" | ")}`);
+}
+if (mode === "flow" && !result.health_has_write_path) {
+  failureCheck.unexpected.push("health does not report the write-path verdict (GIT-102)");
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

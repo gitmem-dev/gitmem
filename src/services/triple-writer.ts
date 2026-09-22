@@ -12,7 +12,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import * as supabase from "./supabase-client.js";
-import { hasSupabase } from "./tier.js";
+import { hasSupabase, getTableName } from "./tier.js";
 
 // --- Types ---
 
@@ -32,7 +32,8 @@ interface TripleCandidate {
   predicate: Predicate;
   object: string;
   source_type: string;
-  source_id: string;
+  /** knowledge_triples.source_id is a UUID column: a row id, or null. */
+  source_id: string | null;
   source_linear_issue?: string;
   domain?: string[];
   project: string;
@@ -282,9 +283,22 @@ export function extractDecisionTriples(params: DecisionTripleParams): TripleCand
  * failure (GIT-104) — callers run this under getEffectTracker().track(), which
  * never rethrows.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function writeTriples(candidates: TripleCandidate[]): Promise<number> {
   if (candidates.length === 0 || !hasSupabase()) {
     return 0;
+  }
+
+  // GIT-105: source_id is a UUID column in every schema. A non-UUID value
+  // (thread ids are "t-xxxxxxxx") failed the whole row with 22P02, so every
+  // thread triple 400'd and was lost. Never send one; the subject/object
+  // labels still carry the relation.
+  for (const c of candidates) {
+    if (c.source_id !== null && !UUID_RE.test(c.source_id)) {
+      console.error(`[triple-writer] source_id "${c.source_id}" is not a UUID — writing the triple with source_id null`);
+      c.source_id = null;
+    }
   }
 
   let written = 0;
@@ -356,6 +370,12 @@ export function writeTriplesForDecision(params: DecisionTripleParams): Promise<n
 
 export interface ThreadCreationTripleParams {
   thread_id: string;
+  /**
+   * GIT-105: the thread's row id (gitmem_threads.id, a UUID) — what
+   * source_id references. thread_id ("t-xxxxxxxx") does not fit the column.
+   * Undefined: looked up by thread_id when writing. Null: not in the store.
+   */
+  thread_row_id?: string | null;
   text: string;
   linear_issue?: string;
   session_id?: string;
@@ -372,7 +392,7 @@ export function extractThreadCreationTriples(params: ThreadCreationTripleParams)
   const threadLabel = buildSubjectLabel("thread", params.text);
   const base = {
     source_type: "thread",
-    source_id: params.thread_id,
+    source_id: params.thread_row_id ?? null,
     source_linear_issue: params.linear_issue,
     project: params.project,
     half_life_days: HALF_LIFE_PROCESS,
@@ -404,6 +424,8 @@ export function extractThreadCreationTriples(params: ThreadCreationTripleParams)
 
 export interface ThreadResolutionTripleParams {
   thread_id: string;
+  /** GIT-105: see ThreadCreationTripleParams.thread_row_id. */
+  thread_row_id?: string | null;
   text: string;
   resolution_note?: string;
   session_id?: string;
@@ -420,7 +442,7 @@ export function extractThreadResolutionTriples(params: ThreadResolutionTriplePar
   const threadLabel = buildSubjectLabel("thread", params.text);
   const base = {
     source_type: "thread",
-    source_id: params.thread_id,
+    source_id: params.thread_row_id ?? null,
     project: params.project,
     half_life_days: HALF_LIFE_PROCESS,
     created_by: params.agent,
@@ -443,16 +465,35 @@ export function extractThreadResolutionTriples(params: ThreadResolutionTriplePar
  * Generate and write triples for a newly created thread.
  * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
-export function writeTriplesForThreadCreation(params: ThreadCreationTripleParams): Promise<number> {
-  const triples = extractThreadCreationTriples(params);
+export async function writeTriplesForThreadCreation(params: ThreadCreationTripleParams): Promise<number> {
+  const triples = extractThreadCreationTriples(await withThreadRowId(params));
   return writeTriples(triples);
+}
+
+/**
+ * GIT-105: fill thread_row_id from the store when the caller did not have it.
+ * A failed or empty lookup leaves it null — the triple is still written.
+ */
+async function withThreadRowId<T extends { thread_id: string; thread_row_id?: string | null }>(params: T): Promise<T> {
+  if (params.thread_row_id !== undefined || !hasSupabase()) return params;
+  try {
+    const rows = await supabase.directQuery<{ id: string }>(getTableName("threads"), {
+      select: "id",
+      filters: { thread_id: params.thread_id },
+      limit: 1,
+    });
+    return { ...params, thread_row_id: rows[0]?.id ?? null };
+  } catch (error) {
+    console.error(`[triple-writer] Could not look up the row id of ${params.thread_id}:`, error instanceof Error ? error.message : error);
+    return { ...params, thread_row_id: null };
+  }
 }
 
 /**
  * Generate and write triples for a resolved thread.
  * Fire-and-forget — run under getEffectTracker().track(); rejects if any triple failed.
  */
-export function writeTriplesForThreadResolution(params: ThreadResolutionTripleParams): Promise<number> {
-  const triples = extractThreadResolutionTriples(params);
+export async function writeTriplesForThreadResolution(params: ThreadResolutionTripleParams): Promise<number> {
+  const triples = extractThreadResolutionTriples(await withThreadRowId(params));
   return writeTriples(triples);
 }

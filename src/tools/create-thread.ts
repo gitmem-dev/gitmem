@@ -296,12 +296,14 @@ export async function createThread(
   // Write to Supabase (source of truth) with embedding.
   let supabaseSynced = false;
   let supabaseError: string | undefined;
+  let threadRowId: string | null = null; // GIT-105: gitmem_threads.id, for triple source_id
   const embeddingJson = newEmbedding ? JSON.stringify(newEmbedding) : null;
 
   if (hasSupabase()) {
     try {
       const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);
       supabaseSynced = Boolean(supabaseResult);
+      threadRowId = supabaseResult?.id ?? null;
       if (!supabaseSynced) {
         supabaseError = "write returned no row";
       }
@@ -347,6 +349,7 @@ export async function createThread(
   getEffectTracker().track("triple_write", "thread_creation", () =>
     writeTriplesForThreadCreation({
       thread_id: thread.id,
+      thread_row_id: threadRowId,
       text: trimmedText,
       linear_issue: params.linear_issue,
       session_id: sessionId,

@@ -123,6 +123,17 @@ describe("registerSession", () => {
     expect(listActiveSessions()[0].session_id).toBe("22222222-2222-2222-2222-222222222222");
   });
 
+  it("does not displace a session of another project on the same hostname+pid (GIT-86)", () => {
+    // One desktop process serves every chat: two projects share hostname+pid.
+    registerSession(makeEntry({ session_id: "11111111-1111-1111-1111-111111111111", hostname: "host-a", pid: 100, project: "proj-x" }));
+    const displaced = registerSession(
+      makeEntry({ session_id: "22222222-2222-2222-2222-222222222222", hostname: "host-a", pid: 100, project: "proj-y" })
+    );
+
+    expect(displaced).toEqual([]);
+    expect(listActiveSessions().map((s) => s.project).sort()).toEqual(["proj-x", "proj-y"]);
+  });
+
   it("returns empty array when no sessions displaced", () => {
     const entry = makeEntry();
     const displaced = registerSession(entry);
@@ -222,6 +233,20 @@ describe("findSessionByHostPid", () => {
 
     expect(findSessionByHostPid("other-host", 9999)).toBeNull();
     expect(findSessionByHostPid("test-host", 1111)).toBeNull();
+  });
+
+  it("with a project, matches only a session of that project (GIT-86)", () => {
+    registerSession(makeEntry({ session_id: "11111111-1111-1111-1111-111111111111", hostname: "h", pid: 7, project: "proj-x" }));
+
+    expect(findSessionByHostPid("h", 7, "proj-y")).toBeNull();
+    expect(findSessionByHostPid("h", 7, "proj-x")?.session_id).toBe("11111111-1111-1111-1111-111111111111");
+  });
+
+  it("without a project, returns the most recently started session of the process (GIT-86)", () => {
+    registerSession(makeEntry({ session_id: "22222222-2222-2222-2222-222222222222", hostname: "h", pid: 7, project: "proj-y", started_at: new Date().toISOString() }));
+    registerSession(makeEntry({ session_id: "11111111-1111-1111-1111-111111111111", hostname: "h", pid: 7, project: "proj-x", started_at: new Date(Date.now() - 60_000).toISOString() }));
+
+    expect(findSessionByHostPid("h", 7)?.session_id).toBe("22222222-2222-2222-2222-222222222222");
   });
 
   it("requires both hostname AND pid to match", () => {
@@ -630,6 +655,16 @@ describe("findResumableSessionOnDisk (GIT-89)", () => {
     expect(findResumableSessionOnDisk()?.session_id).toBe(
       "22222222-2222-2222-2222-222222222222"
     );
+  });
+
+  it("with a project, never resolves a session of another project (GIT-86)", () => {
+    seedDiskOnlySession("11111111-1111-1111-1111-111111111111", { project: "proj-x" });
+    seedDiskOnlySession("22222222-2222-2222-2222-222222222222", { project: "proj-y", pid: DEAD_PID });
+
+    expect(findResumableSessionOnDisk("proj-z")).toBeNull();
+    expect(findResumableSessionOnDisk("proj-x")?.session_id).toBe("11111111-1111-1111-1111-111111111111");
+    // proj-y's orphan is adoptable for proj-y and left alone by the proj-x lookup above.
+    expect(findResumableSessionOnDisk("proj-y")?.session_id).toBe("22222222-2222-2222-2222-222222222222");
   });
 
   it("returns null when there is nothing on disk", () => {

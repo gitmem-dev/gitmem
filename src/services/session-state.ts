@@ -78,12 +78,12 @@ let lastFailedRecoveryFingerprint: number | null | undefined = undefined;
  * Set the current active session
  * Called by session_start
  */
-export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads' | 'feedbackSubmitCount'> & { surfacedScars?: SurfacedScar[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
+export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads' | 'feedbackSubmitCount'> & { surfacedScars?: SurfacedScar[]; confirmations?: ScarConfirmation[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
   currentSession = {
     ...context,
     recallCalled: false,
     surfacedScars: context.surfacedScars || [],
-    confirmations: [],
+    confirmations: context.confirmations || [],
     reflections: [],
     observations: context.observations || [],
     children: context.children || [],

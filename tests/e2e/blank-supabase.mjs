@@ -14,6 +14,7 @@
  * Usage (build first: npm run build):
  *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs flow   --label main --out <dir>
  *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs egress --label pr31 --out <dir> [--rows 250] [--usage 5]
+ *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs projects --label git86 --out <dir>
  *
  *   flow   session_start -> list_threads -> recall -> confirm_scars -> create_thread
  *          -> list_threads -> session_close -> health, with a local threads.json that
@@ -21,6 +22,10 @@
  *   egress bytes received from the venue on a cold start, a warm start, and around
  *          two session_starts (GIT-98 disk cache). --usage N seeds N scars with
  *          >=3 usage rows so refresh_scar_behavioral_scores() has work to do.
+ *   projects one server process serving two projects, as the desktop app does (GIT-86):
+ *          session_start(X), session_start(Y), session_start(X), session_start({}),
+ *          session_start(X, force). A session of one project is never resumed,
+ *          displaced or superseded by a call for another.
  *
  * VENUE_ENV is a KEY=VALUE file OUTSIDE the repo defining SUPABASE_URL,
  * SUPABASE_SERVICE_ROLE_KEY and VENUE_REF. Credentials are never committed.
@@ -96,8 +101,8 @@ function configError(message) {
   console.error(`[driver] ${message}`);
   process.exit(2);
 }
-if (!["flow", "egress"].includes(mode)) {
-  configError("usage: blank-supabase.mjs flow|egress --label <l> --out <dir> [--rows N] [--usage N]");
+if (!["flow", "egress", "projects"].includes(mode)) {
+  configError("usage: blank-supabase.mjs flow|egress|projects --label <l> --out <dir> [--rows N] [--usage N]");
 }
 
 const venueEnvPath = process.env.VENUE_ENV;
@@ -522,7 +527,65 @@ async function egress() {
   return summary;
 }
 
-const result = mode === "flow" ? await flow() : await egress();
+// ---------------------------------------------------------------- PROJECTS (GIT-86)
+async function projects() {
+  await wipeVenue();
+  const X = `${PROJECT}-x`, Y = `${PROJECT}-y`;
+  const { home, gitmemDir } = isolatedHome(`${label}-projects`);
+  const ollama = await startFakeOllama();
+  const netlog = join(outDir, `netlog-${label}-projects.jsonl`);
+  writeFileSync(netlog, "");
+  const stderr = [];
+  const srv = await startServer({ home, gitmemDir, ollamaUrl: ollama.url, netlog, stderrSink: stderr });
+  await waitQuiet(netlog, { minMs: 2000 });
+
+  const steps = [];
+  const start = async (name, args) => {
+    const text = await srv.call("session_start", { agent_identity: "desktop", ...args });
+    const id = (text.match(UUID) || [])[0] ?? null;
+    const step = { name, args, session_id: id, resumed: /\bresumed\b/.test(text.split("\n")[0]),
+      names_project: (text.match(/Resumed project: (\S+)/) || [])[1] ?? null };
+    steps.push(step);
+    console.log(`[driver] ${name}: ${id?.slice(0, 8)} resumed=${step.resumed}${step.names_project ? ` names=${step.names_project}` : ""}`);
+    await waitQuiet(netlog, { minMs: 1500, quietMs: 2000 });
+    return step;
+  };
+  const x1 = await start("X", { project: X });
+  const y1 = await start("Y while X open", { project: Y });
+  const x2 = await start("X again", { project: X });
+  const bare = await start("no project", {});
+  const xf = await start("X force (Y in memory)", { project: X, force: true });
+  await srv.close();
+  ollama.close();
+  allVenueRequests.push(...venueReqs(readNet(netlog)));
+  writeFileSync(join(outDir, `stderr-${label}-projects.log`), stderr.join(""));
+
+  const rows = await rest("GET", `gitmem_sessions?select=id,project,close_compliance&id=in.(${[x1, y1, xf].map((s) => s.session_id).join(",")})`, undefined, { Prefer: "" }).then((r) => r.json());
+  const row = (id) => rows.find((r) => r.id === id);
+  const superseded = (id) => row(id)?.close_compliance?.close_type === "superseded";
+  const registry = JSON.parse(readFileSync(join(gitmemDir, "active-sessions.json"), "utf8")).sessions;
+  const dirExists = (id) => existsSync(join(gitmemDir, "sessions", id, "session.json"));
+
+  const checks = {
+    "Y is a new session, not X resumed": y1.session_id !== x1.session_id && !y1.resumed,
+    "X row stored under X": row(x1.session_id)?.project === X,
+    "Y row stored under Y": row(y1.session_id)?.project === Y,
+    "X again resumes X": x2.session_id === x1.session_id && x2.resumed,
+    "no project resumes the most recent session (Y)": bare.session_id === y1.session_id && bare.resumed,
+    "no project names the resumed project": bare.names_project === Y,
+    "X force is a new session": xf.session_id !== x1.session_id && xf.session_id !== y1.session_id && !xf.resumed,
+    "Y never superseded by an X call": !superseded(y1.session_id),
+    "X superseded only by the same-project force": superseded(x1.session_id) && row(x1.session_id)?.close_compliance?.superseded_by === xf.session_id,
+    "Y still registered and on disk": registry.some((e) => e.session_id === y1.session_id && e.project === Y) && dirExists(y1.session_id),
+    "no cross-project override on stderr": !/Project override on resume/.test(stderr.join("")),
+  };
+  const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k);
+  const summary = { label, mode, venue: SUPABASE_URL, steps, rows, registry, checks, failed };
+  writeFileSync(join(outDir, `summary-${label}-projects.json`), JSON.stringify(summary, null, 2));
+  return summary;
+}
+
+const result = mode === "flow" ? await flow() : mode === "projects" ? await projects() : await egress();
 const failureCheck = checkFailures(allVenueRequests);
 // Invariants the edge-function removal (GIT-97) guarantees, whatever the status code.
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
@@ -542,6 +605,7 @@ if (mode === "flow" && !result.thread_counts_match) {
     `thread panel mismatch (GIT-97): session_start ${result.session_start_thread_count} != list_threads ${result.list_threads_open_right_after_session_start}`
   );
 }
+if (mode === "projects") failureCheck.unexpected.push(...result.failed.map((f) => `cross-project resume (GIT-86): ${f}`));
 writeFileSync(join(outDir, `failure-check-${label}-${mode}.json`), JSON.stringify(failureCheck, null, 2));
 console.log(JSON.stringify({ ...result, health_text: undefined, stderr_error_lines: undefined, failure_check: failureCheck }, null, 2));
 if (failureCheck.unexpected.length > 0) {

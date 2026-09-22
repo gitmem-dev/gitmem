@@ -55,7 +55,7 @@ const DENY_REFS = new Set(["cjptxyezuxdiinufgrrm"]); // production GitMem — ne
  * Known venue failures. Any other 4xx/5xx from /rest/v1/ or /functions/v1/
  * fails the run. Each entry names the ticket that removes it — delete the entry
  * when that ticket merges, so this list only shrinks. An entry allows a failure;
- * it does not require one (e.g. the GIT-73 race is intermittent).
+ * it does not require one (a failure may be intermittent).
  */
 /**
  * Not defects: the store capability probe (src/services/store-columns.ts) is a
@@ -79,7 +79,6 @@ function isCapabilityProbe(r) {
 }
 
 const EXPECTED_FAILURES = [
-  { ticket: "GIT-73", what: "metrics/session_start FK race", method: "POST", path: /^\/rest\/v1\/gitmem_query_metrics$/, status: 409 },
   { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
 ];
 const HERE = dirname(fileURLToPath(import.meta.url));

@@ -12,7 +12,21 @@
  *   1. Ask the store for a FINGERPRINT — row count + newest updated_at. One
  *      request, one row, a few hundred bytes (PostgREST `Prefer: count=exact`).
  *   2. If a cache file with the same fingerprint exists, load vectors from disk.
- *   3. Otherwise download as before and rewrite the cache.
+ *   3. Otherwise sync the difference (below) and rewrite the cache.
+ *
+ * ## Per-row delta sync
+ *
+ * A fingerprint miss used to mean a full download, and on a Pro store it
+ * misses on nearly every session_start: refresh_scar_behavioral_scores()
+ * rewrites every scar with enough recent usage and bumps its updated_at. So
+ * a handful of changed rows cost the whole index.
+ *
+ * On a miss with a usable cache from this store, only the manifest (id,
+ * updated_at; no vectors) is downloaded. A row whose id and updated_at match
+ * the cache is reused from disk; only changed and new ids are fetched in full;
+ * rows no longer in the manifest are dropped. The result is in manifest order,
+ * exactly what a full download would have returned, given that updated_at
+ * moves on every edit (the same assumption the fingerprint already makes).
  *
  * ## What the fingerprint can and cannot see
  *
@@ -105,31 +119,104 @@ export function readVectorCache<T>(storeKey: string, expected: StoreFingerprint)
   // failures would otherwise "agree" and serve whatever is on disk.
   if (expected.count < 0) return { hit: false, reason: "store fingerprint unavailable" };
 
+  const file = readCacheFile<T>(storeKey);
+  if (!file.ok) return { hit: false, reason: file.reason };
+  if (!file.parsed.fingerprint || !fingerprintsMatch(file.parsed.fingerprint, expected)) {
+    return { hit: false, reason: "store changed since cache was written" };
+  }
+  return { hit: true, rows: file.parsed.rows, bytesOnDisk: file.bytesOnDisk };
+}
+
+/**
+ * The cached rows of this store, whatever fingerprint they were written under:
+ * the base a delta sync reuses unchanged rows from. Never served as-is — every
+ * row is checked against the store's manifest first.
+ */
+export function readVectorCacheBase<T>(storeKey: string): T[] | null {
+  if (!isVectorDiskCacheEnabled()) return null;
+  const file = readCacheFile<T>(storeKey);
+  return file.ok ? file.parsed.rows : null;
+}
+
+export interface ManifestRow {
+  id: string;
+  updated_at: string | null;
+}
+
+export interface DeltaPlan<T> {
+  /** Cached rows still current in the store, by id. */
+  reuse: Map<string, T>;
+  /** Ids to fetch in full: changed since the cache was written, or new. */
+  fetchIds: string[];
+  /** Cached rows the store no longer returns. */
+  dropped: number;
+}
+
+/**
+ * Compare the store's manifest with the cached rows. A row is reused only when
+ * its id AND updated_at match; a cached row without updated_at is refetched.
+ */
+export function planDelta<T extends { id: string; updated_at?: string | null }>(
+  cached: T[],
+  manifest: ManifestRow[]
+): DeltaPlan<T> {
+  const cachedById = new Map(cached.map((r) => [r.id, r]));
+  const reuse = new Map<string, T>();
+  const fetchIds: string[] = [];
+  for (const m of manifest) {
+    const c = cachedById.get(m.id);
+    if (c && m.updated_at != null && c.updated_at === m.updated_at) reuse.set(m.id, c);
+    else fetchIds.push(m.id);
+  }
+  const inManifest = new Set(manifest.map((m) => m.id));
+  const dropped = cached.filter((r) => !inManifest.has(r.id)).length;
+  return { reuse, fetchIds, dropped };
+}
+
+/**
+ * Rows in manifest order: reused where current, fetched otherwise. A manifest
+ * id that is in neither (deactivated between the manifest and the fetch) is
+ * left out, as a full download at that moment would have.
+ */
+export function assembleDelta<T extends { id: string }>(
+  manifest: ManifestRow[],
+  plan: DeltaPlan<T>,
+  fetched: T[]
+): T[] {
+  const fetchedById = new Map(fetched.map((r) => [r.id, r]));
+  const rows: T[] = [];
+  for (const m of manifest) {
+    const row = fetchedById.get(m.id) ?? plan.reuse.get(m.id);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+function readCacheFile<T>(storeKey: string):
+  | { ok: true; parsed: VectorCacheFile<T>; bytesOnDisk: number }
+  | { ok: false; reason: string } {
   const file = getVectorCachePath(storeKey);
   let raw: string;
   try {
-    if (!fs.existsSync(file)) return { hit: false, reason: "no cache file" };
+    if (!fs.existsSync(file)) return { ok: false, reason: "no cache file" };
     raw = fs.readFileSync(file, "utf-8");
   } catch (error) {
-    return { hit: false, reason: `unreadable: ${error instanceof Error ? error.message : String(error)}` };
+    return { ok: false, reason: `unreadable: ${error instanceof Error ? error.message : String(error)}` };
   }
 
   let parsed: VectorCacheFile<T>;
   try {
     parsed = JSON.parse(raw) as VectorCacheFile<T>;
   } catch {
-    return { hit: false, reason: "corrupt JSON" };
+    return { ok: false, reason: "corrupt JSON" };
   }
 
-  if (!parsed || typeof parsed !== "object") return { hit: false, reason: "corrupt shape" };
-  if (parsed.format !== VECTOR_CACHE_FORMAT) return { hit: false, reason: `format ${parsed.format} != ${VECTOR_CACHE_FORMAT}` };
-  if (parsed.storeKey !== storeKey) return { hit: false, reason: "written for a different store" };
-  if (!Array.isArray(parsed.rows)) return { hit: false, reason: "corrupt rows" };
-  if (!parsed.fingerprint || !fingerprintsMatch(parsed.fingerprint, expected)) {
-    return { hit: false, reason: "store changed since cache was written" };
-  }
+  if (!parsed || typeof parsed !== "object") return { ok: false, reason: "corrupt shape" };
+  if (parsed.format !== VECTOR_CACHE_FORMAT) return { ok: false, reason: `format ${parsed.format} != ${VECTOR_CACHE_FORMAT}` };
+  if (parsed.storeKey !== storeKey) return { ok: false, reason: "written for a different store" };
+  if (!Array.isArray(parsed.rows)) return { ok: false, reason: "corrupt rows" };
 
-  return { hit: true, rows: parsed.rows, bytesOnDisk: Buffer.byteLength(raw) };
+  return { ok: true, parsed, bytesOnDisk: Buffer.byteLength(raw) };
 }
 
 /**

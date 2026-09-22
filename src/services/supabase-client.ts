@@ -518,6 +518,18 @@ export async function directPatch<T = unknown>(
  *
  * NOTE: Changed from "scars only" to "all learning types"
  */
+/**
+ * The learnings the local index is built from. The bulk load, the fingerprint,
+ * the delta manifest and the delta fetch MUST all use these, or they describe
+ * different sets (GIT-98).
+ */
+const INDEXED_LEARNING_FILTERS: Record<string, string> = {
+  learning_type: "in.(scar,pattern,win,anti_pattern)",
+  is_active: "eq.true",
+};
+const INDEXED_LEARNING_COLUMNS =
+  "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type,decay_multiplier";
+
 export async function loadScarsWithEmbeddings<T = unknown>(
   project?: string,
   limit = 500
@@ -526,16 +538,13 @@ export async function loadScarsWithEmbeddings<T = unknown>(
   const startTime = Date.now();
 
   try {
-    const filters: Record<string, string> = {
-      learning_type: "in.(scar,pattern,win,anti_pattern)",
-      is_active: "eq.true",
-    };
+    const filters: Record<string, string> = { ...INDEXED_LEARNING_FILTERS };
     if (project) {
       filters.project = project;
     }
 
     const learnings = await directQuery<T>(getTableName("learnings"), {
-      select: "id,title,description,severity,counter_arguments,applies_when,source_linear_issue,project,embedding,updated_at,learning_type,decay_multiplier",
+      select: INDEXED_LEARNING_COLUMNS,
       filters,
       order: "updated_at.desc",
       limit,
@@ -549,6 +558,40 @@ export async function loadScarsWithEmbeddings<T = unknown>(
     console.error("[supabase-direct] Failed to load learnings:", error);
     throw error;
   }
+}
+
+/**
+ * Delta manifest (GIT-98): the id and updated_at of every row the bulk load
+ * would return — same filters, order and limit — and nothing else. About 70
+ * bytes a row, versus ~20 KB a row with its 1536-dim embedding.
+ */
+export async function loadLearningsManifest(limit = 500): Promise<Array<{ id: string; updated_at: string | null }>> {
+  return directQuery<{ id: string; updated_at: string | null }>(getTableName("learnings"), {
+    select: "id,updated_at",
+    filters: { ...INDEXED_LEARNING_FILTERS },
+    order: "updated_at.desc",
+    limit,
+  });
+}
+
+/** Ids per delta request. A UUID is 36 characters, so this keeps URLs near 4 KB. */
+const DELTA_FETCH_CHUNK = 100;
+
+/**
+ * Delta fetch (GIT-98): full rows, embedding included, for the given ids only.
+ * The indexed-learning filters still apply, so a row deactivated since the
+ * manifest was read is simply absent.
+ */
+export async function loadLearningsByIds<T = unknown>(ids: string[]): Promise<T[]> {
+  const rows: T[] = [];
+  for (let i = 0; i < ids.length; i += DELTA_FETCH_CHUNK) {
+    const chunk = ids.slice(i, i + DELTA_FETCH_CHUNK);
+    rows.push(...await directQuery<T>(getTableName("learnings"), {
+      select: INDEXED_LEARNING_COLUMNS,
+      filters: { ...INDEXED_LEARNING_FILTERS, id: `in.(${chunk.join(",")})` },
+    }));
+  }
+  return rows;
 }
 
 /**
@@ -569,8 +612,7 @@ export async function getLearningsFingerprint(): Promise<{ count: number; latest
   try {
     const url = new URL(`${SUPABASE_REST_URL}/${getTableName("learnings")}`);
     url.searchParams.set("select", "updated_at");
-    url.searchParams.set("learning_type", "in.(scar,pattern,win,anti_pattern)");
-    url.searchParams.set("is_active", "eq.true");
+    for (const [key, value] of Object.entries(INDEXED_LEARNING_FILTERS)) url.searchParams.set(key, value);
     url.searchParams.set("order", "updated_at.desc");
     url.searchParams.set("limit", "1");
 

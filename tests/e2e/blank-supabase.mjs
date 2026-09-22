@@ -21,6 +21,8 @@
  *   egress bytes received from the venue on a cold start, a warm start, and around
  *          two session_starts (GIT-98 disk cache). --usage N seeds N scars with
  *          >=3 usage rows so refresh_scar_behavioral_scores() has work to do.
+ *          Fails if any start after the cold one downloads the whole index again
+ *          (GIT-98 per-row delta).
  *
  * VENUE_ENV is a KEY=VALUE file OUTSIDE the repo defining SUPABASE_URL,
  * SUPABASE_SERVICE_ROLE_KEY and VENUE_REF. Credentials are never committed.
@@ -520,6 +522,15 @@ const failureCheck = checkFailures(allVenueRequests);
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+// GIT-98 per-row delta: after the cold start, a changed store costs the changed
+// rows, never the whole index again.
+if (mode === "egress") {
+  for (const st of result.starts.slice(1)) {
+    if (st.cache_log.some((l) => /Loading ALL learnings/.test(l))) {
+      failureCheck.unexpected.push(`full index download after the cold start (GIT-98): ${st.start}, ${st.total_bytes} B`);
+    }
+  }
+}
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);
 }

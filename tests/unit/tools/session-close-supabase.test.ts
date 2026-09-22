@@ -347,6 +347,12 @@ describe("session_close Supabase path", () => {
     });
   });
 
+  // GIT-99: a standard close with neither a payload nor an inline reflection is
+  // now rejected up front ("closing-payload.json not found at <path>"). These
+  // tests are about titles and decisions, not validation (which is mocked), so
+  // they carry a reflection to reach the persistence path they check.
+  const REFLECTION = { what_broke: "n/a", what_worked: "n/a", scars_applied: [] };
+
   describe("session title update", () => {
     it("updates generic title with Linear issue + decision", async () => {
       vi.mocked(supabase.getRecord).mockResolvedValue(
@@ -356,6 +362,7 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "standard",
+        closing_reflection: REFLECTION,
         linear_issue: "PROJ-123",
         decisions: [{ title: "Chose X over Y", decision: "X", rationale: "because" }],
       });
@@ -372,6 +379,7 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "standard",
+        closing_reflection: REFLECTION,
         linear_issue: "PROJ-123",
         decisions: [{ title: "Chose X over Y", decision: "X", rationale: "because" }],
       });
@@ -388,6 +396,7 @@ describe("session_close Supabase path", () => {
       await sessionClose({
         session_id: VALID_UUID,
         close_type: "standard",
+        closing_reflection: REFLECTION,
         decisions: [
           { title: "Decision A", decision: "Chose A", rationale: "faster" },
           { title: "Decision B", decision: "Chose B", rationale: "simpler" },

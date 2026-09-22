@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  # GIT-83: run the venue gate by hand (Actions → CI → Run workflow) before
+  # tagging. Publishing still happens only on a v* tag.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -51,8 +54,117 @@ jobs:
       - name: Dependency audit (no unused deps)
         run: npx depcheck --ignores="@types/*" --json | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); const unused=d.dependencies||[]; if(unused.length){console.error('Unused dependencies:',unused);process.exit(1)}"
 
+  # GIT-83 / GIT-112: the hook suite on a runner WITHOUT jq (or ps). The hooks
+  # fall back to node and bash builtins there; on 1.10.0 that fallback left
+  # Stop enforcement inactive and nothing noticed, because every runner and
+  # dev machine the suite had run on had jq.
+  hooks-without-jq:
+    runs-on: ubuntu-latest
+    container: node:20-bookworm-slim
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner has no jq and no ps
+        run: |
+          if command -v jq >/dev/null; then echo "::error::jq is installed; this job must run without it"; exit 1; fi
+          if command -v ps >/dev/null; then echo "::error::ps is installed; this job must run without it"; exit 1; fi
+          bash --version | head -1; node --version
+
+      - name: Hook tests
+        run: bash hooks/tests/test-hooks.sh
+
+  # GIT-83: the release gate. Customers never run SQL after setup (standing
+  # rule, 2026-09-21), so a release must work on a store still on the v1.8.0
+  # setup.sql — the venue is put on exactly that schema first, then the
+  # current one. Runs on v* tags (publish depends on it) and on demand.
+  #
+  # Needs repository secrets, all for the DISPOSABLE venue (never production;
+  # scripts/venue-schema.sh and the driver both refuse it):
+  #   VENUE_REF                  project ref
+  #   VENUE_SUPABASE_URL         https://<VENUE_REF>.supabase.co
+  #   VENUE_SERVICE_ROLE_KEY     service role key
+  #   VENUE_DB_URL               postgres:// URL (session pooler) for schema resets
+  venue-gate:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # One venue: two runs would wipe each other's data.
+    concurrency:
+      group: gitmem-venue
+      cancel-in-progress: false
+    env:
+      VENUE_REF: ${{ secrets.VENUE_REF }}
+      VENUE_DB_URL: ${{ secrets.VENUE_DB_URL }}
+      VENUE_SUPABASE_URL: ${{ secrets.VENUE_SUPABASE_URL }}
+      VENUE_SERVICE_ROLE_KEY: ${{ secrets.VENUE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the v1.8.0 tag supplies the floor schema
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+      - run: npm run build
+
+      # Missing secrets fail the gate — a skipped gate would let publish through.
+      - name: Venue configured
+        run: |
+          missing=""
+          for v in VENUE_REF VENUE_DB_URL VENUE_SUPABASE_URL VENUE_SERVICE_ROLE_KEY; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then echo "::error::venue gate cannot run, missing secrets:$missing"; exit 1; fi
+          umask 077
+          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nVENUE_REF=%s\n' \
+            "$VENUE_SUPABASE_URL" "$VENUE_SERVICE_ROLE_KEY" "$VENUE_REF" > "$RUNNER_TEMP/venue.env"
+          echo "VENUE_ENV=$RUNNER_TEMP/venue.env" >> "$GITHUB_ENV"
+          echo "RUNS=$RUNNER_TEMP/venue-runs" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/venue-runs"
+          git show v1.8.0:schema/setup.sql > "$RUNNER_TEMP/setup-v1.8.0.sql"
+
+      - name: Venue on the v1.8.0 setup.sql
+        run: scripts/venue-schema.sh reset-to "$RUNNER_TEMP/setup-v1.8.0.sql"
+
+      - name: Driver on v1.8.0 — flow
+        run: node tests/e2e/blank-supabase.mjs flow --label v180-flow --out "$RUNS"
+
+      - name: Driver on v1.8.0 — egress
+        run: node tests/e2e/blank-supabase.mjs egress --label v180-egress --out "$RUNS" --rows 250 --usage 5
+
+      - name: Driver on v1.8.0 — projects (when the driver has it)
+        run: |
+          # The usage line lists the modes; a bare "projects" string also appears in a path.
+          if grep -q 'flow|egress|projects' tests/e2e/blank-supabase.mjs; then
+            node tests/e2e/blank-supabase.mjs projects --label v180-projects --out "$RUNS"
+          else
+            echo "driver has no projects mode in this revision"
+          fi
+
+      # The current setup.sql must apply on top of v1.8.0, and apply again.
+      - name: Venue on the current setup.sql (applied twice)
+        run: |
+          scripts/venue-schema.sh apply schema/setup.sql
+          scripts/venue-schema.sh apply schema/setup.sql
+
+      - name: Driver on the current schema — flow
+        run: node tests/e2e/blank-supabase.mjs flow --label current-flow --out "$RUNS"
+
+      - name: Driver reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: venue-gate-${{ github.run_id }}
+          # netlogs record method, path, status and body size only — no bodies or headers.
+          path: ${{ runner.temp }}/venue-runs
+          if-no-files-found: ignore
+          retention-days: 14
+
   publish:
-    needs: build
+    needs: [build, hooks-without-jq, venue-gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

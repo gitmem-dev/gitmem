@@ -31,20 +31,17 @@ HOOK_INPUT=$(cat -)
 # Resolve active session from registry
 # ============================================================================
 
-ACTIVE_SESSIONS=".gitmem/active-sessions.json"
-if [ ! -f "$ACTIVE_SESSIONS" ]; then
+# GIT-99: resolve .gitmem the way the server does, not from cwd.
+. "$(dirname "${BASH_SOURCE[0]}")/resolve-root.sh"
+if [ ! -f "$GITMEM_ACTIVE_SESSIONS" ]; then
     exit 0
 fi
 
-# Get first session ID from registry to find per-session data file
+# Newest live session in the registry -> its per-session data file.
+# Entries whose server pid is dead are skipped (GIT-99).
 SESSION_FILE=""
-if command -v jq &>/dev/null; then
-    SID=$(jq -r '.sessions[0].session_id // empty' "$ACTIVE_SESSIONS" 2>/dev/null)
-    [ -n "$SID" ] && SESSION_FILE=".gitmem/sessions/${SID}/session.json"
-elif command -v node &>/dev/null; then
-    SID=$(node -e "const fs=require('fs');try{const r=JSON.parse(fs.readFileSync('$ACTIVE_SESSIONS','utf8'));const s=(r.sessions||[])[0];process.stdout.write(s?.session_id||'')}catch(e){}" 2>/dev/null)
-    [ -n "$SID" ] && SESSION_FILE=".gitmem/sessions/${SID}/session.json"
-fi
+SID=$(gitmem_live_session_ids | head -n 1)
+[ -n "$SID" ] && SESSION_FILE="$GITMEM_ROOT/sessions/${SID}/session.json"
 
 if [ -z "$SESSION_FILE" ] || [ ! -f "$SESSION_FILE" ]; then
     exit 0

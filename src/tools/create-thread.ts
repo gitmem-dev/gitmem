@@ -41,7 +41,7 @@ import {
 import { wrapDisplay, truncate } from "../services/display-protocol.js";
 import { formatThreadForDisplay } from "../services/timezone.js";
 import type { ThreadWithEmbedding } from "../services/thread-dedup.js";
-import type { ThreadObject, PerformanceData, Project } from "../types/index.js";
+import type { ThreadObject, PerformanceData, Project, WriteResult, StoredIn } from "../types/index.js";
 
 // --- Types ---
 
@@ -73,21 +73,17 @@ export type NotStoredReason =
 /**
  * Where a thread actually landed (R3: every response names its store).
  * `local_only` is the honest middle state from R4 — written somewhere, but
- * not somewhere durable.
+ * not somewhere durable. GIT-101: this contract is now shared by every write
+ * tool (WriteResult).
  */
-export type StoredIn = "supabase" | "local" | "local_only" | null;
+export type { StoredIn } from "../types/index.js";
 
-export interface CreateThreadResult {
-  success: boolean;
+export interface CreateThreadResult extends WriteResult {
   /**
    * Whether a row exists. Distinct from `success` on purpose: a dedup refusal
    * is a well-formed answer to a well-formed request, not a crash.
    */
   stored: boolean;
-  /** Whether what was stored survives this machine. */
-  durable: boolean;
-  /** R3: names the store in-band, which also kills the f104e10d silent-local trap. */
-  stored_in: StoredIn;
   reason?: NotStoredReason;
   thread?: ThreadObject;
   error?: string;
@@ -296,12 +292,14 @@ export async function createThread(
   // Write to Supabase (source of truth) with embedding.
   let supabaseSynced = false;
   let supabaseError: string | undefined;
+  let threadRowId: string | null = null; // GIT-105: gitmem_threads.id, for triple source_id
   const embeddingJson = newEmbedding ? JSON.stringify(newEmbedding) : null;
 
   if (hasSupabase()) {
     try {
       const supabaseResult = await createThreadInSupabase(thread, project, embeddingJson);
       supabaseSynced = Boolean(supabaseResult);
+      threadRowId = supabaseResult?.id ?? null;
       if (!supabaseSynced) {
         supabaseError = "write returned no row";
       }
@@ -347,6 +345,7 @@ export async function createThread(
   getEffectTracker().track("triple_write", "thread_creation", () =>
     writeTriplesForThreadCreation({
       thread_id: thread.id,
+      thread_row_id: threadRowId,
       text: trimmedText,
       linear_issue: params.linear_issue,
       session_id: sessionId,

@@ -14,6 +14,7 @@
  * Usage (build first: npm run build):
  *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs flow   --label main --out <dir>
  *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs egress --label pr31 --out <dir> [--rows 250] [--usage 5]
+ *   VENUE_ENV=/path/outside/repo/.env node tests/e2e/blank-supabase.mjs projects --label git86 --out <dir>
  *
  *   flow   session_start -> list_threads -> recall -> confirm_scars -> create_thread
  *          -> list_threads -> session_close -> health, with a local threads.json that
@@ -21,6 +22,12 @@
  *   egress bytes received from the venue on a cold start, a warm start, and around
  *          two session_starts (GIT-98 disk cache). --usage N seeds N scars with
  *          >=3 usage rows so refresh_scar_behavioral_scores() has work to do.
+ *          Fails if any start after the cold one downloads the whole index again
+ *          (GIT-98 per-row delta).
+ *   projects one server process serving two projects, as the desktop app does (GIT-86):
+ *          session_start(X), session_start(Y), session_start(X), session_start({}),
+ *          session_start(X, force). A session of one project is never resumed,
+ *          displaced or superseded by a call for another.
  *
  * VENUE_ENV is a KEY=VALUE file OUTSIDE the repo defining SUPABASE_URL,
  * SUPABASE_SERVICE_ROLE_KEY and VENUE_REF. Credentials are never committed.
@@ -48,7 +55,7 @@ const DENY_REFS = new Set(["cjptxyezuxdiinufgrrm"]); // production GitMem — ne
  * Known venue failures. Any other 4xx/5xx from /rest/v1/ or /functions/v1/
  * fails the run. Each entry names the ticket that removes it — delete the entry
  * when that ticket merges, so this list only shrinks. An entry allows a failure;
- * it does not require one (e.g. the GIT-73 race is intermittent).
+ * it does not require one (a failure may be intermittent).
  */
 /**
  * Not defects: the store capability probe (src/services/store-columns.ts) is a
@@ -72,8 +79,6 @@ function isCapabilityProbe(r) {
 }
 
 const EXPECTED_FAILURES = [
-  { ticket: "GIT-73", what: "metrics/session_start FK race", method: "POST", path: /^\/rest\/v1\/gitmem_query_metrics$/, status: 409 },
-  { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
 ];
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -96,8 +101,8 @@ function configError(message) {
   console.error(`[driver] ${message}`);
   process.exit(2);
 }
-if (!["flow", "egress"].includes(mode)) {
-  configError("usage: blank-supabase.mjs flow|egress --label <l> --out <dir> [--rows N] [--usage N]");
+if (!["flow", "egress", "projects"].includes(mode)) {
+  configError("usage: blank-supabase.mjs flow|egress|projects --label <l> --out <dir> [--rows N] [--usage N]");
 }
 
 const venueEnvPath = process.env.VENUE_ENV;
@@ -366,6 +371,24 @@ async function flow() {
   const lt = await step("list_threads", { project: PROJECT });
   const ltOpen = Number((lt.match(/(\d+) open/) || [])[1] ?? -1);
 
+  // GIT-101: resolve a second driver thread; the durable store must record it
+  // and the response must not claim a local-only resolve as done.
+  const ct2 = await step("create_thread", { text: `Close out the quarterly vendor audit checklist (${label})`, allow_duplicate: true });
+  const resolveId = (ct2.match(/\bt-[0-9a-f]{8}\b/) || [])[0] ?? null;
+  const rt = resolveId ? await step("resolve_thread", { thread_id: resolveId, resolution_note: "venue driver" }) : "";
+  const resolvedRow = resolveId
+    ? await rest("GET", `gitmem_threads?select=status,resolved_by_session&thread_id=eq.${resolveId}`, undefined, { Prefer: "" }).then((r) => r.json())
+    : [];
+  const resolveDurable = !!resolveId && /Thread resolved/.test(rt) && !/LOCALLY ONLY/.test(rt)
+    && resolvedRow[0]?.status === "resolved";
+
+  // GIT-99: a standard close with no payload file and no inline reflection
+  // names the absolute path this server reads, instead of "requires N answers".
+  const expectedPayloadPath = join(gitmemDir, "closing-payload.json");
+  const scNoPayload = await step("session_close", { session_id: sessionId, close_type: "standard" });
+  const missingPayloadNamed = scNoPayload.includes(`closing-payload.json not found at ${expectedPayloadPath}`)
+    && !/requires closing_reflection|requires task_completion/.test(scNoPayload);
+
   const sc = await step("session_close", {
     session_id: sessionId, close_type: "standard", human_corrections: "none",
     closing_reflection: {
@@ -376,6 +399,16 @@ async function flow() {
   });
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
+
+  // GIT-102: every WARN on the close names a subsystem and cause and says
+  // whether the session content was stored; health reports the write-path verdict.
+  const closeWarns = sc.replace(/\x1b\[[0-9;]*m/g, "").split("\n").filter((l) => /^WARN /.test(l));
+  const closeWarnsSelfDescribing = closeWarns.every((l) => /^WARN .+: \d+ of \d+ writes? failed — .+ · session content (stored OK|NOT stored)/.test(l));
+  const healthHasWritePath = /^Write path: /m.test(health);
+  // GIT-105: thread triples land, and their source_id is a real thread row id.
+  const threadTriples = await rest("GET", "knowledge_triples?select=predicate,source_id&source_type=eq.thread", undefined, { Prefer: "" }).then((r) => r.json());
+  const threadRowIds = new Set((await rest("GET", "gitmem_threads?select=id", undefined, { Prefer: "" }).then((r) => r.json())).map((t) => t.id));
+  const threadTriplesLinked = threadTriples.length > 0 && threadTriples.every((t) => threadRowIds.has(t.source_id));
 
   // Did the close land? Is relevance readable from the store (GIT-109)?
   const closedRows = sessionId
@@ -408,6 +441,16 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    missing_payload_named: missingPayloadNamed,
+    resolve_thread_durable: resolveDurable,
+    close_warns: closeWarns,
+    close_warns_self_describing: closeWarnsSelfDescribing,
+    health_has_write_path: healthHasWritePath,
+    thread_triples: threadTriples.length,
+    thread_triples_linked: threadTriplesLinked,
+    // GIT-107: the driver creates no stranded store; its GITMEM_DIR lives under
+    // $TMPDIR, i.e. /var/... vs /private/var/... on macOS.
+    false_stranded_notice: /NOT being read/.test(ss),
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -514,12 +557,97 @@ async function egress() {
   return summary;
 }
 
-const result = mode === "flow" ? await flow() : await egress();
+// ---------------------------------------------------------------- PROJECTS (GIT-86)
+async function projects() {
+  await wipeVenue();
+  const X = `${PROJECT}-x`, Y = `${PROJECT}-y`;
+  const { home, gitmemDir } = isolatedHome(`${label}-projects`);
+  const ollama = await startFakeOllama();
+  const netlog = join(outDir, `netlog-${label}-projects.jsonl`);
+  writeFileSync(netlog, "");
+  const stderr = [];
+  const srv = await startServer({ home, gitmemDir, ollamaUrl: ollama.url, netlog, stderrSink: stderr });
+  await waitQuiet(netlog, { minMs: 2000 });
+
+  const steps = [];
+  const start = async (name, args) => {
+    const text = await srv.call("session_start", { agent_identity: "desktop", ...args });
+    const id = (text.match(UUID) || [])[0] ?? null;
+    const step = { name, args, session_id: id, resumed: /\bresumed\b/.test(text.split("\n")[0]),
+      names_project: (text.match(/Resumed project: (\S+)/) || [])[1] ?? null };
+    steps.push(step);
+    console.log(`[driver] ${name}: ${id?.slice(0, 8)} resumed=${step.resumed}${step.names_project ? ` names=${step.names_project}` : ""}`);
+    await waitQuiet(netlog, { minMs: 1500, quietMs: 2000 });
+    return step;
+  };
+  const x1 = await start("X", { project: X });
+  const y1 = await start("Y while X open", { project: Y });
+  const x2 = await start("X again", { project: X });
+  const bare = await start("no project", {});
+  const xf = await start("X force (Y in memory)", { project: X, force: true });
+  await srv.close();
+  ollama.close();
+  allVenueRequests.push(...venueReqs(readNet(netlog)));
+  writeFileSync(join(outDir, `stderr-${label}-projects.log`), stderr.join(""));
+
+  const rows = await rest("GET", `gitmem_sessions?select=id,project,close_compliance&id=in.(${[x1, y1, xf].map((s) => s.session_id).join(",")})`, undefined, { Prefer: "" }).then((r) => r.json());
+  const row = (id) => rows.find((r) => r.id === id);
+  const superseded = (id) => row(id)?.close_compliance?.close_type === "superseded";
+  const registry = JSON.parse(readFileSync(join(gitmemDir, "active-sessions.json"), "utf8")).sessions;
+  const dirExists = (id) => existsSync(join(gitmemDir, "sessions", id, "session.json"));
+
+  const checks = {
+    "Y is a new session, not X resumed": y1.session_id !== x1.session_id && !y1.resumed,
+    "X row stored under X": row(x1.session_id)?.project === X,
+    "Y row stored under Y": row(y1.session_id)?.project === Y,
+    "X again resumes X": x2.session_id === x1.session_id && x2.resumed,
+    "no project resumes the most recent session (Y)": bare.session_id === y1.session_id && bare.resumed,
+    "no project names the resumed project": bare.names_project === Y,
+    "X force is a new session": xf.session_id !== x1.session_id && xf.session_id !== y1.session_id && !xf.resumed,
+    "Y never superseded by an X call": !superseded(y1.session_id),
+    "X superseded only by the same-project force": superseded(x1.session_id) && row(x1.session_id)?.close_compliance?.superseded_by === xf.session_id,
+    "Y still registered and on disk": registry.some((e) => e.session_id === y1.session_id && e.project === Y) && dirExists(y1.session_id),
+    "no cross-project override on stderr": !/Project override on resume/.test(stderr.join("")),
+  };
+  const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k);
+  const summary = { label, mode, venue: SUPABASE_URL, steps, rows, registry, checks, failed };
+  writeFileSync(join(outDir, `summary-${label}-projects.json`), JSON.stringify(summary, null, 2));
+  return summary;
+}
+
+const result = mode === "flow" ? await flow() : mode === "projects" ? await projects() : await egress();
 const failureCheck = checkFailures(allVenueRequests);
 // Invariants the edge-function removal (GIT-97) guarantees, whatever the status code.
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && !result.resolve_thread_durable) {
+  failureCheck.unexpected.push("resolve_thread did not land durably in gitmem_threads, or claimed it did not (GIT-101)");
+}
+if (mode === "flow" && !result.missing_payload_named) {
+  failureCheck.unexpected.push("session_close without a payload did not name the absolute closing-payload.json path (GIT-99)");
+}
+// GIT-98 per-row delta: after the cold start, a changed store costs the changed
+// rows, never the whole index again.
+if (mode === "egress") {
+  for (const st of result.starts.slice(1)) {
+    if (st.cache_log.some((l) => /Loading ALL learnings/.test(l))) {
+      failureCheck.unexpected.push(`full index download after the cold start (GIT-98): ${st.start}, ${st.total_bytes} B`);
+    }
+  }
+}
+if (mode === "flow" && !result.close_warns_self_describing) {
+  failureCheck.unexpected.push(`session_close WARN is not self-describing (GIT-102): ${result.close_warns.join(" | ")}`);
+}
+if (mode === "flow" && !result.health_has_write_path) {
+  failureCheck.unexpected.push("health does not report the write-path verdict (GIT-102)");
+}
+if (mode === "flow" && !result.thread_triples_linked) {
+  failureCheck.unexpected.push(`thread triples missing or not linked to a gitmem_threads row (GIT-105): ${result.thread_triples} found`);
+}
+if (mode === "flow" && result.false_stranded_notice) {
+  failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);
 }
@@ -531,6 +659,7 @@ if (mode === "flow" && !result.thread_counts_match) {
     `thread panel mismatch (GIT-97): session_start ${result.session_start_thread_count} != list_threads ${result.list_threads_open_right_after_session_start}`
   );
 }
+if (mode === "projects") failureCheck.unexpected.push(...result.failed.map((f) => `cross-project resume (GIT-86): ${f}`));
 writeFileSync(join(outDir, `failure-check-${label}-${mode}.json`), JSON.stringify(failureCheck, null, 2));
 console.log(JSON.stringify({ ...result, health_text: undefined, stderr_error_lines: undefined, failure_check: failureCheck }, null, 2));
 if (failureCheck.unexpected.length > 0) {

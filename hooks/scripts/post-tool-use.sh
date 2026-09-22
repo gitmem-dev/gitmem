@@ -22,8 +22,9 @@ HOOK_INPUT=$(cat -)
 # ============================================================================
 
 # Check active sessions registry
-ACTIVE_SESSIONS=".gitmem/active-sessions.json"
-if [ ! -f "$ACTIVE_SESSIONS" ]; then
+# GIT-99: resolve .gitmem the way the server does, not from cwd.
+. "$(dirname "${BASH_SOURCE[0]}")/resolve-root.sh"
+if [ -z "$(gitmem_live_session_ids)" ]; then
     exit 0
 fi
 

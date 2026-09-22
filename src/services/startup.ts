@@ -15,8 +15,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { isConfigured, loadScarsWithEmbeddings, getLearningsFingerprint, getSupabaseUrl } from "./supabase-client.js";
-import { computeStoreKey, readVectorCache, writeVectorCache, tryAcquireDownloadLock, waitForLeaderCache } from "./vector-disk-cache.js";
+import { isConfigured, loadScarsWithEmbeddings, loadLearningsManifest, loadLearningsByIds, getLearningsFingerprint, getSupabaseUrl } from "./supabase-client.js";
+import { computeStoreKey, readVectorCache, readVectorCacheBase, planDelta, assembleDelta, writeVectorCache, tryAcquireDownloadLock, waitForLeaderCache } from "./vector-disk-cache.js";
+import type { StoreFingerprint } from "./vector-disk-cache.js";
 import { getTableName } from "./tier.js";
 import { getGitmemDir } from "./gitmem-dir.js";
 import {
@@ -103,6 +104,38 @@ interface ScarWithEmbedding {
   [key: string]: unknown;
 }
 
+/** Rows the bulk load and the delta manifest both cap at. */
+const INDEX_ROW_LIMIT = 500;
+
+/**
+ * GIT-98 per-row delta: bring a cache from this store up to date by fetching
+ * only the rows whose updated_at moved. Returns null — and the caller does the
+ * full download — when there is no base to reuse or anything goes wrong.
+ */
+async function deltaSyncFromCache(storeKey: string, fingerprint: StoreFingerprint): Promise<ScarWithEmbedding[] | null> {
+  const base = readVectorCacheBase<ScarWithEmbedding>(storeKey);
+  if (!base || base.length === 0) return null;
+  const startTime = Date.now();
+  try {
+    const manifest = await loadLearningsManifest(INDEX_ROW_LIMIT);
+    // An empty manifest is more likely a transient failure than an emptied
+    // store; let the full download decide.
+    if (manifest.length === 0) return null;
+    const plan = planDelta(base, manifest);
+    const fetched = plan.fetchIds.length > 0 ? await loadLearningsByIds<ScarWithEmbedding>(plan.fetchIds) : [];
+    const rows = assembleDelta(manifest, plan, fetched);
+    console.error(
+      `[startup] Vector cache DELTA: ${rows.length} learnings in ${Date.now() - startTime}ms — ` +
+      `${plan.reuse.size} reused from disk, ${fetched.length} fetched, ${plan.dropped} dropped (bulk download skipped)`
+    );
+    if (rows.length > 0) writeVectorCache(storeKey, fingerprint, rows);
+    return rows;
+  } catch (error) {
+    console.error("[startup] Delta sync failed, falling back to full download:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 /**
  * Load all learnings with embeddings from Supabase
  *
@@ -112,7 +145,8 @@ interface ScarWithEmbedding {
  * NOTE: Now loads all learning types (scars, patterns, wins, anti-patterns),
  * not just scars. This fixes the issue where ~64 patterns were being ignored.
  */
-async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean } = {}): Promise<{
+/** @internal exported for tests (GIT-98 delta sync). */
+export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean } = {}): Promise<{
   scars: ScarWithEmbedding[];
   latestUpdatedAt: string | null;
   source: "disk" | "network";
@@ -155,11 +189,20 @@ async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean } = {}
   }
   releaseLock = releaseLock ?? (() => {});
 
-  console.error(`[startup] Loading ALL learnings with embeddings from Supabase (cross-project)`);
-
   try {
+    // GIT-98: a miss is usually a handful of changed rows, not a new store.
+    // cache-flush (bypassDiskCache) always takes the full download.
+    if (!options.bypassDiskCache && fingerprint.count >= 0) {
+      const synced = await deltaSyncFromCache(storeKey, fingerprint);
+      if (synced) {
+        return { scars: synced, latestUpdatedAt: synced[0]?.updated_at || null, source: "network" };
+      }
+    }
+
+    console.error(`[startup] Loading ALL learnings with embeddings from Supabase (cross-project)`);
+
     // Load ALL learnings across projects — semantic similarity handles relevance
-    const learnings = await loadScarsWithEmbeddings<ScarWithEmbedding>(undefined, 500);
+    const learnings = await loadScarsWithEmbeddings<ScarWithEmbedding>(undefined, INDEX_ROW_LIMIT);
 
     const elapsed = Date.now() - startTime;
     console.error(`[startup] Loaded ${learnings.length} learnings in ${elapsed}ms`);

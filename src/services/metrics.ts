@@ -136,6 +136,48 @@ export class Timer {
 }
 
 /**
+ * GIT-73: session rows still being created, by session id.
+ *
+ * session_start creates its session row fire-and-forget and records its own
+ * metrics at the same moment, and gitmem_query_metrics.session_id references
+ * gitmem_sessions(id). Whichever request reached the store first decided
+ * whether the metrics insert 409'd (FK violation). recall right after
+ * session_start raced the same way.
+ *
+ * A metrics write for a session registered here waits for its row. If the row
+ * did not land (or takes longer than the wait budget), the metrics row is
+ * written without the FK and keeps the id in metadata.session_id — where
+ * session_close already looks for it (GIT-109) — instead of being lost to a 409.
+ * Entries stay after they settle so later writes know the answer too.
+ */
+const pendingSessionRows = new Map<string, Promise<boolean>>();
+const SESSION_ROW_WAIT_MS = 15_000;
+
+export function registerPendingSessionRow(sessionId: string, created: Promise<boolean>): void {
+  pendingSessionRows.set(sessionId, created.catch(() => false));
+}
+
+/** For tests. */
+export function clearPendingSessionRows(): void {
+  pendingSessionRows.clear();
+}
+
+async function sessionRowLanded(sessionId: string): Promise<boolean | undefined> {
+  const pending = pendingSessionRows.get(sessionId);
+  if (!pending) return undefined; // not created by this process — nothing to wait for
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), SESSION_ROW_WAIT_MS);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([pending, budget]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Track a query and record metrics.
  *
  * Wrapped by Effect Tracker — failures are recorded instead of swallowed.
@@ -146,9 +188,17 @@ export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
   // Auto-detect agent if not provided by caller
   const agent = metrics.agent || getAgentIdentity() || null;
 
+  // GIT-73: never reference a session row that is not there yet.
+  let sessionId = metrics.session_id || null;
+  let metadata = metrics.metadata || {};
+  if (sessionId && (await sessionRowLanded(sessionId)) === false) {
+    metadata = { ...metadata, session_id: sessionId };
+    sessionId = null;
+  }
+
   const record: Record<string, unknown> = {
     id: metrics.id,
-    session_id: metrics.session_id || null,
+    session_id: sessionId,
     agent,
     tool_name: metrics.tool_name,
     query_text: metrics.query_text || null,
@@ -160,7 +210,7 @@ export async function recordMetrics(metrics: QueryMetrics): Promise<void> {
     phase_tag: metrics.phase_tag || null,
     linear_issue: metrics.linear_issue || null,
     memories_surfaced: metrics.memories_surfaced || null,
-    metadata: metrics.metadata || {},
+    metadata,
     created_at: new Date().toISOString(),
   };
 

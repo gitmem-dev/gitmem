@@ -179,15 +179,52 @@ export function describeGitmemRoot(root: string): GitmemRootContents {
   };
 }
 
+/**
+ * GIT-107: a path's canonical spelling, for comparing directories.
+ *
+ * Roots used to be compared as strings, but one directory has many spellings:
+ * on macOS /var is a symlink to /private/var, so a home under $TMPDIR
+ * (/var/folders/...) and a cwd reported as /private/var/folders/... named the
+ * same store and still read as different — and session_start announced
+ * "Memory store found but NOT being read" about the store it was reading.
+ *
+ * realpathSync.native resolves every symlink. A path that does not exist yet
+ * (a destination root before its first write) resolves through its nearest
+ * existing ancestor, so /var/x/.gitmem and /private/var/x/.gitmem still agree.
+ */
+export function canonicalPath(p: string): string {
+  const abs = path.resolve(p);
+  const rest: string[] = [];
+  let dir = abs;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(dir), ...rest.reverse());
+    } catch {
+      const parent = path.dirname(dir);
+      if (parent === dir) return abs; // nothing on the path exists
+      rest.push(path.basename(dir));
+      dir = parent;
+    }
+  }
+}
+
+/** GIT-107: the same directory, however it is spelled. */
+export function sameDirectory(a: string, b: string): boolean {
+  return canonicalPath(a) === canonicalPath(b);
+}
+
 export function findStrandedProjectRoots(): string[] {
   try {
-    const home = getHomeGitmemDir();
+    // A root is only stranded if it is not the one being read: neither the
+    // developer-scoped home nor an explicit GITMEM_DIR. (process.env, not
+    // getGitmemDir(): that call is what triggers this scan.)
+    const readRoots = [getHomeGitmemDir(), ...(process.env.GITMEM_DIR ? [process.env.GITMEM_DIR] : [])];
     const stranded: string[] = [];
     let dir = process.cwd();
     const fsRoot = path.parse(dir).root;
     while (dir !== fsRoot) {
       const candidate = path.join(dir, ".gitmem");
-      if (candidate !== home && isLiveGitmemRoot(candidate)) stranded.push(candidate);
+      if (!readRoots.some((r) => sameDirectory(candidate, r)) && isLiveGitmemRoot(candidate)) stranded.push(candidate);
       dir = path.dirname(dir);
     }
     return stranded;

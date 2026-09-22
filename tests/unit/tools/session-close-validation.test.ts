@@ -125,6 +125,7 @@ vi.mock("../../../src/services/gitmem-dir.js", () => ({
 vi.mock("../../../src/services/active-sessions.js", () => ({
   unregisterSession: vi.fn(),
   findSessionByHostPid: vi.fn().mockReturnValue(null),
+  findSessionById: vi.fn().mockReturnValue(null), // GIT-86: session-close's registry fallback looks up by id
 }));
 
 vi.mock("../../../src/services/thread-suggestions.js", () => ({

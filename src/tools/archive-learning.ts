@@ -16,6 +16,8 @@ import { getStorage } from "../services/storage.js";
 import { flushCache } from "../services/startup.js";
 import { Timer } from "../services/metrics.js";
 import { wrapDisplay } from "../services/display-protocol.js";
+import { writeResult, notStored } from "../services/write-result.js";
+import type { WriteResult } from "../types/index.js";
 
 export interface ArchiveLearningParams {
   /** UUID or short ID prefix of the learning to archive */
@@ -24,8 +26,7 @@ export interface ArchiveLearningParams {
   reason?: string;
 }
 
-export interface ArchiveLearningResult {
-  success: boolean;
+export interface ArchiveLearningResult extends WriteResult {
   id: string;
   archived_at?: string;
   reason?: string;
@@ -95,7 +96,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
   if (!params.id || typeof params.id !== "string") {
     const msg = "Missing required parameter: id (UUID or short ID prefix of the learning to archive)";
     return {
-      success: false,
+      ...notStored(),
       id: "",
       cache_flushed: false,
       display: wrapDisplay(msg),
@@ -108,7 +109,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
   const resolved = await resolveIdPrefix(params.id);
   if ("error" in resolved) {
     return {
-      success: false,
+      ...notStored(),
       id: params.id,
       cache_flushed: false,
       display: wrapDisplay(resolved.error),
@@ -147,7 +148,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
       if (!existing) {
         const msg = `Learning ${resolvedId} not found in local storage`;
         return {
-          success: false,
+          ...notStored(),
           id: resolvedId,
           cache_flushed: false,
           display: wrapDisplay(msg),
@@ -172,7 +173,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
     const display = `Archived learning ${idDisplay}.${reasonText}\n(${latencyMs}ms)`;
 
     return {
-      success: true,
+      ...writeResult(hasSupabase()),
       id: resolvedId,
       archived_at: archivedAt,
       reason: params.reason,
@@ -184,7 +185,7 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
     const message = error instanceof Error ? error.message : String(error);
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       id: resolvedId,
       cache_flushed: false,
       display: wrapDisplay(`Failed to archive learning: ${message}`),

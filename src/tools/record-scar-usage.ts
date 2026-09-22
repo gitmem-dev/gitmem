@@ -24,6 +24,7 @@ import type {
   RecordScarUsageResult,
   PerformanceBreakdown,
 } from "../types/index.js";
+import { writeResult, notStored } from "../services/write-result.js";
 
 /**
  * Execute record_scar_usage tool
@@ -101,7 +102,7 @@ export async function recordScarUsage(
     }).catch(() => {});
 
     return {
-      success: true,
+      ...writeResult(hasSupabase()),
       usage_id: usageId,
       performance: perfData,
       display: wrapDisplay(`Scar usage recorded\nID: ${usageId}`),
@@ -112,7 +113,7 @@ export async function recordScarUsage(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("record_scar_usage", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       usage_id: "",
       errors: [errorMsg],
       performance: perfData,

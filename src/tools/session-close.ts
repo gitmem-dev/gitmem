@@ -36,6 +36,7 @@ import {
 import { wrapDisplay, truncate, productLine, boldText, dimText, STATUS, ANSI } from "../services/display-protocol.js";
 import { queryScarUsageByDateRange, enrichScarUsageTitles, formatBlindspotSnippet } from "../services/analytics.js";
 import { recordScarUsageBatch } from "./record-scar-usage-batch.js";
+import { writeResult, notStored } from "../services/write-result.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
 import { saveTranscript } from "./save-transcript.js";
 import { processTranscript } from "../services/transcript-chunker.js";
@@ -43,7 +44,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { getGitmemPath, getGitmemDir, getSessionPath, getSessionDir } from "../services/gitmem-dir.js";
-import { unregisterSession, findSessionByHostPid } from "../services/active-sessions.js";
+import { unregisterSession, findSessionByHostPid, findSessionById } from "../services/active-sessions.js";
 import { loadSuggestions, saveSuggestions, detectSuggestedThreads, loadRecentSessionEmbeddings } from "../services/thread-suggestions.js";
 import { writeAgentBriefing } from "../services/agent-briefing.js";
 import type {
@@ -318,7 +319,7 @@ async function sessionCloseFree(
     const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, true);
 
     return {
-      success: true,
+      ...writeResult(false),
       session_id: sessionId,
       close_compliance: closeCompliance,
       performance: perfData,
@@ -329,10 +330,10 @@ async function sessionCloseFree(
     clearCurrentSession();
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], undefined, undefined, false);
 
     return {
-      success: false,
+      ...notStored(),
       session_id: sessionId,
       close_compliance: closeCompliance,
       validation_errors: [`Failed to persist session: ${errorMessage}`],
@@ -363,6 +364,8 @@ function formatCloseDisplay(
   errors?: string[],
   transcriptStatus?: TranscriptStatus,
   blindspotSnippet?: string | null,
+  /** GIT-102: whether the session content itself landed; defaults to `success`. */
+  sessionStored: boolean = success,
 ): string {
   const lines: string[] = [];
 
@@ -434,13 +437,53 @@ function formatCloseDisplay(
   }
 
   // Write health — only on failure
-  const healthReport = getEffectTracker().getHealthReport();
-  if (healthReport.overall.failed > 0) {
+  const warnings = formatWriteWarnings(getEffectTracker().getHealthReport(), sessionStored);
+  if (warnings.length > 0) {
     lines.push("");
-    lines.push(`${STATUS.warn} ${healthReport.overall.failed} write failure${healthReport.overall.failed > 1 ? "s" : ""}`);
+    for (const w of warnings) lines.push(`${STATUS.warn} ${w}`);
   }
 
   return wrapDisplay(lines.join("\n"));
+}
+
+/** GIT-102: what each tracked write path is, in words. */
+const SUBSYSTEM_NAMES: Record<string, string> = {
+  triple_write: "knowledge graph (triples)",
+  embedding: "session embedding",
+  scar_usage: "scar usage records",
+  transcript: "transcript upload",
+  metrics: "query metrics",
+  relevance_update: "relevance feedback",
+  variant_generation: "scar variants",
+  cache_set: "local cache",
+};
+
+/**
+ * GIT-102: one self-describing line per failing write subsystem.
+ *
+ * The close used to print "WARN 3 write failures" and nothing else: not which
+ * writes, not why, and — the question every reader actually has — not whether
+ * the session itself was saved. Each line now names the subsystem, the cause
+ * (its most recent error), and states whether the session content was stored.
+ * That last clause is mandatory on every line, so no WARN can be read as
+ * "the close failed" when it didn't, or as harmless when it wasn't.
+ */
+export function formatWriteWarnings(
+  report: ReturnType<ReturnType<typeof getEffectTracker>["getHealthReport"]>,
+  sessionStored: boolean
+): string[] {
+  const where = hasSupabase() ? "" : " (local)";
+  const stored = sessionStored ? `session content stored OK${where}` : "session content NOT stored";
+  const lines: string[] = [];
+  for (const [path, s] of Object.entries(report.byPath)) {
+    if (s.failed === 0) continue;
+    const name = SUBSYSTEM_NAMES[path] ?? path;
+    const cause = s.lastFailure?.error
+      ? truncate(s.lastFailure.error.replace(/\s+/g, " ").trim(), 160)
+      : "no error message recorded";
+    lines.push(`${name}: ${s.failed} of ${s.attempted} write${s.attempted > 1 ? "s" : ""} failed — ${cause} · ${stored}`);
+  }
+  return lines;
 }
 
 /**
@@ -862,7 +905,7 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id,
       close_compliance: {
         close_type: params.close_type,
@@ -908,7 +951,7 @@ export async function sessionClose(
   if (!params.session_id && params.close_type !== "retroactive") {
     const latencyMs = timer.stop();
     return {
-      success: false,
+      ...notStored(),
       session_id: "",
       close_compliance: {
         close_type: params.close_type,
@@ -932,6 +975,11 @@ export async function sessionClose(
   // This keeps the visible MCP tool call small: just session_id + close_type.
   const payloadPath = getGitmemPath("closing-payload.json");
   let payloadConsumed = false;
+  let payloadReadError: string | null = null;
+  // Whether the session row reached the durable store. Set only after the
+  // upsert resolves, so every exit can say so: its WriteResult (GIT-101) and
+  // the "session content stored OK / NOT stored" clause on each WARN (GIT-102).
+  let sessionRowStored = false;
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
@@ -944,6 +992,36 @@ export async function sessionClose(
     }
   } catch (error) {
     console.warn("[session_close] Failed to read closing-payload.json:", error);
+    payloadReadError =
+      `closing-payload.json at ${path.resolve(payloadPath)} could not be read: ` +
+      `${error instanceof Error ? error.message : String(error)}. Fix or rewrite it, then call session_close again.`;
+  }
+
+  // GIT-99: a standard close with no reflection at all. The agent almost always
+  // wrote the payload — to a root this server does not read (the hook and the
+  // server resolved .gitmem differently). Validation would then report
+  // "requires task_completion" / "requires closing_reflection with N answers",
+  // which sends the agent to rewrite answers it already wrote. Name the path.
+  if (params.close_type === "standard" && !payloadConsumed && !params.closing_reflection) {
+    return {
+      ...notStored(), // pre-write exit: nothing stored
+      session_id: params.session_id || "",
+      close_compliance: {
+        close_type: "standard",
+        agent: detectAgent().agent,
+        checklist_displayed: false,
+        questions_answered_by_agent: false,
+        human_asked_for_corrections: false,
+        learnings_stored: 0,
+        scars_applied: 0,
+      },
+      validation_errors: [
+        payloadReadError ??
+          `closing-payload.json not found at ${path.resolve(payloadPath)}. ` +
+          `Write the closing payload to exactly that path (or pass closing_reflection inline), then call session_close again.`,
+      ],
+      performance: buildPerformanceData("session_close", timer.stop(), 0),
+    };
   }
 
   // Sanitize scars_to_record: agents frequently write create_learning shape
@@ -1066,7 +1144,7 @@ export async function sessionClose(
     // Hard gate: quick close requires session under 30 minutes
     if (params.close_type === "quick" && activity.duration_min >= 30) {
       return {
-        success: false,
+        ...notStored(),
         session_id: params.session_id || "",
         close_compliance: {
           close_type: "quick",
@@ -1099,7 +1177,7 @@ export async function sessionClose(
   // Exemptions: quick (micro sessions), autonomous (CODA-1), hasReflection (agent already wrote full reflection)
   if (params.close_type === "standard" && !isRecallCalled() && !hasReflection) {
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id || "",
       close_compliance: {
         close_type: "standard",
@@ -1155,7 +1233,7 @@ export async function sessionClose(
         const latencyMs = timer.stop();
         const perfData = buildPerformanceData("session_close", latencyMs, 0);
         return {
-          success: false,
+          ...notStored(),
           session_id: "",  // Empty string when no session found
           close_compliance: {
             close_type: params.close_type,
@@ -1179,7 +1257,7 @@ export async function sessionClose(
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("session_close", latencyMs, 0);
       return {
-        success: false,
+        ...notStored(),
         session_id: "",  // Empty string when search fails
         close_compliance: {
           close_type: params.close_type,
@@ -1206,7 +1284,7 @@ export async function sessionClose(
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
     return {
-      success: false,
+      ...notStored(),
       session_id: params.session_id,
       close_compliance: {
         close_type: params.close_type,
@@ -1285,8 +1363,10 @@ export async function sessionClose(
     // Fall back to active-sessions registry as last resort
     if (!existingSession) {
       try {
-        const mySession = findSessionByHostPid(os.hostname(), process.pid);
-        if (mySession && mySession.session_id === sessionId) {
+        // GIT-86: look up by id — a process can hold one session per project,
+        // so "this process's session" is not a single entry.
+        const mySession = findSessionById(sessionId);
+        if (mySession && mySession.hostname === os.hostname() && mySession.pid === process.pid) {
           existingSession = {
             id: sessionId,
             session_date: mySession.started_at?.split("T")[0] || new Date().toISOString().split("T")[0],
@@ -1304,7 +1384,7 @@ export async function sessionClose(
       const latencyMs = timer.stop();
       const perfData = buildPerformanceData("session_close", latencyMs, 0);
       return {
-        success: false,
+        ...notStored(),
         session_id: sessionId,
         close_compliance: closeCompliance,
         validation_errors: [`Session ${sessionId} not found in Supabase, local files, or registry. Was session_start called?`],
@@ -1470,6 +1550,7 @@ export async function sessionClose(
       supabase.directUpsert(sessionsTable, sessionRow),
       blindspotPromise,
     ]);
+    sessionRowStored = true;
 
     // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
@@ -1642,9 +1723,12 @@ export async function sessionClose(
 
     const allErrors = [...persistErrors, ...coverageWarnings, ...validation.warnings];
 
-    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet);
+    // The session row is upserted above; a partial persist is threads, not the session.
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet, true);
 
     return {
+      // The session row is durable; success also requires every thread to sync.
+      ...writeResult(true),
       success: !partialPersist,
       session_id: sessionId,
       close_compliance: closeCompliance,
@@ -1660,9 +1744,10 @@ export async function sessionClose(
     // Clear session state even on error (session is done either way)
     clearCurrentSession();
 
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet, sessionRowStored);
 
     return {
+      ...writeResult(sessionRowStored),
       success: false,
       session_id: sessionId,
       close_compliance: closeCompliance,

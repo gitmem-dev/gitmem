@@ -687,7 +687,7 @@ echo "$OUTPUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=
 
 # Registry entries whose pid is dead on this host are skipped.
 DEAD_PID=99999999
-while ps -p "$DEAD_PID" >/dev/null 2>&1; do DEAD_PID=$((DEAD_PID - 1)); done
+while kill -0 "$DEAD_PID" 2>/dev/null; do DEAD_PID=$((DEAD_PID - 1)); done
 HOST=$(hostname)
 setup_state 10 60
 echo "{\"sessions\":[{\"session_id\":\"dead-one\",\"pid\":$DEAD_PID,\"hostname\":\"$HOST\",\"started_at\":\"2026-09-21T00:00:00Z\"}]}" > "$GITMEM_DIR/active-sessions.json"
@@ -715,6 +715,14 @@ setup_state 0 0
 OUTPUT=$(echo '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}' | bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
 echo "$OUTPUT" | grep -q "block" && pass "recall-check reads the live session's scars (dead newer entry skipped)" \
     || fail "recall-check live session" "block on unconfirmed scar of live-old" "$OUTPUT"
+
+# The pid check needs no `ps` (minimal images have none).
+GOT=$(PATH="$TMPDIR/no-ps-bin" "$BASH" -c '. "$0/scripts/resolve-root.sh"; gitmem_pid_alive $$ && echo alive; gitmem_pid_alive '"$DEAD_PID"' || echo dead' "$SCRIPT_DIR" 2>/dev/null | tr "\n" " ")
+[ "$GOT" = "alive dead " ] && pass "gitmem_pid_alive works with no ps on PATH" \
+    || fail "pid check without ps" "alive dead" "$GOT"
+GOT=$(bash -c '. "$0/scripts/resolve-root.sh"; gitmem_pid_alive 1 && echo alive' "$SCRIPT_DIR")
+[ "$GOT" = "alive" ] && pass "a live pid owned by another user (EPERM) counts as alive" \
+    || fail "EPERM pid alive" "alive" "$GOT"
 
 remove_session_registry
 

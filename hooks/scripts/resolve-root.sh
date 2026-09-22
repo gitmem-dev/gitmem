@@ -22,6 +22,7 @@
 # Provides:
 #   gitmem_live_session_ids   registry session ids, newest first, skipping
 #                             entries on this host whose pid is dead
+#   gitmem_pid_alive          whether a pid is running (no `ps` needed)
 #   gitmem_json_escape        escape a string for a JSON string literal
 # ============================================================================
 
@@ -42,10 +43,19 @@ unset _gitmem_root
 GITMEM_ACTIVE_SESSIONS="$GITMEM_ROOT/active-sessions.json"
 GITMEM_PAYLOAD_PATH="$GITMEM_ROOT/closing-payload.json"
 
+# Is this pid a running process? `kill -0` needs no external tool (minimal
+# images have no `ps`, and a missing `ps` would make every session look dead).
+# EPERM ("Operation not permitted") means it exists but belongs to another user.
+gitmem_pid_alive() {
+    local out
+    out=$(kill -0 "$1" 2>&1) && return 0
+    case "$out" in *ermitted*) return 0 ;; esac
+    return 1
+}
+
 # A registry entry whose server died is not a session anyone can be in. Only
 # entries on THIS host can be checked; entries without a pid, or from another
-# host, are kept. `ps -p` rather than `kill -0`: kill fails with EPERM for a
-# live process of another user, which is still alive.
+# host, are kept.
 gitmem_live_session_ids() {
     [ -f "$GITMEM_ACTIVE_SESSIONS" ] || return 0
     local host rows
@@ -69,7 +79,7 @@ gitmem_live_session_ids() {
     # empty pid would shift the hostname into its place.
     while IFS='|' read -r sid pid h; do
         [ -n "$sid" ] || continue
-        if [ -n "$pid" ] && [ "$h" = "$host" ] && ! ps -p "$pid" >/dev/null 2>&1; then
+        if [ -n "$pid" ] && [ "$h" = "$host" ] && ! gitmem_pid_alive "$pid"; then
             continue
         fi
         echo "$sid"

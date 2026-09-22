@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-21
+
 **Just upgrade the package. Nothing to change on your database.** Every fix in this release works on
 a project still on the `setup.sql` you first ran, back to 1.8.0. Each one was checked against a
 project on exactly that schema.

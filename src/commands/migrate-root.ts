@@ -29,7 +29,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { findStrandedProjectRoots, getHomeGitmemDir } from "../services/gitmem-dir.js";
+import { findStrandedProjectRoots, getHomeGitmemDir, sameDirectory } from "../services/gitmem-dir.js";
 
 interface MigrationPlan {
   source: string;
@@ -144,7 +144,7 @@ export function main(args: string[]): void {
   }
 
   const source = sources[0];
-  if (source === home) {
+  if (sameDirectory(source, home)) { // GIT-107: symlinks, /var vs /private/var
     console.log(`Source and destination are the same (${home}). Nothing to do.`);
     return;
   }

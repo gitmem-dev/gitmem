@@ -24,6 +24,7 @@ import { getStorage } from "../services/storage.js";
 import {
   Timer,
   recordMetrics,
+  registerPendingSessionRow,
   calculateContextBytes,
   PERFORMANCE_TARGETS,
   buildPerformanceData,
@@ -426,14 +427,14 @@ async function createSessionRecord(
   project: Project,
   linearIssue?: string,
   preGeneratedId?: string  // Accept pre-generated UUID for fire-and-forget pattern
-): Promise<{ session_id: string; latency_ms: number; network_call: boolean }> {
+): Promise<{ session_id: string; latency_ms: number; network_call: boolean; stored: boolean }> {
   const sessionId = preGeneratedId || uuidv4();
   const today = new Date().toISOString().split("T")[0];
   const timer = new Timer();
 
   if (!hasSupabase()) {
     // Free tier: session tracked locally only
-    return { session_id: sessionId, latency_ms: timer.stop(), network_call: false };
+    return { session_id: sessionId, latency_ms: timer.stop(), network_call: false, stored: false };
   }
 
   try {
@@ -458,6 +459,7 @@ async function createSessionRecord(
       session_id: sessionId,
       latency_ms: timer.stop(),
       network_call: true, // Always writes to Supabase
+      stored: true,
     };
   } catch (error) {
     console.error("[session_start] Failed to create session record:", error);
@@ -466,6 +468,7 @@ async function createSessionRecord(
       session_id: sessionId,
       latency_ms: timer.stop(),
       network_call: true, // Network was attempted
+      stored: false,
     };
   }
 }
@@ -1117,8 +1120,12 @@ export async function sessionStart(
     console.error(`[session_start] Resuming session ${sessionId} — skipping record creation`);
   } else {
     sessionId = uuidv4();
-    // Fire-and-forget: don't await the Supabase write
-    createSessionRecord(agent, project, params.linear_issue, sessionId).catch(() => {});
+    // Fire-and-forget: don't await the Supabase write. GIT-73: metrics writes
+    // for this session wait on it instead of racing it to a 409.
+    registerPendingSessionRow(
+      sessionId,
+      createSessionRecord(agent, project, params.linear_issue, sessionId).then((r) => r.stored)
+    );
     // Mark prior in-memory session as superseded (force=true path)
     // Registry displacement in writeSessionFiles handles the registry case,
     // but priorSession may not be in the registry (e.g., after MCP restart)

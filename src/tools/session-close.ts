@@ -329,7 +329,7 @@ async function sessionCloseFree(
     clearCurrentSession();
     const latencyMs = timer.stop();
     const perfData = buildPerformanceData("session_close", latencyMs, 0);
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`]);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], undefined, undefined, false);
 
     return {
       success: false,
@@ -363,6 +363,8 @@ function formatCloseDisplay(
   errors?: string[],
   transcriptStatus?: TranscriptStatus,
   blindspotSnippet?: string | null,
+  /** GIT-102: whether the session content itself landed; defaults to `success`. */
+  sessionStored: boolean = success,
 ): string {
   const lines: string[] = [];
 
@@ -434,13 +436,53 @@ function formatCloseDisplay(
   }
 
   // Write health — only on failure
-  const healthReport = getEffectTracker().getHealthReport();
-  if (healthReport.overall.failed > 0) {
+  const warnings = formatWriteWarnings(getEffectTracker().getHealthReport(), sessionStored);
+  if (warnings.length > 0) {
     lines.push("");
-    lines.push(`${STATUS.warn} ${healthReport.overall.failed} write failure${healthReport.overall.failed > 1 ? "s" : ""}`);
+    for (const w of warnings) lines.push(`${STATUS.warn} ${w}`);
   }
 
   return wrapDisplay(lines.join("\n"));
+}
+
+/** GIT-102: what each tracked write path is, in words. */
+const SUBSYSTEM_NAMES: Record<string, string> = {
+  triple_write: "knowledge graph (triples)",
+  embedding: "session embedding",
+  scar_usage: "scar usage records",
+  transcript: "transcript upload",
+  metrics: "query metrics",
+  relevance_update: "relevance feedback",
+  variant_generation: "scar variants",
+  cache_set: "local cache",
+};
+
+/**
+ * GIT-102: one self-describing line per failing write subsystem.
+ *
+ * The close used to print "WARN 3 write failures" and nothing else: not which
+ * writes, not why, and — the question every reader actually has — not whether
+ * the session itself was saved. Each line now names the subsystem, the cause
+ * (its most recent error), and states whether the session content was stored.
+ * That last clause is mandatory on every line, so no WARN can be read as
+ * "the close failed" when it didn't, or as harmless when it wasn't.
+ */
+export function formatWriteWarnings(
+  report: ReturnType<ReturnType<typeof getEffectTracker>["getHealthReport"]>,
+  sessionStored: boolean
+): string[] {
+  const where = hasSupabase() ? "" : " (local)";
+  const stored = sessionStored ? `session content stored OK${where}` : "session content NOT stored";
+  const lines: string[] = [];
+  for (const [path, s] of Object.entries(report.byPath)) {
+    if (s.failed === 0) continue;
+    const name = SUBSYSTEM_NAMES[path] ?? path;
+    const cause = s.lastFailure?.error
+      ? truncate(s.lastFailure.error.replace(/\s+/g, " ").trim(), 160)
+      : "no error message recorded";
+    lines.push(`${name}: ${s.failed} of ${s.attempted} write${s.attempted > 1 ? "s" : ""} failed — ${cause} · ${stored}`);
+  }
+  return lines;
 }
 
 /**
@@ -932,6 +974,9 @@ export async function sessionClose(
   // This keeps the visible MCP tool call small: just session_id + close_type.
   const payloadPath = getGitmemPath("closing-payload.json");
   let payloadConsumed = false;
+  // Whether the session row reached the durable store (GIT-102: the close
+  // display says so on every WARN; set only after the upsert resolves).
+  let sessionRowStored = false;
   try {
     if (fs.existsSync(payloadPath)) {
       const filePayload = JSON.parse(fs.readFileSync(payloadPath, "utf-8")) as Partial<SessionCloseParams>;
@@ -1470,6 +1515,7 @@ export async function sessionClose(
       supabase.directUpsert(sessionsTable, sessionRow),
       blindspotPromise,
     ]);
+    sessionRowStored = true;
 
     // Tracked fire-and-forget embedding generation + session update + thread detection
     if (isEmbeddingAvailable()) {
@@ -1642,7 +1688,8 @@ export async function sessionClose(
 
     const allErrors = [...persistErrors, ...coverageWarnings, ...validation.warnings];
 
-    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet);
+    // The session row is upserted above; a partial persist is threads, not the session.
+    const display = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, !partialPersist, allErrors.length > 0 ? allErrors : undefined, transcriptStatus, blindspotSnippet, true);
 
     return {
       success: !partialPersist,
@@ -1660,7 +1707,7 @@ export async function sessionClose(
     // Clear session state even on error (session is done either way)
     clearCurrentSession();
 
-    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet);
+    const errorDisplay = formatCloseDisplay(sessionId, closeCompliance, params, learningsCount, false, [`Failed to persist session: ${errorMessage}`], transcriptStatus, blindspotSnippet, sessionRowStored);
 
     return {
       success: false,

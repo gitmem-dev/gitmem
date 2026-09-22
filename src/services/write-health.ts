@@ -17,6 +17,12 @@
  * Fire-and-forget: never throws (whole body is guarded), never blocks startup.
  * Logs a loud warning to stderr when misconfigured, a one-line confirmation
  * otherwise.
+ *
+ * GIT-102: the probe had no timeout. A store that accepts the connection and
+ * never answers left it pending forever — no warning, no confirmation, and
+ * nothing anywhere saying durability had not been checked. The server now runs
+ * it through checkWritePathWithTimeout(): raced against 10 s, with a
+ * "timed_out" verdict that says so, and the last verdict kept for `health`.
  */
 
 import { getTier, hasSupabase, getTablePrefix, getTableName } from "./tier.js";
@@ -30,12 +36,115 @@ export type WritePathMode =
   | "free_with_credentials" // creds present but tier free — writes silently local (bug)
   | "missing_tables"        // pro/dev but resolved tables absent (bug)
   | "supabase"              // healthy: pro/dev with tables present
-  | "skipped";              // unexpected internal error — stayed silent, did not block startup
+  | "skipped"               // unexpected internal error — stayed silent, did not block startup
+  | "timed_out"             // GIT-102: no answer within the budget — durability UNVERIFIED
+  | "unreachable";          // GIT-102: probes errored (network/auth) — durability UNVERIFIED
 
 export interface WritePathResult {
   ok: boolean;
   mode: WritePathMode;
   missing?: string[];
+  /** unreachable: the probe error, as the store reported it. */
+  error?: string;
+}
+
+/** The most recent write-path verdict, for `health` (GIT-102). */
+export interface WritePathVerdict extends WritePathResult {
+  /** One line a person can act on. */
+  summary: string;
+  checked_at: string;
+  duration_ms: number;
+  /** A check that finished after its timeout had already been reported. */
+  late?: boolean;
+}
+
+export const WRITE_PATH_TIMEOUT_MS = 10_000;
+
+let lastVerdict: WritePathVerdict | null = null;
+
+/** The last write-path verdict, or null when no check has finished or timed out yet. */
+export function getLastWritePathVerdict(): WritePathVerdict | null {
+  return lastVerdict;
+}
+
+/** For tests. */
+export function resetWritePathVerdict(): void {
+  lastVerdict = null;
+}
+
+/** The `health` line for a verdict (GIT-102). */
+export function formatWritePathLine(v: WritePathVerdict | null): string {
+  if (!v) return "Write path: not checked yet (the startup check has not finished or timed out)";
+  return `Write path: ${v.summary} (${v.ok ? "ok" : "NOT OK"}, checked ${v.checked_at}, ${v.duration_ms} ms` +
+    `${v.late ? ", finished after its timeout" : ""})`;
+}
+
+function summarize(r: WritePathResult, timeoutMs: number): string {
+  switch (r.mode) {
+    case "supabase": return "Supabase — learnings/decisions tables present, writes are durable";
+    case "local": return "local files (free tier, no Supabase configured) — intended";
+    case "free_with_credentials": return "Supabase is configured but the tier resolved to FREE — writes are going to local files, NOT Supabase";
+    case "missing_tables": return `tables missing on the Supabase backend (${(r.missing || []).join(", ")}) — create_learning / create_decision will fail`;
+    case "skipped": return "check skipped after an internal error — durability UNVERIFIED";
+    case "timed_out": return `timed out after ${Math.round(timeoutMs / 1000)} s, durability UNVERIFIED`;
+    case "unreachable": return `store unreachable (${r.error ?? "probe failed"}), durability UNVERIFIED`;
+  }
+}
+
+/**
+ * Run checkWritePath() against a deadline and record the verdict.
+ *
+ * Resolves by the deadline at the latest. If the check finishes afterwards,
+ * its real verdict replaces "timed_out" (marked late) — the store answered
+ * slowly, and the latest word on it is the one health should show.
+ */
+export async function checkWritePathWithTimeout(
+  timeoutMs: number = WRITE_PATH_TIMEOUT_MS,
+  check: () => Promise<WritePathResult> = checkWritePath
+): Promise<WritePathVerdict> {
+  const started = Date.now();
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const record = (r: WritePathResult, late = false): WritePathVerdict => {
+    lastVerdict = {
+      ...r,
+      summary: summarize(r, timeoutMs),
+      checked_at: new Date().toISOString(),
+      duration_ms: Date.now() - started,
+      ...(late && { late: true }),
+    };
+    return lastVerdict;
+  };
+
+  const checked = check().then((r) => {
+    if (timedOut) {
+      const v = record(r, true);
+      console.error(`[gitmem] Write-path check finished late (${v.duration_ms} ms): ${v.summary}`);
+      return v;
+    }
+    return record(r);
+  });
+
+  const deadline = new Promise<WritePathVerdict>((resolve) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      const v = record({ ok: false, mode: "timed_out" });
+      console.error(
+        `\n\u26a0\ufe0f  [gitmem] WRITE PATH: ${v.summary}.\n` +
+        "   The Supabase store did not answer the write-path probe. Writes may or may not be landing;\n" +
+        "   check connectivity to SUPABASE_URL. `health` shows the latest verdict.\n"
+      );
+      resolve(v);
+    }, timeoutMs);
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([checked, deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function checkWritePath(): Promise<WritePathResult> {
@@ -65,6 +174,7 @@ export async function checkWritePath(): Promise<WritePathResult> {
     const prefix = getTablePrefix();
     const prefixSource = process.env.GITMEM_TABLE_PREFIX ? "GITMEM_TABLE_PREFIX" : "default";
     const missing: string[] = [];
+    const probeErrors: string[] = [];
 
     for (const base of ["learnings", "decisions"]) {
       const table = getTableName(base);
@@ -73,7 +183,9 @@ export async function checkWritePath(): Promise<WritePathResult> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (SCHEMA_MISS.test(msg)) missing.push(table);
-        // Transient network/auth errors are out of scope for this check.
+        // GIT-102: a network/auth error used to be ignored here, so a store
+        // that refused every connection was reported as "Write-path OK".
+        else probeErrors.push(`${table}: ${msg}`);
       }
     }
 
@@ -87,6 +199,15 @@ export async function checkWritePath(): Promise<WritePathResult> {
         "     - Fresh project? Run `npx gitmem-mcp setup` (or set DATABASE_URL and re-activate) to create tables.\n"
       );
       return { ok: false, mode: "missing_tables", missing };
+    }
+
+    if (probeErrors.length > 0) {
+      const error = probeErrors.join("; ").slice(0, 300);
+      console.error(
+        "\n\u26a0\ufe0f  [gitmem] WRITE PATH: the Supabase store could not be probed — durability UNVERIFIED.\n" +
+        `      ${error}\n`
+      );
+      return { ok: false, mode: "unreachable", error };
     }
 
     console.error(

@@ -64,7 +64,7 @@ import {
   flushCache,
   startBackgroundInit,
 } from "./services/startup.js";
-import { checkWritePath } from "./services/write-health.js";
+import { checkWritePathWithTimeout, getLastWritePathVerdict, formatWritePathLine } from "./services/write-health.js";
 import { getEffectTracker } from "./services/effect-tracker.js";
 import { RIPPLE, ANSI } from "./services/display-protocol.js";
 import { getProject } from "./services/session-state.js";
@@ -371,9 +371,13 @@ export function createServer(): Server {
           const tracker = getEffectTracker();
           const report = tracker.getHealthReport(failureLimit);
           const summary = tracker.formatSummary();
+          // GIT-102: the startup write-path verdict, including "timed out,
+          // durability UNVERIFIED" — previously visible only on stderr, if at all.
+          const writePath = getLastWritePathVerdict();
           result = {
             ...report,
-            text: summary || "No tracked effects this session.",
+            write_path: writePath,
+            text: `${formatWritePathLine(writePath)}\n\n${summary || "No tracked effects this session."}`,
           };
           break;
         }
@@ -501,14 +505,14 @@ export async function runServer(): Promise<void> {
       }
       // Verify the write path with the FINAL tier (post-validation): catches an
       // invalid license silently downgrading writes to local files.
-      void checkWritePath();
+      void checkWritePathWithTimeout(); // GIT-102: bounded; verdict kept for health
     }).catch((err) => {
       console.error(`[gitmem:license] Validation error: ${err}`);
     });
   } else {
     // No license key to validate — verify the write path with the detected tier
     // (catches a GITMEM_TABLE_PREFIX / schema mismatch on the backward-compat path).
-    void checkWritePath();
+    void checkWritePathWithTimeout(); // GIT-102: bounded; verdict kept for health
   }
 
   if (hasSupabase()) {

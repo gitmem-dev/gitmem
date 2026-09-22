@@ -73,7 +73,6 @@ function isCapabilityProbe(r) {
 
 const EXPECTED_FAILURES = [
   { ticket: "GIT-73", what: "metrics/session_start FK race", method: "POST", path: /^\/rest\/v1\/gitmem_query_metrics$/, status: 409 },
-  { ticket: "GIT-105", what: "knowledge-triple thread id into a uuid column", method: "POST", path: /^\/rest\/v1\/knowledge_triples$/, status: 400 },
 ];
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -377,6 +376,11 @@ async function flow() {
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
 
+  // GIT-105: thread triples land, and their source_id is a real thread row id.
+  const threadTriples = await rest("GET", "knowledge_triples?select=predicate,source_id&source_type=eq.thread", undefined, { Prefer: "" }).then((r) => r.json());
+  const threadRowIds = new Set((await rest("GET", "gitmem_threads?select=id", undefined, { Prefer: "" }).then((r) => r.json())).map((t) => t.id));
+  const threadTriplesLinked = threadTriples.length > 0 && threadTriples.every((t) => threadRowIds.has(t.source_id));
+
   // Did the close land? Is relevance readable from the store (GIT-109)?
   const closedRows = sessionId
     ? await rest("GET", `gitmem_sessions?select=id,closing_reflection&id=eq.${sessionId}`, undefined, { Prefer: "" }).then((r) => r.json())
@@ -408,6 +412,8 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    thread_triples: threadTriples.length,
+    thread_triples_linked: threadTriplesLinked,
     relevance_readable: relevance.some((r) => scarIds.some((id) => (r.memories_applied || []).includes(id) && r.memory_relevance?.[id])),
     relevance,
     health_failed_total: failed,
@@ -520,6 +526,9 @@ const failureCheck = checkFailures(allVenueRequests);
 const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v1/"))
   .map((r) => `${r.method} ${r.path} -> ${r.status}`);
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
+if (mode === "flow" && !result.thread_triples_linked) {
+  failureCheck.unexpected.push(`thread triples missing or not linked to a gitmem_threads row (GIT-105): ${result.thread_triples} found`);
+}
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);
 }

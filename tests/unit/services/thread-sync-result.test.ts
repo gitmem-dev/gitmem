@@ -58,7 +58,7 @@ beforeEach(() => {
   mockHasSupabase.mockReturnValue(true);
   mockDirectUpsert.mockResolvedValue([{ id: "row" }]);
   mockDirectPatch.mockReset();
-  mockDirectPatch.mockResolvedValue([{ id: "row" }]);
+  mockDirectPatch.mockResolvedValue({ count: 1, rows: [{ id: "row" }] }); // GIT-119 shape
 });
 
 describe("tier awareness (R3)", () => {
@@ -266,7 +266,7 @@ describe("GIT-117: a thread counts as synced only when the store confirms a row"
     mockDirectQuery
       .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r", status: "open" }]) // existence
       .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r" }]);                 // resolve lookup
-    mockDirectPatch.mockResolvedValue([]);
+    mockDirectPatch.mockResolvedValue({ count: 0, rows: [] });
 
     const r = await syncThreadsToSupabase([thread("t-r", "resolved")], "gitmem", "s-1");
 

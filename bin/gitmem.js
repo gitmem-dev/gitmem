@@ -28,6 +28,7 @@ import {
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
+import { hasGitmemHooks, hooksShapeError, mergeGitmemHooks, removeGitmemHooks, backupFile } from "./hooks-merge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const command = process.argv[2];
@@ -480,6 +481,39 @@ async function cmdSessionRefresh() {
 }
 
 /**
+ * GIT-120: read a hooks-bearing JSON file for an in-place edit. A file that
+ * exists but cannot be parsed, or whose hooks have an unexpected shape, is
+ * never rewritten — that used to replace the user's file with a fresh one.
+ */
+function readHooksFile(path, name) {
+  if (!existsSync(path)) return {};
+  let cfg;
+  try {
+    cfg = JSON.parse(readFileSync(path, "utf-8"));
+  } catch (err) {
+    console.error(`Error: ${name} is not valid JSON (${err.message}). Nothing was changed.`);
+    console.error(`Fix or move ${name}, then run this again.`);
+    process.exit(1);
+  }
+  const shapeError = cfg && typeof cfg === "object" && !Array.isArray(cfg) ? hooksShapeError(cfg.hooks) : "file is not a JSON object";
+  if (shapeError) {
+    console.error(`Error: ${name}: ${shapeError}. Nothing was changed.`);
+    process.exit(1);
+  }
+  return cfg;
+}
+
+/** Back up, write, and print what changed. */
+function writeHooksFile(path, name, cfg, changes) {
+  const backup = backupFile(path);
+  writeFileSync(path, JSON.stringify(cfg, null, 2));
+  console.log(`Changes to ${name}:`);
+  for (const line of changes) console.log(`  ${line}`);
+  console.log(backup ? `Backup of the previous file: ${backup}` : "(new file, nothing to back up)");
+  console.log("");
+}
+
+/**
  * Install gitmem hooks as project-level hooks.
  *
  * Claude Code: writes to .claude/settings.json
@@ -560,30 +594,21 @@ function cmdInstallHooks() {
       stop: [{ command: `bash ${relScripts}/session-close-check.sh`, timeout: 5000 }],
     };
 
-    let config = {};
-    if (existsSync(hooksPath)) {
-      try {
-        config = JSON.parse(readFileSync(hooksPath, "utf-8"));
-      } catch {
-        console.warn("  Warning: Could not parse existing .cursor/hooks.json, creating fresh");
-      }
-    } else {
-      mkdirSync(cursorDir, { recursive: true });
+    const config = readHooksFile(hooksPath, ".cursor/hooks.json");
+    if (!existsSync(cursorDir)) mkdirSync(cursorDir, { recursive: true });
+
+    if (!force && hasGitmemHooks(config.hooks)) {
+      console.log("GitMem hooks already installed in .cursor/hooks.json");
+      console.log("");
+      console.log("To reinstall (replaces only gitmem's hooks), run:");
+      console.log("  npx gitmem-mcp install-hooks --client cursor --force");
+      return;
     }
 
-    if (config.hooks && !force) {
-      const hasGitmem = JSON.stringify(config.hooks).includes("gitmem");
-      if (hasGitmem) {
-        console.log("GitMem hooks already installed in .cursor/hooks.json");
-        console.log("");
-        console.log("To reinstall (overwrite), run:");
-        console.log("  npx gitmem-mcp install-hooks --client cursor --force");
-        return;
-      }
-    }
-
-    config.hooks = gitmemHooks;
-    writeFileSync(hooksPath, JSON.stringify(config, null, 2));
+    // GIT-120: merge per event; other hooks stay as they are.
+    const merged = mergeGitmemHooks(config.hooks, gitmemHooks);
+    config.hooks = merged.hooks;
+    writeHooksFile(hooksPath, ".cursor/hooks.json", config, merged.changes);
 
     console.log("Hooks written to .cursor/hooks.json");
     console.log(`Scripts at: ${relScripts}/`);
@@ -634,30 +659,21 @@ function cmdInstallHooks() {
       ],
     };
 
-    let settings = {};
-    if (existsSync(settingsPath)) {
-      try {
-        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-      } catch {
-        console.warn("  Warning: Could not parse existing .claude/settings.json, creating fresh");
-      }
-    } else {
-      mkdirSync(claudeDir, { recursive: true });
+    const settings = readHooksFile(settingsPath, ".claude/settings.json");
+    if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
+
+    if (!force && hasGitmemHooks(settings.hooks)) {
+      console.log("GitMem hooks already installed in .claude/settings.json");
+      console.log("");
+      console.log("To reinstall (replaces only gitmem's hooks), run:");
+      console.log("  npx gitmem-mcp install-hooks --force");
+      return;
     }
 
-    if (settings.hooks && !force) {
-      const hasGitmem = JSON.stringify(settings.hooks).includes("gitmem");
-      if (hasGitmem) {
-        console.log("GitMem hooks already installed in .claude/settings.json");
-        console.log("");
-        console.log("To reinstall (overwrite), run:");
-        console.log("  npx gitmem-mcp install-hooks --force");
-        return;
-      }
-    }
-
-    settings.hooks = gitmemHooks;
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    // GIT-120: merge per event; other hooks stay as they are.
+    const merged = mergeGitmemHooks(settings.hooks, gitmemHooks);
+    settings.hooks = merged.hooks;
+    writeHooksFile(settingsPath, ".claude/settings.json", settings, merged.changes);
 
     console.log("Hooks written to .claude/settings.json");
     console.log(`Scripts at: ${relScripts}/`);
@@ -732,6 +748,25 @@ function promptTelemetryOptIn() {
  * Also cleans up legacy plugin directories and temp state.
  * Use --client <claude|cursor> to target a specific IDE.
  */
+/**
+ * GIT-120: take out only the commands gitmem installed. Other hooks, and the
+ * hooks key itself while anything is left in it, stay.
+ */
+function uninstallFrom(path, name, cfg, extraChanges = []) {
+  if (!cfg.hooks && extraChanges.length === 0) {
+    console.log(`[uninstall] No hooks found in ${name}`);
+    return;
+  }
+  const result = removeGitmemHooks(cfg.hooks);
+  if (result.removed === 0 && extraChanges.length === 0) {
+    console.log(`[uninstall] No gitmem hooks found in ${name}${result.kept ? ` (${result.kept} other hook(s) left untouched)` : ""}`);
+    return;
+  }
+  if (result.hooks) cfg.hooks = result.hooks; else delete cfg.hooks;
+  writeHooksFile(path, name, cfg, [...result.changes, ...extraChanges]);
+  console.log(`[uninstall] Removed ${result.removed} gitmem hook(s) from ${name}; kept ${result.kept} other`);
+}
+
 function cmdUninstallHooks() {
   const clientIdx = process.argv.indexOf("--client");
   const clientArg = clientIdx !== -1 ? process.argv[clientIdx + 1]?.toLowerCase() : null;
@@ -759,40 +794,8 @@ function cmdUninstallHooks() {
     // Remove hooks from .cursor/hooks.json
     const hooksPath = join(process.cwd(), ".cursor", "hooks.json");
     if (existsSync(hooksPath)) {
-      try {
-        const cfg = JSON.parse(readFileSync(hooksPath, "utf-8"));
-        if (cfg.hooks) {
-          // Filter out gitmem hooks, preserve others
-          const cleaned = {};
-          let removed = 0;
-          for (const [eventType, entries] of Object.entries(cfg.hooks)) {
-            if (!Array.isArray(entries)) continue;
-            const nonGitmem = entries.filter((e) => {
-              if (typeof e.command === "string" && e.command.includes("gitmem")) {
-                removed++;
-                return false;
-              }
-              return true;
-            });
-            if (nonGitmem.length > 0) cleaned[eventType] = nonGitmem;
-          }
-          if (removed > 0) {
-            if (Object.keys(cleaned).length > 0) {
-              cfg.hooks = cleaned;
-            } else {
-              delete cfg.hooks;
-            }
-            writeFileSync(hooksPath, JSON.stringify(cfg, null, 2));
-            console.log(`[uninstall] Removed ${removed} gitmem hooks from .cursor/hooks.json`);
-          } else {
-            console.log("[uninstall] No gitmem hooks found in .cursor/hooks.json");
-          }
-        } else {
-          console.log("[uninstall] No hooks found in .cursor/hooks.json");
-        }
-      } catch {
-        // ignore parse errors
-      }
+      const cfg = readHooksFile(hooksPath, ".cursor/hooks.json");
+      uninstallFrom(hooksPath, ".cursor/hooks.json", cfg);
     } else {
       console.log("[uninstall] No .cursor/hooks.json found");
     }
@@ -800,28 +803,12 @@ function cmdUninstallHooks() {
     // Remove hooks from .claude/settings.json
     const settingsPath = join(process.cwd(), ".claude", "settings.json");
     if (existsSync(settingsPath)) {
-      try {
-        const cfg = JSON.parse(readFileSync(settingsPath, "utf-8"));
-        if (cfg.hooks) {
-          delete cfg.hooks;
-          writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
-          console.log("[uninstall] Removed hooks from .claude/settings.json");
-        } else {
-          console.log("[uninstall] No hooks found in .claude/settings.json");
-        }
-        // Also clean legacy enabledPlugins
-        if (cfg.enabledPlugins) {
-          for (const key of Object.keys(cfg.enabledPlugins)) {
-            if (key.startsWith("gitmem-hooks")) {
-              delete cfg.enabledPlugins[key];
-              writeFileSync(settingsPath, JSON.stringify(cfg, null, 2));
-              console.log("[cleanup] Removed legacy enabledPlugins entry");
-            }
-          }
-        }
-      } catch {
-        // ignore parse errors
-      }
+      const cfg = readHooksFile(settingsPath, ".claude/settings.json");
+      // Legacy enabledPlugins entries from the old plugin install.
+      const legacyPlugins = Object.keys(cfg.enabledPlugins || {}).filter((k) => k.startsWith("gitmem-hooks"));
+      for (const key of legacyPlugins) delete cfg.enabledPlugins[key];
+      uninstallFrom(settingsPath, ".claude/settings.json", cfg,
+        legacyPlugins.map((k) => `enabledPlugins: removed legacy entry ${k}`));
     }
   }
 

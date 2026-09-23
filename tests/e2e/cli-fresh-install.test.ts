@@ -295,9 +295,10 @@ describe("Fresh Install: Hooks CLI", () => {
     // Permissions preserved
     expect(settings.permissions.allow).toContain("mcp__gitmem__*");
     expect(settings.permissions.allow).toContain("custom_tool");
-    // Hooks replaced with new ones
+    // gitmem's hooks added; the foreign "echo old" hook kept (GIT-120)
     const cmd = JSON.stringify(settings.hooks.SessionStart);
     expect(cmd).toContain("session-start.sh");
+    expect(cmd).toContain("echo old");
   });
 
   it("uninstall-hooks removes hooks from settings", async () => {
@@ -308,10 +309,11 @@ describe("Fresh Install: Hooks CLI", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("Uninstall complete");
 
-    // settings.json still exists but hooks key removed
+    // settings.json still exists; only gitmem's hooks removed, the foreign
+    // "echo old" hook from the previous test kept (GIT-120)
     expect(existsSync(SETTINGS_PATH)).toBe(true);
     const settings = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
-    expect(settings.hooks).toBeUndefined();
+    expect(settings.hooks).toEqual({ SessionStart: [{ hooks: [{ type: "command", command: "echo old" }] }] });
 
     // Permissions preserved
     expect(settings.permissions).toBeDefined();
@@ -323,7 +325,7 @@ describe("Fresh Install: Hooks CLI", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("No hooks found");
+    expect(stdout).toContain("No gitmem hooks found");
   });
 });
 

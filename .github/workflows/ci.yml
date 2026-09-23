@@ -73,6 +73,31 @@ jobs:
       - name: Hook tests
         run: bash hooks/tests/test-hooks.sh
 
+  # GIT-116: the same suite on stock macOS. The runner has Homebrew (and may
+  # have coreutils' timeout), so the suite runs with the system directories
+  # plus a directory holding only node — what a Mac without Homebrew has.
+  hooks-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Hook tests on a stock macOS PATH (no Homebrew, no timeout)
+        run: |
+          mkdir -p "$RUNNER_TEMP/nodeonly"
+          ln -s "$(command -v node)" "$RUNNER_TEMP/nodeonly/node"
+          STOCK="/usr/bin:/bin:/usr/sbin:/sbin:$RUNNER_TEMP/nodeonly"
+          for t in timeout gtimeout; do
+            if PATH="$STOCK" command -v "$t" >/dev/null; then echo "::error::$t is on the stock PATH"; exit 1; fi
+          done
+          # macOS 15+ ships /usr/bin/jq; older macOS does not. The jq-less path
+          # is covered by hooks-without-jq (Linux); report which this runner is.
+          PATH="$STOCK" command -v jq >/dev/null && echo "stock jq present: $(PATH="$STOCK" jq --version)" || echo "stock jq absent"
+          env -i HOME="$HOME" PATH="$STOCK" /bin/bash hooks/tests/test-hooks.sh
+
   # GIT-83: the release gate. Customers never run SQL after setup (standing
   # rule, 2026-09-21), so a release must work on a store still on the v1.8.0
   # setup.sql — the venue is put on exactly that schema first, then the
@@ -164,7 +189,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: [build, hooks-without-jq, venue-gate]
+    needs: [build, hooks-without-jq, hooks-macos, venue-gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

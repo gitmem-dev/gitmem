@@ -148,12 +148,37 @@ function toFormattable(scar: RelevantScar): FormattableScar {
   };
 }
 
+// --- Time bound (GIT-116) ---
+// The UserPromptSubmit hook has a 3 s budget. The hook used to enforce it with
+// `timeout 2.5 node …`, but macOS ships no `timeout`, so on a stock Mac the
+// call failed, the error was discarded and nothing was ever retrieved. The
+// bound lives here now: node is the one tool the hook already requires.
+
+export const QUICK_RETRIEVE_DEADLINE_MS = 2500;
+
+/**
+ * Exit quietly (no context injected) once `ms` have passed. unref'd, so a
+ * run that finishes first is not held open by the timer.
+ */
+export function armDeadline(
+  ms: number,
+  onExpire: () => void = () => {
+    process.stderr.write(`gitmem quick-retrieve: no result within ${ms} ms; nothing injected\n`);
+    process.exit(0);
+  }
+): ReturnType<typeof setTimeout> {
+  const timer = setTimeout(onExpire, ms);
+  timer.unref?.();
+  return timer;
+}
+
 // --- CLI entry point ---
 // Called from hook: node dist/hooks/quick-retrieve.js <prompt> <level> [token_budget]
 
 const isMainModule = process.argv[1]?.endsWith("quick-retrieve.js");
 
 if (isMainModule) {
+  armDeadline(Number(process.env.GITMEM_QUICK_RETRIEVE_DEADLINE_MS) || QUICK_RETRIEVE_DEADLINE_MS);
   const prompt = process.argv[2];
   const level = process.argv[3] || "scars";
   const budget = process.argv[4] ? parseInt(process.argv[4], 10) : undefined;

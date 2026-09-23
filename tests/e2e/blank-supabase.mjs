@@ -422,6 +422,56 @@ async function flow() {
   const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));
   await waitQuiet(netlog, { minMs: 1000, quietMs: 2000 });
   await srv.close();
+
+  // GIT-117: a close whose thread write the store rejects. A thread naming a
+  // session the store has never seen violates the source_session FK (23503).
+  // The close must say PARTIAL and name it, keep it in threads.json marked
+  // sync_pending, and the next session_start must carry it forward.
+  const threadSyncProbe = async () => {
+    const h = isolatedHome(`${label}-threadsync`);
+    const probeLog = join(outDir, `netlog-${label}-threadsync.jsonl`);
+    writeFileSync(probeLog, "");
+    const badId = `t-fk${randomUUID().slice(0, 6)}`;
+    const errs1 = [];
+    const p1 = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs1 });
+    const ss1 = await p1.call("session_start", { project: PROJECT, agent_identity: "cli", force: true });
+    const sid1 = (ss1.match(UUID) || [])[0];
+    await waitQuiet(probeLog, { minMs: 1500, quietMs: 2000 });
+    const close = await p1.call("session_close", {
+      session_id: sid1, close_type: "standard", human_corrections: "none",
+      open_threads: [{ id: badId, text: `Thread whose write the store rejects (${label})`, status: "open",
+        created_at: new Date().toISOString(), source_session: randomUUID() }],
+      closing_reflection: {
+        what_broke: "n/a", what_took_longer: "n/a", do_differently: "n/a", what_worked: "n/a",
+        wrong_assumption: "n/a", scars_applied: [], institutional_memory_items: "n/a",
+        collaborative_dynamic: "n/a", rapport_notes: "n/a",
+      },
+    });
+    await p1.close();
+    const threadsFile = join(h.gitmemDir, "threads.json");
+    const local = existsSync(threadsFile) ? JSON.parse(readFileSync(threadsFile, "utf8")) : [];
+    const localEntry = local.find((t) => t.id === badId);
+    const inStore = await rest("GET", `gitmem_threads?select=id&thread_id=eq.${badId}`, undefined, { Prefer: "" }).then((r) => r.json());
+    const errs2 = [];
+    const p2 = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs2 });
+    await p2.call("session_start", { project: PROJECT, agent_identity: "cli" });
+    await p2.close();
+    allVenueRequests.push(...venueReqs(readNet(probeLog)).filter((r) => !(r.method === "POST" && /gitmem_threads$/.test(r.path) && r.status === 409)));
+    const after = existsSync(threadsFile) ? JSON.parse(readFileSync(threadsFile, "utf8")) : [];
+    writeFileSync(join(outDir, `stderr-${label}-threadsync-restart.log`), errs2.join(""));
+    writeFileSync(join(outDir, `threads-${label}-threadsync-after.json`), JSON.stringify(after, null, 2));
+    const plain = close.replace(/\x1b\[[0-9;]*m/g, "");
+    return {
+      bad_thread: badId,
+      store_rejected_it: inStore.length === 0,
+      close_says_partial: /close · PARTIAL/.test(plain) && plain.includes(badId),
+      kept_locally_pending: !!localEntry && localEntry.sync_pending === true,
+      carried_into_next_session: after.some((t) => t.id === badId) &&
+        errs2.join("").split("\n").some((l) => l.includes("Carrying forward") && l.includes(badId)),
+      close_head: plain.split("\n").slice(0, 2).join(" | "),
+    };
+  };
+  const threadSync = await threadSyncProbe();
   ollama.close();
 
   const reqs = readNet(netlog);
@@ -441,6 +491,7 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    thread_sync: threadSync,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
     close_warns: closeWarns,
@@ -647,6 +698,13 @@ if (mode === "flow" && !result.thread_triples_linked) {
 }
 if (mode === "flow" && result.false_stranded_notice) {
   failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
+if (mode === "flow") {
+  const t = result.thread_sync;
+  if (!t.store_rejected_it) failureCheck.unexpected.push(`thread-sync probe: the store accepted ${t.bad_thread}; the probe did not exercise a failed write (GIT-117)`);
+  else if (!(t.close_says_partial && t.kept_locally_pending && t.carried_into_next_session)) {
+    failureCheck.unexpected.push(`a rejected thread write was not reported PARTIAL / kept pending / carried forward (GIT-117): ${JSON.stringify(t)}`);
+  }
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

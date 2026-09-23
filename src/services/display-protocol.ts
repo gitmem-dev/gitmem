@@ -156,6 +156,7 @@ export const STATUS = {
   rejected: `${red}REJECTED${reset}`,
   complete: `${green}COMPLETE${reset}`,
   failed:   `${red}FAILED${reset}`,
+  partial:  `${yellow}PARTIAL${reset}`,
   pass:     `${green}+${reset}`,
   miss:     `${red}-${reset}`,
 } as const;

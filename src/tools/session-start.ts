@@ -478,7 +478,8 @@ async function createSessionRecord(
  * Fire-and-forget — failures logged but don't block session_start.
  * Only sets close_compliance if it's currently null (truly abandoned).
  */
-async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
+/** @internal exported for the GIT-119 zero-row test. */
+export async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
   if (!hasSupabase()) return; // Free tier: no remote session tracking
   try {
     // Check if session already has close_compliance (was properly closed)
@@ -490,7 +491,7 @@ async function markSessionSuperseded(oldSessionId: string, newSessionId: string)
       // Already closed — don't overwrite
       return;
     }
-    await supabase.directPatch(getTableName("sessions"),
+    const patched = await supabase.directPatch(getTableName("sessions"),
       { id: oldSessionId },
       {
         close_compliance: {
@@ -500,6 +501,8 @@ async function markSessionSuperseded(oldSessionId: string, newSessionId: string)
         },
       }
     );
+    // GIT-119: 0 rows = the superseded row isn't there; not marked.
+    if (patched.count === 0) throw new Error(`no session row ${oldSessionId.slice(0, 8)} to mark superseded`);
     console.error(`[session_start] Marked session ${oldSessionId.slice(0, 8)} as superseded by ${newSessionId.slice(0, 8)}`);
   } catch (error) {
     console.error(`[session_start] Failed to mark session ${oldSessionId.slice(0, 8)} as superseded:`, error);
@@ -870,9 +873,17 @@ function writeSessionFiles(
     // because the NOT-IN query excludes them, making them look "local-only".
     const supabaseIds = new Set(threads.map(t => t.id));
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    // GIT-117: a thread a close could not write is kept whatever its age, and
+    // its local state (e.g. a resolution) wins over the store's copy until a
+    // later close writes it.
+    const pending = new Map(existingFileThreads.filter(t => t.sync_pending && t.id).map(t => [t.id, t]));
+    if (pending.size > 0) {
+      console.error(`[session_start] Carrying forward ${pending.size} thread(s) a previous close could not write: ${[...pending.keys()].join(", ")}`);
+    }
     const localOnlyThreads = existingFileThreads.filter(t => {
       if (supabaseIds.has(t.id)) return false; // exists in Supabase active set
       if (!t.id) return false; // no ID = malformed, drop
+      if (t.sync_pending) return true;
       const created = t.created_at ? new Date(t.created_at).getTime() : 0;
       return created > cutoff; // only keep if created within last 24h
     });
@@ -883,7 +894,7 @@ function writeSessionFiles(
     if (dropped > 0) {
       console.error(`[session_start] Dropped ${dropped} stale local-only threads (resolved/archived in Supabase)`);
     }
-    merged = deduplicateThreadList([...threads, ...localOnlyThreads]);
+    merged = deduplicateThreadList([...threads.map(t => pending.get(t.id) ?? t), ...localOnlyThreads]);
   } else {
     // Fallback (free tier / Supabase offline): merge with existing file
     merged = existingFileThreads.length > 0

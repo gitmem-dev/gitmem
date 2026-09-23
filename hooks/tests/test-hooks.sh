@@ -128,6 +128,22 @@ else
     pass "Output is plain text, not JSON"
 fi
 
+# Test 1.2b (GIT-115): the project hint comes from the repo's .gitmem/config.json,
+# with or without jq (node fallback).
+# A repo of its own: the suite's GITMEM_DIR ($TMPDIR/.gitmem) is the store.
+mkdir -p "$TMPDIR/repo-git115/.gitmem"
+cp "$TMPDIR/.mcp.json" "$TMPDIR/repo-git115/.mcp.json"
+echo '{"project":"acme-hooks"}' > "$TMPDIR/repo-git115/.gitmem/config.json"
+OUTPUT=$(cd "$TMPDIR/repo-git115" && echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
+if echo "$OUTPUT" | grep -q 'session_start(project: "acme-hooks")'; then
+    pass "Project hint read from the repo's .gitmem/config.json"
+else
+    fail "Project hint read from the repo's .gitmem/config.json" \
+         'Contains session_start(project: "acme-hooks")' \
+         "$OUTPUT"
+fi
+rm -rf "$TMPDIR/repo-git115"
+
 # Test 1.3: Gitmem NOT in .mcp.json (may still detect via disk fallback)
 rm "$TMPDIR/.mcp.json"
 echo '{"mcpServers":{"other-tool":{}}}' > "$TMPDIR/.mcp.json"
@@ -725,6 +741,92 @@ GOT=$(bash -c '. "$0/scripts/resolve-root.sh"; gitmem_pid_alive 1 && echo alive'
     || fail "EPERM pid alive" "alive" "$GOT"
 
 remove_session_registry
+
+# ============================================================================
+# TEST GROUP: portability (GIT-116)
+# ============================================================================
+
+echo ""
+echo -e "${YELLOW}=== Portability (GIT-116) ===${NC}"
+
+# A PATH holding every command on the current PATH except the ones named.
+path_without() {
+    local out="$1"; shift
+    mkdir -p "$out"
+    local d f n old_ifs="$IFS"
+    IFS=:
+    for d in $PATH; do
+        [ -d "$d" ] || continue
+        for f in "$d"/*; do
+            n=$(basename "$f")
+            [ -x "$f" ] && [ ! -e "$out/$n" ] && ln -s "$f" "$out/$n" 2>/dev/null || true
+        done
+    done
+    IFS="$old_ifs"
+    for n in "$@"; do rm -f "$out/$n"; done
+    echo "$out"
+}
+
+# A fake installed package: hooks/scripts next to dist/hooks/quick-retrieve.js.
+PKG="$TMPDIR/pkg"
+mkdir -p "$PKG/hooks/scripts" "$PKG/dist/hooks"
+cp "$SCRIPT_DIR"/scripts/*.sh "$PKG/hooks/scripts/"
+cat > "$PKG/dist/hooks/quick-retrieve.js" <<'STUB'
+process.stdout.write("STUB-SCAR for: " + process.argv[2]);
+STUB
+PROMPT_JSON='{"prompt":"add a retry to the deploy script before the migration"}'
+
+NO_TIMEOUT_PATH=$(path_without "$TMPDIR/bin-no-timeout" timeout gtimeout)
+OUT=$(echo "$PROMPT_JSON" | PATH="$NO_TIMEOUT_PATH" bash "$PKG/hooks/scripts/auto-retrieve-hook.sh" 2>/dev/null) || true
+echo "$OUT" | grep -q "STUB-SCAR" && pass "auto-retrieve works with no timeout/gtimeout on PATH (stock macOS)" \
+    || fail "auto-retrieve without timeout" "STUB-SCAR in additionalContext" "$OUT"
+
+NO_NODE_PATH=$(path_without "$TMPDIR/bin-no-node" node)
+set +e
+ERR=$(echo "$PROMPT_JSON" | PATH="$NO_NODE_PATH" bash "$PKG/hooks/scripts/auto-retrieve-hook.sh" 2>&1 >/dev/null); CODE=$?
+set -e
+[ "$CODE" = "1" ] && echo "$ERR" | grep -q "node is not on the hook's PATH" \
+    && pass "no node: visible non-blocking error (exit 1, reason on stderr)" \
+    || fail "no node visible" "exit 1 + reason" "exit=$CODE err=$ERR"
+
+# Hooks copied into a repo (init / install-hooks): no dist beside them.
+COPIED="$TMPDIR/repo/.gitmem/hooks"; mkdir -p "$COPIED"; cp "$SCRIPT_DIR"/scripts/*.sh "$COPIED/"
+EMPTY_HOME="$TMPDIR/empty-home"; mkdir -p "$EMPTY_HOME"
+NO_PKG_PATH=$(path_without "$TMPDIR/bin-no-pkg" gitmem-mcp npm)
+set +e
+ERR=$(echo "$PROMPT_JSON" | HOME="$EMPTY_HOME" PATH="$NO_PKG_PATH" bash "$COPIED/auto-retrieve-hook.sh" 2>&1 >/dev/null); CODE=$?
+set -e
+[ "$CODE" = "1" ] && echo "$ERR" | grep -q "quick-retrieve.js not found" \
+    && pass "module not found: visible non-blocking error, not a silent 'nothing relevant'" \
+    || fail "module not found visible" "exit 1 + reason" "exit=$CODE err=$ERR"
+
+NPX_HOME="$TMPDIR/npx-home"
+mkdir -p "$NPX_HOME/.npm/_npx/abc123/node_modules/gitmem-mcp/dist/hooks"
+cp "$PKG/dist/hooks/quick-retrieve.js" "$NPX_HOME/.npm/_npx/abc123/node_modules/gitmem-mcp/dist/hooks/"
+OUT=$(echo "$PROMPT_JSON" | HOME="$NPX_HOME" PATH="$NO_PKG_PATH" bash "$COPIED/auto-retrieve-hook.sh" 2>/dev/null) || true
+echo "$OUT" | grep -q "STUB-SCAR" && pass "copied hooks find gitmem-mcp in npx's cache" \
+    || fail "npx cache lookup" "STUB-SCAR" "$OUT"
+
+# session-start: no pgrep must not stall the 10 s hook for the 7 s gate.
+NO_PGREP_PATH=$(path_without "$TMPDIR/bin-no-pgrep" pgrep)
+T0=$(date +%s)
+OUT=$(echo '{}' | GITMEM_ENABLED=true PATH="$NO_PGREP_PATH" bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null) || true
+ELAPSED=$(( $(date +%s) - T0 ))
+[ "$ELAPSED" -lt 4 ] && echo "$OUT" | grep -q "SESSION START" \
+    && pass "session-start without pgrep does not stall (${ELAPSED}s)" \
+    || fail "session-start without pgrep" "<4s and SESSION START" "${ELAPSED}s: $OUT"
+
+# session-start: an unwritable debug log must not kill the hook under set -e.
+BAD_TMP="$TMPDIR/bad-tmp"; mkdir -p "$BAD_TMP/gitmem-hooks-plugin-debug-$(id -u).log"
+OUT=$(echo '{}' | GITMEM_ENABLED=true TMPDIR="$BAD_TMP" PATH="$NO_PGREP_PATH" bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null) || true
+echo "$OUT" | grep -q "SESSION START" && pass "session-start survives an unwritable debug log" \
+    || fail "unwritable debug log" "SESSION START" "$OUT"
+
+# credential-guard: a quote or backslash in the path must still produce JSON that blocks.
+OUT=$(printf '{"tool_name":"Read","tool_input":{"file_path":"/x/we\\"ird\\\\d/.env"}}' | bash "$SCRIPT_DIR/scripts/credential-guard.sh" 2>/dev/null) || true
+echo "$OUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{process.exit(JSON.parse(d).decision==="block"?0:1)})' 2>/dev/null \
+    && pass "credential-guard block is valid JSON for a path with quotes" \
+    || fail "credential-guard JSON" "valid JSON, decision block" "$OUT"
 
 # ============================================================================
 # Summary

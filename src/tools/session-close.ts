@@ -16,7 +16,7 @@ import { getStorage } from "../services/storage.js";
 import { filterToStoreSessionColumns } from "../services/session-columns.js";
 import { storeHasTable } from "../services/store-columns.js";
 import { clearCurrentSession, resolveCurrentSession, getSurfacedScars, getConfirmations, getReflections, getObservations, getChildren, getThreads, getSessionActivity, isRecallCalled } from "../services/session-state.js";
-import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile } from "../services/thread-manager.js"; // 
+import { normalizeThreads, mergeThreadStates, migrateStringThread, saveThreadsFile, loadThreadsFile } from "../services/thread-manager.js"; // 
 import { deduplicateThreadList } from "../services/thread-dedup.js";
 import { syncThreadsToSupabase, loadOpenThreadEmbeddings } from "../services/thread-supabase.js";
 import type { ThreadSyncResult } from "../services/thread-supabase.js";
@@ -369,8 +369,9 @@ function formatCloseDisplay(
 ): string {
   const lines: string[] = [];
 
-  // Header: branded product line
-  const status = success ? STATUS.complete : STATUS.failed;
+  // Header: branded product line. GIT-117: the session saved but some threads
+  // did not — PARTIAL, not FAILED (the session is there) and not COMPLETE.
+  const status = success ? STATUS.complete : sessionStored ? STATUS.partial : STATUS.failed;
   lines.push(productLine("close", status));
 
   // Stats line: compact one-liner with key counts
@@ -484,6 +485,15 @@ export function formatWriteWarnings(
     lines.push(`${name}: ${s.failed} of ${s.attempted} write${s.attempted > 1 ? "s" : ""} failed — ${cause} · ${stored}`);
   }
   return lines;
+}
+
+/**
+ * Store a session's embedding (PATCH, not upsert — the row already exists).
+ * GIT-119: 0 rows = not saved; throwing lets the effect tracker record it.
+ */
+export async function saveSessionEmbedding(sessionId: string, embeddingJson: string): Promise<void> {
+  const patched = await supabase.directPatch(getTableName("sessions"), { id: sessionId }, { embedding: embeddingJson });
+  if (patched.count === 0) throw new Error(`session ${sessionId.slice(0, 8)}: embedding PATCH updated no row`);
 }
 
 /**
@@ -1445,8 +1455,19 @@ export async function sessionClose(
         `[session_close] Local thread prune SKIPPED — ${threadSync.failed.length} thread(s) did not reach Supabase (${threadSync.failed.map((f) => f.id).join(", ")}). ` +
         `threads.json retained in full; it is the only record of the unsynced threads.`
       );
+      // GIT-117: mark what did not land so the next session_start keeps it
+      // (whatever its age) and the next close writes it again.
+      const failedIds = new Set(threadSync.failed.map((f) => f.id));
+      const fileThreads = loadThreadsFile();
+      const byId = new Map(fileThreads.map((t) => [t.id, t]));
+      for (const t of closeThreads) {
+        if (failedIds.has(t.id)) byId.set(t.id, { ...(byId.get(t.id) ?? {}), ...t, sync_pending: true });
+      }
+      saveThreadsFile([...byId.values()]);
     } else {
-      const openThreadsOnly = closeThreads.filter(t => t.status === "open" || !t.status);
+      const openThreadsOnly = closeThreads
+        .filter(t => t.status === "open" || !t.status)
+        .map(({ sync_pending: _written, ...t }) => t); // GIT-117: written now
       saveThreadsFile(openThreadsOnly);
       console.error(`[session_close] Pruned threads.json: ${openThreadsOnly.length} open threads (removed ${closeThreads.length - openThreadsOnly.length} resolved/archived)`);
     }
@@ -1566,11 +1587,7 @@ export async function sessionClose(
           const embeddingVector = await embed(embeddingText);
           if (embeddingVector) {
             const embeddingJson = JSON.stringify(embeddingVector);
-            // Update session with embedding (PATCH, not upsert — row already exists)
-            await supabase.directPatch(getTableName("sessions"),
-              { id: sessionId },
-              { embedding: embeddingJson }
-            );
+            await saveSessionEmbedding(sessionId, embeddingJson);
             console.error("[session_close] Embedding saved to session");
 
             // Phase 5: Implicit thread detection (chained after embedding)
@@ -1702,8 +1719,8 @@ export async function sessionClose(
 
     const persistErrors = partialPersist
       ? [
-          `Thread sync incomplete: ${threadSync.failed.length} of ${threadSync.attempted} thread(s) did not reach Supabase — ${threadSync.failed.map((f) => `${f.id} (${f.error})`).join("; ")}. ` +
-          `threads.json was NOT pruned and session files were retained; re-run session_close to retry.`,
+          `PARTIAL: the session saved, but ${threadSync.failed.length} of ${threadSync.attempted} thread(s) did not reach Supabase — ${threadSync.failed.map((f) => `${f.id} (${f.error})`).join("; ")}. ` +
+          `They are kept in threads.json and carried into the next session, whose close writes them again; session files were retained.`,
         ]
       : [];
 

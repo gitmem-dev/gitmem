@@ -21,7 +21,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { parseSchema, scanSources, compare, selectColumns } from "../helpers/schema-drift.js";
+import { parseSchema, scanSources, compare, selectColumns, parseFunctions, scanRpcNames } from "../helpers/schema-drift.js";
 import type { Finding, ScanResult, Schema } from "../helpers/schema-drift.js";
 import { SESSION_COLUMNS, PRODUCTION_ONLY_SESSION_COLUMNS } from "../../src/services/session-columns.js";
 
@@ -175,5 +175,65 @@ describe("src/ against the v1.8.0 schema", () => {
     const sessions = floor.get("gitmem_sessions")!;
     const missing = [...SESSION_COLUMNS].filter((c) => !sessions.has(c) && !PRODUCTION_ONLY_SESSION_COLUMNS.has(c));
     expect(missing, "SESSION_COLUMNS entries a v1.8.0 store rejects").toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GIT-114: RPC names
+// ---------------------------------------------------------------------------
+
+/**
+ * RPCs src/ may call that v1.8.0's setup.sql does not define, each owned by a
+ * ticket. Remove an entry when it goes; a stale entry fails.
+ */
+const ALLOWED_RPCS: Array<{ name: string; ticket: string; reason: string }> = [
+  { name: "match_gitmem_learnings_weighted", ticket: "GIT-114", reason: "fallback only after gitmem_scar_search answers PGRST202 (a store without the setup.sql function, e.g. nTEG's)" },
+  { name: "match_transcript_chunks", ticket: "GIT-106", reason: "transcript search: dev tier only; setup.sql creates neither the table nor the function" },
+];
+
+describe("RPC names against the v1.8.0 schema (GIT-114)", () => {
+  const functions = parseFunctions(fs.readFileSync(FLOOR_SQL, "utf-8"));
+  const rpc = scanRpcNames(path.join(REPO, "src"));
+  const storeRefs = rpc.refs.filter((r) => !r.external);
+
+  it("parses setup.sql's functions", () => {
+    expect([...functions]).toEqual(expect.arrayContaining([
+      "gitmem_scar_search", "gitmem_semantic_search", "refresh_scar_behavioral_scores",
+    ]));
+  });
+
+  it("finds the RPC call sites, including the scar-search candidate list", () => {
+    const names = storeRefs.map((r) => r.name);
+    expect(names).toEqual(expect.arrayContaining(["gitmem_scar_search", "refresh_scar_behavioral_scores"]));
+    expect(rpc.unresolved).toEqual([]);
+  });
+
+  it("every RPC on the customer's store is defined by setup.sql or allowlisted by ticket", () => {
+    const missing = storeRefs.filter((r) => !functions.has(r.name) && !ALLOWED_RPCS.some((a) => a.name === r.name));
+    expect(missing.map((r) => `${r.name} at ${r.file}:${r.line}`)).toEqual([]);
+  });
+
+  it("every allowlisted RPC is still referenced and names a ticket", () => {
+    for (const a of ALLOWED_RPCS) {
+      expect(a.ticket).toMatch(/^GIT-\d+$/);
+      expect(storeRefs.some((r) => r.name === a.name), `stale ALLOWED_RPCS entry ${a.name}`).toBe(true);
+    }
+  });
+
+  it("catches a planted call to a function setup.sql lacks, and a dynamic name it cannot resolve", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gitmem-rpc-drift-"));
+    try {
+      fs.mkdirSync(path.join(dir, "src"));
+      fs.writeFileSync(path.join(dir, "src", "a.ts"), `
+        declare const U: string; declare function getTableName(b: string): string; declare const x: string;
+        export const a = \`\${U}/rest/v1/rpc/match_\${getTableName("learnings")}_weighted\`;
+        export const b = "https://example.supabase.co/rest/v1/rpc/licence_check";
+        export const c = \`\${U}/rest/v1/rpc/\${x}\`;`);
+      const r = scanRpcNames(path.join(dir, "src"));
+      expect(r.refs.map((x) => `${x.name}:${x.external}`).sort()).toEqual(["licence_check:true", "match_gitmem_learnings_weighted:false"]);
+      expect(r.unresolved).toHaveLength(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

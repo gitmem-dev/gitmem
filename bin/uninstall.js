@@ -14,10 +14,13 @@ import {
   writeFileSync,
   existsSync,
   rmSync,
+  readdirSync,
 } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline/promises";
+import { storeRoot, repoGitmemDir, displayPath } from "./gitmem-root.js";
+import { removeGitmemHooks, backupFile } from "./hooks-merge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
@@ -122,7 +125,10 @@ function detectClient() {
 const client = detectClient();
 const cc = CLIENT_CONFIGS[client];
 
-const gitmemDir = join(cwd, ".gitmem");
+// GIT-115: the repo's .gitmem/ (config.json + hooks) and the store the
+// server reads are separate, and handled separately below.
+const repoDir = repoGitmemDir(cwd);
+const storeDir = storeRoot();
 const gitignorePath = join(cwd, ".gitignore");
 
 let rl;
@@ -151,18 +157,6 @@ function readJson(path) {
 
 function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
-}
-
-function isGitmemHook(entry) {
-  if (entry.hooks && Array.isArray(entry.hooks)) {
-    return entry.hooks.some(
-      (h) => typeof h.command === "string" && h.command.includes("gitmem")
-    );
-  }
-  if (typeof entry.command === "string") {
-    return entry.command.includes("gitmem");
-  }
-  return false;
 }
 
 // ── Steps ──
@@ -232,94 +226,34 @@ function stepHooks() {
   return stepHooksCursor();
 }
 
-function stepHooksClaude() {
-  const settings = readJson(cc.settingsFile);
-  if (!settings?.hooks) {
-    log(SKIP, "No hooks in .claude/settings.json");
+/**
+ * GIT-120 matching: remove only the commands gitmem installed. A matcher group
+ * keeps its other commands; the hooks key goes only when nothing is left.
+ */
+function removeHooksFrom(file, name) {
+  const cfg = readJson(file);
+  if (!cfg?.hooks) {
+    log(SKIP, `No hooks in ${name}`);
     return;
   }
-
-  let removed = 0;
-  let preserved = 0;
-  const cleaned = {};
-
-  for (const [eventType, entries] of Object.entries(settings.hooks)) {
-    if (!Array.isArray(entries)) continue;
-    const nonGitmem = entries.filter((e) => {
-      if (isGitmemHook(e)) {
-        removed++;
-        return false;
-      }
-      preserved++;
-      return true;
-    });
-    if (nonGitmem.length > 0) {
-      cleaned[eventType] = nonGitmem;
-    }
-  }
-
-  if (removed === 0) {
+  const result = removeGitmemHooks(cfg.hooks);
+  if (result.removed === 0) {
     log(SKIP, "No gitmem hooks found");
     return;
   }
+  if (result.hooks) cfg.hooks = result.hooks; else delete cfg.hooks;
+  const backup = backupFile(file);
+  writeJson(file, cfg);
+  const kept = result.kept > 0 ? `(${result.kept} other hook${result.kept !== 1 ? "s" : ""} preserved)` : "";
+  log(CHECK, "Removed automatic memory hooks", [kept, backup ? `backup: ${displayPath(backup)}` : ""].filter(Boolean).join(" "));
+}
 
-  if (Object.keys(cleaned).length > 0) {
-    settings.hooks = cleaned;
-  } else {
-    delete settings.hooks;
-  }
-
-  writeJson(cc.settingsFile, settings);
-  if (preserved > 0) {
-    log(CHECK, "Removed automatic memory hooks", `(${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`);
-  } else {
-    log(CHECK, "Removed automatic memory hooks");
-  }
+function stepHooksClaude() {
+  removeHooksFrom(cc.settingsFile, ".claude/settings.json");
 }
 
 function stepHooksCursor() {
-  const config = readJson(cc.hooksFile);
-  if (!config?.hooks) {
-    log(SKIP, `No hooks in ${cc.hooksFileName}`);
-    return;
-  }
-
-  let removed = 0;
-  let preserved = 0;
-  const cleaned = {};
-
-  for (const [eventType, entries] of Object.entries(config.hooks)) {
-    if (!Array.isArray(entries)) continue;
-    const nonGitmem = entries.filter((e) => {
-      if (isGitmemHook(e)) {
-        removed++;
-        return false;
-      }
-      preserved++;
-      return true;
-    });
-    if (nonGitmem.length > 0) {
-      cleaned[eventType] = nonGitmem;
-    }
-  }
-
-  if (removed === 0) {
-    log(SKIP, "No gitmem hooks found");
-    return;
-  }
-
-  if (Object.keys(cleaned).length > 0) {
-    config.hooks = cleaned;
-  } else {
-    delete config.hooks;
-  }
-
-  writeJson(cc.hooksFile, config);
-  if (preserved > 0) {
-    log(CHECK, "Removed automatic memory hooks", `(${preserved} other hook${preserved !== 1 ? "s" : ""} preserved)`);
-  } else {
-    log(CHECK, "Removed automatic memory hooks");
-  }
+  removeHooksFrom(cc.hooksFile, cc.hooksFileName);
 }
 
 function stepPermissions() {
@@ -359,23 +293,51 @@ function stepPermissions() {
   log(CHECK, "Removed tool permissions");
 }
 
+/**
+ * GIT-115: the repo's .gitmem/ holds gitmem's config.json and hooks/, which
+ * are this repo's integration and go with it. Anything else in there (a store
+ * from an older install) is left alone.
+ */
+function stepRepoDir() {
+  if (!existsSync(repoDir)) {
+    log(SKIP, "No .gitmem/ in this repo");
+    return;
+  }
+  for (const entry of ["config.json", "hooks"]) {
+    rmSync(join(repoDir, entry), { recursive: true, force: true });
+  }
+  const rest = readdirSync(repoDir);
+  if (rest.length === 0) {
+    rmSync(repoDir, { recursive: true, force: true });
+    log(CHECK, "Removed .gitmem/ from this repo", "(config.json and hooks)");
+  } else {
+    log(CHECK, "Removed .gitmem/config.json and .gitmem/hooks/",
+      `(${rest.length} other file${rest.length !== 1 ? "s" : ""} left in .gitmem/)`);
+  }
+}
+
+/**
+ * The memory store is shared by every project on this machine, so it is kept
+ * unless --all is given or the user says to delete it.
+ */
 async function stepGitmemDir() {
-  if (!existsSync(gitmemDir)) {
-    log(SKIP, "No .gitmem/ directory");
+  const name = displayPath(storeDir);
+  if (!existsSync(storeDir)) {
+    log(SKIP, `No memory store at ${name}`);
     return;
   }
 
   if (deleteAll) {
-    rmSync(gitmemDir, { recursive: true, force: true });
-    log(CHECK, "Deleted .gitmem/ directory");
+    rmSync(storeDir, { recursive: true, force: true });
+    log(CHECK, `Deleted memory store ${name}`);
     return;
   }
 
-  if (await confirm("Keep .gitmem/ memory data for future use?", true)) {
-    log(CHECK, ".gitmem/ preserved — your memories will be here if you reinstall");
+  if (await confirm(`Keep memory store ${name}? (shared by every project on this machine)`, true)) {
+    log(CHECK, `${name} preserved — your memories will be there if you reinstall`);
   } else {
-    rmSync(gitmemDir, { recursive: true, force: true });
-    log(CHECK, "Deleted .gitmem/ directory");
+    rmSync(storeDir, { recursive: true, force: true });
+    log(CHECK, `Deleted memory store ${name}`);
   }
 }
 
@@ -406,6 +368,7 @@ async function main() {
   stepMcpJson();
   stepHooks();
   stepPermissions();
+  stepRepoDir();
   await stepGitmemDir();
   stepGitignore();
 

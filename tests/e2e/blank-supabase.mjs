@@ -200,7 +200,7 @@ function isolatedHome(tag) {
   return { home, gitmemDir };
 }
 const STRIP = /^(OPENAI_API_KEY|OPENROUTER_API_KEY|GITMEM_|SUPABASE_|OLLAMA_|NODE_OPTIONS$|CLAUDE_CODE_ENTRYPOINT$)/;
-async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
+async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink, extraEnv = {} }) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !STRIP.test(k)));
   Object.assign(env, {
     HOME: home,
@@ -216,6 +216,7 @@ async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
     GITMEM_NETLOG: netlog,
     NODE_OPTIONS: `--import=${pathToFileURL(NETLOG_PRELOAD).href}`,
     NO_COLOR: "1",
+    ...extraEnv,
   });
   const transport = new StdioClientTransport({ command: process.execPath, args: [SERVER], env, cwd: home, stderr: "pipe" });
   transport.stderr?.on("data", (d) => stderrSink.push(d.toString()));
@@ -400,6 +401,25 @@ async function flow() {
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
 
+  // GIT-119: archive_learning by id prefix sent id=like.<prefix>% against a
+  // uuid column (42883), and a full UUID that matched no row still reported
+  // "Archived". The row below is inserted after the server loaded its index,
+  // so the prefix must be resolved by the store (UUID range), not locally.
+  const archiveRowId = randomUUID();
+  await rest("POST", "gitmem_learnings", [{
+    id: archiveRowId, learning_type: "scar", title: `Driver archive target (${label})`,
+    description: "Inserted after startup so archive_learning resolves its prefix from the store.",
+    severity: "low", counter_arguments: ["You might think it is permanent — but it is archived here."],
+    project: PROJECT, is_active: true,
+  }]);
+  const archivePrefix = archiveRowId.slice(0, 8);
+  const ap = await step("archive_learning", { id: archivePrefix, reason: "venue driver (GIT-119)" });
+  const archivedRow = await rest("GET", `gitmem_learnings?select=is_active&id=eq.${archiveRowId}`, undefined, { Prefer: "" }).then((r) => r.json());
+  const archivePrefixDurable = /Archived learning/.test(ap) && archivedRow[0]?.is_active === false;
+  const ghostId = "00000000-0000-4000-8000-00000000d119";
+  const ag = await step("archive_learning", { id: ghostId, reason: "venue driver (GIT-119)" });
+  const archiveGhostHonest = !/Archived learning/.test(ag) && /nothing was archived|not found|No learning/i.test(ag);
+
   // GIT-102: every WARN on the close names a subsystem and cause and says
   // whether the session content was stored; health reports the write-path verdict.
   const closeWarns = sc.replace(/\x1b\[[0-9;]*m/g, "").split("\n").filter((l) => /^WARN /.test(l));
@@ -422,6 +442,131 @@ async function flow() {
   const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));
   await waitQuiet(netlog, { minMs: 1000, quietMs: 2000 });
   await srv.close();
+
+  // GIT-114: recall served by the store, not the local index. (1) Forced with
+  // GITMEM_SEARCH_MODE=remote. (2) A fresh server asked before its index has
+  // loaded — the cold-start path every customer hits first. Both must return a
+  // seeded scar; the store must answer the RPC (a 404 fails the run below).
+  const recallProbe = async (tag, extraEnv) => {
+    const h = isolatedHome(`${label}-${tag}`);
+    const probeLog = join(outDir, `netlog-${label}-${tag}.jsonl`);
+    writeFileSync(probeLog, "");
+    const errs = [];
+    const p = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs, extraEnv });
+    let text = "";
+    try {
+      text = await p.call("recall", { plan: "Supabase migrations must be dry-run before push", project: PROJECT, match_count: 3 });
+    } catch (e) { text = `ERROR ${e}`; }
+    await p.close();
+    allVenueRequests.push(...venueReqs(readNet(probeLog)));
+    const errText = errs.join("");
+    return {
+      found_seeded_scar: /Supabase migrations must be dry-run/.test(text),
+      used_store_rpc: venueReqs(readNet(probeLog)).some((r) => r.path.includes("/rpc/") && r.status < 300),
+      fell_back_from_local: /Local cache not ready/.test(errText),
+      text: text.slice(0, 300),
+    };
+  };
+  const recallRemote = await recallProbe("recall-remote", { GITMEM_SEARCH_MODE: "remote" });
+  const recallCold = await recallProbe("recall-cold", {});
+  // GIT-117: a close whose thread write the store rejects. A thread naming a
+  // session the store has never seen violates the source_session FK (23503).
+  // The close must say PARTIAL and name it, keep it in threads.json marked
+  // sync_pending, and the next session_start must carry it forward.
+  const threadSyncProbe = async () => {
+    const h = isolatedHome(`${label}-threadsync`);
+    const probeLog = join(outDir, `netlog-${label}-threadsync.jsonl`);
+    writeFileSync(probeLog, "");
+    const badId = `t-fk${randomUUID().slice(0, 6)}`;
+    const errs1 = [];
+    const p1 = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs1 });
+    const ss1 = await p1.call("session_start", { project: PROJECT, agent_identity: "cli", force: true });
+    const sid1 = (ss1.match(UUID) || [])[0];
+    await waitQuiet(probeLog, { minMs: 1500, quietMs: 2000 });
+    const close = await p1.call("session_close", {
+      session_id: sid1, close_type: "standard", human_corrections: "none",
+      open_threads: [{ id: badId, text: `Thread whose write the store rejects (${label})`, status: "open",
+        created_at: new Date().toISOString(), source_session: randomUUID() }],
+      closing_reflection: {
+        what_broke: "n/a", what_took_longer: "n/a", do_differently: "n/a", what_worked: "n/a",
+        wrong_assumption: "n/a", scars_applied: [], institutional_memory_items: "n/a",
+        collaborative_dynamic: "n/a", rapport_notes: "n/a",
+      },
+    });
+    await p1.close();
+    const threadsFile = join(h.gitmemDir, "threads.json");
+    const local = existsSync(threadsFile) ? JSON.parse(readFileSync(threadsFile, "utf8")) : [];
+    const localEntry = local.find((t) => t.id === badId);
+    const inStore = await rest("GET", `gitmem_threads?select=id&thread_id=eq.${badId}`, undefined, { Prefer: "" }).then((r) => r.json());
+    const errs2 = [];
+    const p2 = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs2 });
+    await p2.call("session_start", { project: PROJECT, agent_identity: "cli" });
+    await p2.close();
+    allVenueRequests.push(...venueReqs(readNet(probeLog)).filter((r) => !(r.method === "POST" && /gitmem_threads$/.test(r.path) && r.status === 409)));
+    const after = existsSync(threadsFile) ? JSON.parse(readFileSync(threadsFile, "utf8")) : [];
+    writeFileSync(join(outDir, `stderr-${label}-threadsync-restart.log`), errs2.join(""));
+    writeFileSync(join(outDir, `threads-${label}-threadsync-after.json`), JSON.stringify(after, null, 2));
+    const plain = close.replace(/\x1b\[[0-9;]*m/g, "");
+    return {
+      bad_thread: badId,
+      store_rejected_it: inStore.length === 0,
+      close_says_partial: /close · PARTIAL/.test(plain) && plain.includes(badId),
+      kept_locally_pending: !!localEntry && localEntry.sync_pending === true,
+      carried_into_next_session: after.some((t) => t.id === badId) &&
+        errs2.join("").split("\n").some((l) => l.includes("Carrying forward") && l.includes(badId)),
+      close_head: plain.split("\n").slice(0, 2).join(" | "),
+    };
+  };
+  const threadSync = await threadSyncProbe();
+  // GIT-118: the store fails the index READS while writes still land. A
+  // forwarding proxy in front of the venue fails GET gitmem_learnings… on
+  // demand. create_learning must save and say its index refresh failed; a
+  // recall right after must still find the seeded scars (index kept).
+  const reloadFailureProbe = async () => {
+    let failIndexReads = false;
+    const proxy = createServer(async (req, res) => {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      if (failIndexReads && req.method === "GET" && /^\/rest\/v1\/gitmem_learnings(\?|$)/.test(req.url)) {
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end('{"message":"injected by the venue driver (GIT-118)"}');
+        return;
+      }
+      const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !["host", "connection", "content-length", "accept-encoding"].includes(k)));
+      const upstream = await fetch(`${SUPABASE_URL}${req.url}`, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+      const body = Buffer.from(await upstream.arrayBuffer());
+      const out = {};
+      upstream.headers.forEach((v, k) => { if (!["content-encoding", "content-length", "transfer-encoding", "connection"].includes(k)) out[k] = v; });
+      res.writeHead(upstream.status, out);
+      res.end(body);
+    });
+    await new Promise((r) => proxy.listen(0, "127.0.0.1", r));
+    const h = isolatedHome(`${label}-reload`);
+    const probeLog = join(outDir, `netlog-${label}-reload.jsonl`);
+    writeFileSync(probeLog, "");
+    const errs = [];
+    const p = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs,
+      extraEnv: { SUPABASE_URL: `http://127.0.0.1:${proxy.address().port}`, GITMEM_SEARCH_MODE: "local" } });
+    await p.call("session_start", { project: PROJECT, agent_identity: "cli", force: true });
+    for (let i = 0; i < 60 && !/GitMem initialized: [1-9]\d* scars/.test(errs.join("")); i++) await new Promise((r) => setTimeout(r, 500));
+    failIndexReads = true;
+    const created = await p.call("create_learning", { learning_type: "win", title: `Reload probe win (${label}) ${randomUUID().slice(0, 8)}`, description: "written while the index reads fail", project: PROJECT });
+    // Let any background reload the write started finish before the next
+    // prompt's recall (1.11.0 did not await it; a user's next prompt comes later).
+    await waitQuiet(probeLog, { minMs: 3000, quietMs: 2500 });
+    const recall = await p.call("recall", { plan: "Supabase migrations must be dry-run before push", project: PROJECT, match_count: 3 });
+    failIndexReads = false;
+    await p.close();
+    proxy.close();
+    writeFileSync(join(outDir, `stderr-${label}-reload.log`), errs.join(""));
+    return {
+      learning_saved: /Created win/.test(created),
+      create_says_not_refreshed: /Recall index NOT refreshed/.test(created),
+      recall_still_finds_seeded_scar: /Supabase migrations must be dry-run/.test(recall),
+      create_head: created.split("\n").slice(0, 3).join(" | ").slice(0, 240),
+    };
+  };
+  const reloadFailure = await reloadFailureProbe();
   ollama.close();
 
   const reqs = readNet(netlog);
@@ -441,8 +586,16 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    recall_remote: recallRemote,
+    recall_cold: recallCold,
+    thread_sync: threadSync,
+    reload_failure: reloadFailure,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
+    archive_prefix_durable: archivePrefixDurable,
+    archive_prefix_text: ap.slice(0, 300),
+    archive_ghost_honest: archiveGhostHonest,
+    archive_ghost_text: ag.slice(0, 300),
     close_warns: closeWarns,
     close_warns_self_describing: closeWarnsSelfDescribing,
     health_has_write_path: healthHasWritePath,
@@ -624,6 +777,12 @@ if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge
 if (mode === "flow" && !result.resolve_thread_durable) {
   failureCheck.unexpected.push("resolve_thread did not land durably in gitmem_threads, or claimed it did not (GIT-101)");
 }
+if (mode === "flow" && !result.archive_prefix_durable) {
+  failureCheck.unexpected.push(`archive_learning by id prefix did not archive the row (GIT-119): ${result.archive_prefix_text}`);
+}
+if (mode === "flow" && !result.archive_ghost_honest) {
+  failureCheck.unexpected.push(`archive_learning of a nonexistent id claimed success (GIT-119): ${result.archive_ghost_text}`);
+}
 if (mode === "flow" && !result.missing_payload_named) {
   failureCheck.unexpected.push("session_close without a payload did not name the absolute closing-payload.json path (GIT-99)");
 }
@@ -647,6 +806,25 @@ if (mode === "flow" && !result.thread_triples_linked) {
 }
 if (mode === "flow" && result.false_stranded_notice) {
   failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
+if (mode === "flow" && !(result.recall_remote.found_seeded_scar && result.recall_remote.used_store_rpc)) {
+  failureCheck.unexpected.push(`recall with GITMEM_SEARCH_MODE=remote did not return a seeded scar from the store (GIT-114): ${result.recall_remote.text}`);
+}
+if (mode === "flow" && !result.recall_cold.found_seeded_scar) {
+  failureCheck.unexpected.push(`cold-start recall returned no seeded scar (GIT-114): ${result.recall_cold.text}`);
+}
+if (mode === "flow") {
+  const t = result.thread_sync;
+  if (!t.store_rejected_it) failureCheck.unexpected.push(`thread-sync probe: the store accepted ${t.bad_thread}; the probe did not exercise a failed write (GIT-117)`);
+  else if (!(t.close_says_partial && t.kept_locally_pending && t.carried_into_next_session)) {
+    failureCheck.unexpected.push(`a rejected thread write was not reported PARTIAL / kept pending / carried forward (GIT-117): ${JSON.stringify(t)}`);
+  }
+}
+if (mode === "flow") {
+  const r = result.reload_failure;
+  if (!(r.learning_saved && r.create_says_not_refreshed && r.recall_still_finds_seeded_scar)) {
+    failureCheck.unexpected.push(`a failed index reload was hidden or emptied recall (GIT-118): ${JSON.stringify(r)}`);
+  }
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

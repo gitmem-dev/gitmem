@@ -55,6 +55,7 @@ vi.mock("../../../src/services/display-protocol.js", () => ({
 
 vi.mock("../../../src/services/startup.js", () => ({
   flushCache: vi.fn(() => Promise.resolve()),
+  refreshIndexAfterWrite: vi.fn(() => Promise.resolve({ success: true, previous_scar_count: 0, new_scar_count: 1, elapsed_ms: 1 })), // GIT-118
 }));
 
 vi.mock("../../../src/services/triple-writer.js", () => ({

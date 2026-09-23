@@ -15,6 +15,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { fileURLToPath } from "url";
 
 /**
  * Validate a string intended for use as a single path component (directory name or filename).
@@ -272,9 +273,16 @@ function warnAboutStrandedProjectRoots(home: string): void {
  * without ever having held a session.
  *
  * Any ONE of these counts:
- *   - config.json           a deliberate project-scoped install
  *   - a registered session  the registry names at least one
  *   - a real session dir    sessions/<id>/session.json parses with a session_id
+ *   - a real record         a learning, thread or decision that `init` did not seed
+ *
+ * GIT-115: config.json no longer counts. A repo's .gitmem/ now holds its
+ * config.json (the project name the SessionStart hook reads) and the hook
+ * scripts on purpose, while the store lives in the root the server reads. A
+ * repo set up that way is not a stranded store. Starter lessons and the
+ * welcome thread are not evidence either: every older `init` seeded them into
+ * the repo, and the root being read has its own copy.
  *
  * Exported for tests and diagnostics; the resolution path is the only caller
  * that matters.
@@ -283,8 +291,7 @@ export function isLiveGitmemRoot(candidate: string): boolean {
   try {
     if (!fs.existsSync(candidate)) return false;
 
-    // A project-scoped install is deliberate — honour it even when idle.
-    if (fs.existsSync(path.join(candidate, "config.json"))) return true;
+    if (holdsRealRecords(candidate)) return true;
 
     const registryPath = path.join(candidate, "active-sessions.json");
     if (fs.existsSync(registryPath)) {
@@ -315,6 +322,43 @@ export function isLiveGitmemRoot(candidate: string): boolean {
     // throwing: resolution must always yield a usable root.
     return false;
   }
+}
+
+/** What `init` seeds: starter lesson ids and the welcome thread (GIT-115). */
+const WELCOME_THREAD_ID = "t-welcome01";
+let starterIds: Set<string> | null = null;
+function starterLearningIds(): Set<string> {
+  if (starterIds) return starterIds;
+  starterIds = new Set();
+  try {
+    // src/services or dist/services → <package>/schema/starter-scars.json
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const file = path.join(here, "..", "..", "schema", "starter-scars.json");
+    for (const s of JSON.parse(fs.readFileSync(file, "utf-8"))) if (s?.id) starterIds.add(String(s.id));
+  } catch {
+    // Unreadable: every learning then counts, which errs toward reporting.
+  }
+  return starterIds;
+}
+
+/** Entries of a store file that may be a bare array or {key: array}. */
+function readCollection(file: string, key: string): Array<Record<string, unknown>> {
+  try {
+    if (!fs.existsSync(file)) return [];
+    const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
+    const list = Array.isArray(parsed) ? parsed : parsed?.[key];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+/** GIT-115: a learning, thread or decision that `init` did not seed. */
+function holdsRealRecords(root: string): boolean {
+  const starters = starterLearningIds();
+  if (readCollection(path.join(root, "learnings.json"), "learnings").some((l) => !starters.has(String(l?.id)))) return true;
+  if (readCollection(path.join(root, "threads.json"), "threads").some((t) => String(t?.id) !== WELCOME_THREAD_ID)) return true;
+  return readCollection(path.join(root, "decisions.json"), "decisions").length > 0;
 }
 
 /**

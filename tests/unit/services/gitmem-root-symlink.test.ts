@@ -15,11 +15,15 @@ import { findStrandedProjectRoots, sameDirectory, canonicalPath, clearGitmemDirC
 let tmp: string;
 const saved = { home: process.env.GITMEM_HOME, dir: process.env.GITMEM_DIR };
 
-/** A live project-scoped store: config.json marks a deliberate install. */
+/**
+ * A live project-scoped store: it holds a learning of the user's own.
+ * (GIT-115: config.json alone no longer marks one; a repo keeps its
+ * config.json and hooks in .gitmem/ while the store lives elsewhere.)
+ */
 function liveStore(dir: string): string {
   const g = path.join(dir, ".gitmem");
   fs.mkdirSync(g, { recursive: true });
-  fs.writeFileSync(path.join(g, "config.json"), JSON.stringify({ project: "p" }));
+  fs.writeFileSync(path.join(g, "learnings.json"), JSON.stringify([{ id: "user-learning", title: "mine" }]));
   return g;
 }
 

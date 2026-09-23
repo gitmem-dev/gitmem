@@ -14,7 +14,7 @@ import type {
   SupabaseSearchOptions,
 } from "../types/index.js";
 import { getCache } from "./cache.js";
-import { getTableName } from "./tier.js";
+import { getTableName, getTablePrefix } from "./tier.js";
 
 // --- PostgREST Input Sanitization ---
 
@@ -157,61 +157,6 @@ export async function upsertRecord<T = unknown>(
   data: Record<string, unknown>
 ): Promise<T> {
   return directUpsert<T>(table, data);
-}
-
-/**
- * Semantic search across tables
- *
- * Generates an embedding for the query, then calls the match_<table>
- * RPC function directly via PostgREST.
- */
-export async function semanticSearch<T = unknown>(
-  options: SupabaseSearchOptions
-): Promise<T[]> {
-  if (!isConfigured()) {
-    throw new Error("Supabase not configured");
-  }
-
-  const { query, match_count = 10 } = options;
-
-  // Generate embedding for the query
-  const { embed } = await import("./embedding.js");
-  const embedding = await embed(query);
-
-  if (!embedding) {
-    console.error("[semantic-search] No embedding provider configured — cannot run semantic search");
-    return [];
-  }
-
-  // GIT-93: same defect as scarSearch below — this built `${prefix}_semantic_search`,
-  // which exists under no prefix. The deployed function is match_<table>, and it
-  // takes similarity_threshold (unlike the _weighted variant), which is what the
-  // body already sends.
-  const rpcName = `match_${getTableName("learnings")}`;
-  const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
-    body: JSON.stringify({
-      query_embedding: `[${embedding.join(",")}]`,
-      match_count,
-      similarity_threshold: 0.0,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Supabase RPC error: ${response.status} - ${text.slice(0, 200)}`);
-  }
-
-  const rows = (await response.json()) as T[];
-  return rows || [];
 }
 
 // ============================================================================
@@ -473,11 +418,22 @@ export async function directUpsert<T = unknown>(
  * @param filters PostgREST filter to identify the row(s) to update
  * @param data    Fields to update (partial — omitted columns stay unchanged)
  */
+/**
+ * GIT-119: what a PATCH changed. PostgREST answers 200 with [] when the filter
+ * matched nothing (a wrong id, a row not created yet, RLS), so a PATCH that
+ * returns is not evidence of a write: `count` is. All callers treat 0 as not
+ * durable.
+ */
+export interface PatchResult<T = unknown> {
+  count: number;
+  rows: T[];
+}
+
 export async function directPatch<T = unknown>(
   table: string,
   filters: Record<string, string>,
   data: Record<string, unknown>
-): Promise<T[]> {
+): Promise<PatchResult<T>> {
   if (!isConfigured()) {
     throw new Error("Supabase not configured");
   }
@@ -507,7 +463,8 @@ export async function directPatch<T = unknown>(
     throw new Error(`Supabase patch error: ${response.status} - ${text.slice(0, 200)}`);
   }
 
-  return response.json() as Promise<T[]>;
+  const rows = ((await response.json()) as T[]) || [];
+  return { count: Array.isArray(rows) ? rows.length : 0, rows: Array.isArray(rows) ? rows : [] };
 }
 
 /**
@@ -677,49 +634,107 @@ export async function scarSearch<T = unknown>(
     return [];
   }
 
-  // GIT-93: the RPC is named after the TABLE it searches, not after the prefix
-  // with a verb appended. This built `${prefix}_scar_search` — "orchestra_scar_search"
-  // under GITMEM_TABLE_PREFIX=orchestra_, and "gitmem_scar_search" by default.
-  // Neither exists: PostgREST exposes match_orchestra_learnings_weighted, and a
-  // survey of the deployed functions found no *_scar_search under any prefix. So
-  // this fallback returned PGRST202 on every call, on every deployment, since it
-  // was written — invisible because it is only reached while the local vector
-  // index is cold.
-  //
-  // _weighted is the right one of the pair: this function is documented as scar
-  // search WITH SEVERITY WEIGHTING, and it is the variant that returns
-  // decay_multiplier, which recall consumes. Note it takes match_threshold, not
-  // similarity_threshold — the unweighted variant takes the latter.
-  const rpcName = `match_${getTableName("learnings")}_weighted`;
-  const url = `${SUPABASE_URL}/rest/v1/rpc/${rpcName}`;
+  const rows = await callScarSearchRpc<T & { id: string; learning_type?: string }>(embedding, matchCount);
+  return (await withLearningColumns(rows)) as T[];
+}
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
-    body: JSON.stringify({
-      query_embedding: `[${embedding.join(",")}]`,
-      match_count: matchCount,
-      match_threshold: 0.0,
-      // project_filter is deliberately not sent. The primary path this falls back
-      // from is the unified CROSS-PROJECT vector cache, so filtering here would
-      // make the fallback return a different, narrower result set than the path
-      // it stands in for — a silent behaviour change on exactly the cold-start
-      // calls that are hardest to notice.
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
+/**
+ * GIT-114: which scar-search function this store has.
+ *
+ * setup.sql (every version a customer can have) defines gitmem_scar_search,
+ * taking similarity_threshold. It does NOT define match_<table>_weighted —
+ * GIT-93 renamed the call to that after surveying nTEG's store, which has it,
+ * so every customer's cold-index recall got PGRST202.
+ *
+ * Order of preference:
+ *   - default prefix: gitmem_scar_search (setup.sql), then
+ *     match_gitmem_learnings_weighted for a store that predates or lacks it;
+ *   - any other prefix: only match_<table>_weighted — gitmem_scar_search reads
+ *     gitmem_learnings by name and would search the wrong table.
+ * The first function that exists is remembered for the process.
+ */
+interface ScarSearchRpc {
+  name: string;
+  thresholdParam: "similarity_threshold" | "match_threshold";
+}
 
-  if (!response.ok) {
+let resolvedScarSearchRpc: ScarSearchRpc | null = null;
+
+/** For tests. */
+export function resetScarSearchRpc(): void {
+  resolvedScarSearchRpc = null;
+}
+
+function scarSearchCandidates(): ScarSearchRpc[] {
+  const weighted: ScarSearchRpc = { name: `match_${getTableName("learnings")}_weighted`, thresholdParam: "match_threshold" };
+  return getTablePrefix() === "gitmem_"
+    ? [{ name: "gitmem_scar_search", thresholdParam: "similarity_threshold" }, weighted]
+    : [weighted];
+}
+
+async function callScarSearchRpc<T>(embedding: number[], matchCount: number): Promise<T[]> {
+  const candidates = resolvedScarSearchRpc ? [resolvedScarSearchRpc] : scarSearchCandidates();
+  let lastError = "";
+  for (const rpc of candidates) {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${rpc.name}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify({
+        query_embedding: `[${embedding.join(",")}]`,
+        match_count: matchCount,
+        [rpc.thresholdParam]: 0.0,
+        // project_filter is deliberately not sent. The primary path this falls
+        // back from is the unified CROSS-PROJECT vector cache, so filtering here
+        // would make the fallback return a narrower set than the path it stands
+        // in for — a silent behaviour change on the cold-start calls.
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (response.ok) {
+      resolvedScarSearchRpc = rpc;
+      const rows = (await response.json()) as T[];
+      return rows || [];
+    }
+
     const text = await response.text();
-    throw new Error(`Supabase RPC error: ${response.status} - ${text.slice(0, 200)}`);
+    lastError = `Supabase RPC error: ${response.status} - ${text.slice(0, 200)}`;
+    // PGRST202: no such function (with these parameters) — try the next name.
+    // Anything else is a real failure of a function that exists.
+    if (!(response.status === 404 && text.includes("PGRST202"))) break;
+    console.error(`[scar-search] ${rpc.name} not on this store (PGRST202)`);
   }
+  throw new Error(lastError);
+}
 
-  const rows = (await response.json()) as T[];
-  return rows || [];
+/**
+ * gitmem_scar_search returns id, title, description, severity, scar_type,
+ * counter_arguments, decay_multiplier and similarity — not the fields recall
+ * renders from (learning_type, applies_when, why_this_matters, …). Fetch them
+ * for the returned ids in one request. If that request fails the rows are
+ * still returned: recall renders what it has rather than losing the result.
+ */
+const RECALL_EXTRA_COLUMNS =
+  "id,learning_type,problem_context,solution_approach,applies_when,domain,keywords,source_linear_issue,why_this_matters,action_protocol,self_check_criteria,project";
+
+async function withLearningColumns<T extends { id: string; learning_type?: string }>(rows: T[]): Promise<T[]> {
+  if (rows.length === 0 || rows.every((r) => r.learning_type !== undefined)) return rows;
+  try {
+    const extra = await directQuery<Record<string, unknown> & { id: string }>(getTableName("learnings"), {
+      select: RECALL_EXTRA_COLUMNS,
+      filters: { id: `in.(${rows.map((r) => r.id).join(",")})` },
+    });
+    const byId = new Map(extra.map((e) => [e.id, e]));
+    return rows.map((r) => ({ ...(byId.get(r.id) ?? {}), ...r }));
+  } catch (error) {
+    console.error("[scar-search] Could not fetch recall columns for the matched scars (returning without them):",
+      error instanceof Error ? error.message : error);
+    return rows;
+  }
 }
 
 /**
@@ -888,10 +903,12 @@ export async function saveTranscript(
   // Update the session record with transcript_path (direct REST API)
   let patch_warning: string | undefined;
   try {
-    await directPatch(getTableName("sessions"),
+    const patched = await directPatch(getTableName("sessions"),
       { id: sessionId },
       { transcript_path: path }
     );
+    // GIT-119: 0 rows = no session row to update, not a success.
+    if (patched.count === 0) throw new Error(`no session row ${sessionId} to update`);
   } catch (error) {
     // File is saved; session record update failed — warn, don't fail
     const msg = error instanceof Error ? error.message : String(error);

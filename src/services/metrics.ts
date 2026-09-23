@@ -443,9 +443,11 @@ export async function updateRelevanceData(
       );
       if (applied.length === 0 && Object.keys(relevance).length === 0) continue;
 
-      await supabase.directPatch("gitmem_query_metrics", { id: `eq.${metric.id}` }, {
+      const patched = await supabase.directPatch("gitmem_query_metrics", { id: `eq.${metric.id}` }, {
         metadata: { ...(metric.metadata ?? {}), memories_applied: applied, memory_relevance: relevance },
       });
+      // GIT-119: 0 rows = relevance not recorded; throw so the tracker counts it.
+      if (patched.count === 0) throw new Error(`relevance for metrics row ${metric.id} updated no row`);
     }
   });
 }

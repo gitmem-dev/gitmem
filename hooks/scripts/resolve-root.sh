@@ -43,12 +43,21 @@ unset _gitmem_root
 GITMEM_ACTIVE_SESSIONS="$GITMEM_ROOT/active-sessions.json"
 GITMEM_PAYLOAD_PATH="$GITMEM_ROOT/closing-payload.json"
 
-# Is this pid a running process? `kill -0` needs no external tool (minimal
-# images have no `ps`, and a missing `ps` would make every session look dead).
-# EPERM ("Operation not permitted") means it exists but belongs to another user.
+# Is this pid a running process? `kill -0` (a builtin) answers for our own
+# processes. When it fails the process is either gone or another user's (EPERM):
+# /proc tells them apart on Linux, `ps` (always present on macOS) elsewhere.
+# GIT-116: this used to match kill's English error text, which a non-English
+# locale changes.
 gitmem_pid_alive() {
+    kill -0 "$1" 2>/dev/null && return 0
+    if [ -d /proc/self ]; then
+        [ -d "/proc/$1" ] && return 0 || return 1
+    fi
+    if command -v ps >/dev/null 2>&1; then
+        ps -p "$1" >/dev/null 2>&1 && return 0 || return 1
+    fi
     local out
-    out=$(kill -0 "$1" 2>&1) && return 0
+    out=$(LC_ALL=C kill -0 "$1" 2>&1)
     case "$out" in *ermitted*) return 0 ;; esac
     return 1
 }
@@ -59,7 +68,8 @@ gitmem_pid_alive() {
 gitmem_live_session_ids() {
     [ -f "$GITMEM_ACTIVE_SESSIONS" ] || return 0
     local host rows
-    host=$(hostname 2>/dev/null || echo "")
+    # bash's own HOSTNAME is gethostname(), what the server's os.hostname() is.
+    host="${HOSTNAME:-$(hostname 2>/dev/null || echo "")}"
     if command -v jq &>/dev/null; then
         rows=$(jq -r '(.sessions // []) | sort_by(.started_at // "") | reverse | .[]
             | [(.session_id // ""), ((.pid // "") | tostring), (.hostname // "")] | join("|")' \

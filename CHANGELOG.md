@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-09-22
+
+**Just upgrade the package. Nothing to change on your database.** Every fix below works on a project
+still on the `setup.sql` you first ran, back to 1.8.0, and was checked against a project on exactly
+that schema and on the current one.
+
+**Recall works when it has to ask your database.** When the local index was not ready, or with
+`GITMEM_SEARCH_MODE=remote`, recall called a database function that `setup.sql` never created. It
+got an error and returned no scars. It now calls `gitmem_scar_search`, which every project has, and
+falls back to the older function only where that exists. (GIT-114)
+
+**A fresh install now finds its starter lessons.** `gitmem init` put your memory in the repo's
+`.gitmem/`, but gitmem reads `~/.gitmem`, so a new install started with none of its starter lessons
+and was told its memory was "NOT being read". `init` now puts your memory where gitmem reads it
+(`GITMEM_DIR`, else `GITMEM_HOME/.gitmem`, else `~/.gitmem`). The repo's `.gitmem/` keeps only
+`config.json`, with the project name, and the hook scripts. A repo set up that way no longer
+triggers the warning. `gitmem uninstall` removes the repo's files and keeps your memory, which every
+project shares, unless you pass `--all`. The session-start hook now finds the project name without
+jq. (GIT-115)
+
+If an older `init` put lessons of your own in a repo's `.gitmem/`, session_start still points them
+out. `npx gitmem-mcp migrate-root` copies them into `~/.gitmem`.
+
+**`install-hooks` and `uninstall-hooks` keep your own hooks.** They used to replace or delete every
+hook in `.claude/settings.json` or `.cursor/hooks.json`. Now they add or remove only gitmem's hooks,
+back the file up first, and print what changed. A file that is not valid JSON is left alone instead
+of being replaced. `gitmem init` and `gitmem uninstall` use the same matching, so a hook of yours
+that shares a matcher with gitmem's, or lives in a folder named gitmem, is no longer removed or
+mistaken for gitmem's. (GIT-120, GIT-115)
+
+### Fixed
+
+- **Hooks work on a stock Mac.** The prompt hook ran `timeout`, which macOS does not have, so it
+  never returned scars there. The time limit now lives inside gitmem. When gitmem or node cannot be
+  found, the hook says so instead of staying silent. (GIT-116)
+- **A thread that failed to sync is no longer marked synced.** `session_close` reports PARTIAL and
+  names the thread ids that did not reach your database. Those threads stay in `threads.json` and
+  the next session tries again. (GIT-117)
+- **A failed index reload no longer empties recall.** If reloading scars from your database fails,
+  gitmem keeps the index it had, falls back to the on-disk cache, and retries in the background.
+  `create_learning` says when the new learning is saved but not yet searchable. (GIT-118)
+- **`archive_learning` accepts a short id.** Archiving by id prefix failed on every project with
+  "operator does not exist". Archiving an id that does not exist used to report success; it now says
+  nothing was archived. (GIT-119)
+- **Updates that change no row are reported as not saved.** This covers thread resolve, touch and
+  auto-archive, session embeddings, superseded sessions, relevance data and transcript paths. Each
+  one used to count as success. (GIT-119)
+
 ## [1.11.0] - 2026-09-21
 
 **Just upgrade the package. Nothing to change on your database.** Every fix in this release works on

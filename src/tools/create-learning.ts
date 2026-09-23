@@ -13,7 +13,7 @@ import * as supabase from "../services/supabase-client.js";
 import { embed, isEmbeddingAvailable } from "../services/embedding.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { wrapDisplay, TYPE, SEV } from "../services/display-protocol.js";
-import { flushCache } from "../services/startup.js";
+import { refreshIndexAfterWrite } from "../services/startup.js";
 import { writeTriplesForLearning } from "../services/triple-writer.js";
 import { generateVariantsForScar } from "../services/variant-generation.js";
 import { getEffectTracker } from "../services/effect-tracker.js";
@@ -182,6 +182,9 @@ export async function createLearning(
     learningData.severity = params.severity || "medium";
   }
 
+  // GIT-118: set when the recall index could not be refreshed after the write.
+  let indexNotRefreshed: string | null = null;
+
   try {
     let embeddingGenerated = false;
     const breakdown: PerformanceBreakdown = {};
@@ -272,11 +275,17 @@ export async function createLearning(
         );
       }
 
-      // Invalidate local cache so next recall picks up the new learning
+      // Refresh the local index so the next recall sees the new learning.
+      // GIT-118: awaited and reported. It was fire-and-forget, and a failed
+      // reload emptied the index while create_learning said nothing. The
+      // learning itself is saved either way; only recall's view of it waits.
       const project = (params.project || getProject() || "default") as Project;
-      flushCache(project).catch((err) => {
-        console.warn("[create_learning] Cache invalidation failed (non-fatal):", err);
-      });
+      try {
+        const refreshed = await refreshIndexAfterWrite(project);
+        if (!refreshed.success) indexNotRefreshed = refreshed.error ?? "reload failed";
+      } catch (err) {
+        indexNotRefreshed = err instanceof Error ? err.message : String(err);
+      }
     } else {
       // Free tier: Store locally without embedding
       console.error(`[create_learning] Storing locally: ${learningId}`);
@@ -319,7 +328,13 @@ export async function createLearning(
       learning_id: learningId,
       embedding_generated: embeddingGenerated,
       performance: perfData,
-      display: wrapDisplay(`${te} Created ${params.learning_type}: "${params.title}"\n${se}ID: ${learningId}`),
+      ...(indexNotRefreshed !== null && { index_refreshed: false }),
+      display: wrapDisplay(
+        `${te} Created ${params.learning_type}: "${params.title}"\n${se}ID: ${learningId}` +
+        (indexNotRefreshed !== null
+          ? `\nRecall index NOT refreshed (${indexNotRefreshed}). The learning is saved; recall will find it after the next successful reload (retrying in the background).`
+          : "")
+      ),
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);

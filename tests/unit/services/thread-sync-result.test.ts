@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockDirectQuery = vi.fn();
 const mockDirectQueryAll = vi.fn();
 const mockDirectUpsert = vi.fn();
+const mockDirectPatch = vi.fn();
 const mockIsConfigured = vi.fn(() => true);
 const mockHasSupabase = vi.fn(() => true);
 
@@ -24,6 +25,7 @@ vi.mock("../../../src/services/supabase-client.js", () => ({
   directQuery: (...a: unknown[]) => mockDirectQuery(...a),
   directQueryAll: (...a: unknown[]) => mockDirectQueryAll(...a),
   directUpsert: (...a: unknown[]) => mockDirectUpsert(...a),
+  directPatch: (...a: unknown[]) => mockDirectPatch(...a),
   upsertRecord: vi.fn(),
   listRecords: vi.fn(),
 }));
@@ -55,6 +57,8 @@ beforeEach(() => {
   mockIsConfigured.mockReturnValue(true);
   mockHasSupabase.mockReturnValue(true);
   mockDirectUpsert.mockResolvedValue([{ id: "row" }]);
+  mockDirectPatch.mockReset();
+  mockDirectPatch.mockResolvedValue({ count: 1, rows: [{ id: "row" }] }); // GIT-119 shape
 });
 
 describe("tier awareness (R3)", () => {
@@ -234,5 +238,83 @@ describe("dedup candidate coverage (GIT-70)", () => {
 
     expect(r.all_synced).toBe(true);
     expect(r.dedup_coverage).not.toBe("complete");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GIT-117: the WRITE fails, not the lookup
+// ---------------------------------------------------------------------------
+// The tests above fail only directQuery, the one call whose error propagated.
+// The create / resolve / touch helpers caught their own failures and returned
+// null / false / void, which the loop never read — so a thread whose write
+// failed was counted as synced, and session_close pruned it from threads.json.
+
+describe("GIT-117: a thread counts as synced only when the store confirms a row", () => {
+  it("create rejected by the store -> failed, not synced", async () => {
+    mockDirectQuery.mockResolvedValue([]); // not in the store yet -> create
+    mockDirectUpsert.mockRejectedValue(new Error("Supabase upsert error: 409 - violates foreign key constraint"));
+
+    const r = await syncThreadsToSupabase([thread("t-new")], "gitmem", "s-1");
+
+    expect(r.synced).toEqual([]);
+    expect(r.failed.map((f) => f.id)).toEqual(["t-new"]);
+    expect(r.failed[0].error).toMatch(/foreign key/);
+    expect(r.all_synced).toBe(false);
+  });
+
+  it("resolve whose PATCH updates no row -> failed", async () => {
+    mockDirectQuery
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r", status: "open" }]) // existence
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r" }]);                 // resolve lookup
+    mockDirectPatch.mockResolvedValue({ count: 0, rows: [] });
+
+    const r = await syncThreadsToSupabase([thread("t-r", "resolved")], "gitmem", "s-1");
+
+    expect(r.failed.map((f) => f.id)).toEqual(["t-r"]);
+    expect(r.failed[0].error).toMatch(/updated no row/);
+    expect(r.all_synced).toBe(false);
+  });
+
+  it("resolve rejected by the store -> failed", async () => {
+    mockDirectQuery
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r", status: "open" }])
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r" }]);
+    mockDirectPatch.mockRejectedValue(new Error("Supabase patch error: 503"));
+
+    const r = await syncThreadsToSupabase([thread("t-r", "resolved")], "gitmem", "s-1");
+    expect(r.failed.map((f) => f.id)).toEqual(["t-r"]);
+  });
+
+  it("touch of an existing thread whose PATCH fails -> failed", async () => {
+    mockDirectQuery
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-o", status: "active" }]) // existence
+      .mockResolvedValueOnce([{ id: "u1", touch_count: 1, created_at: "2026-08-01T00:00:00Z", thread_class: "backlog", status: "active" }]);
+    mockDirectPatch.mockRejectedValue(new Error("Supabase patch error: 500"));
+
+    const r = await syncThreadsToSupabase([thread("t-o")], "gitmem", "s-1");
+    expect(r.failed.map((f) => f.id)).toEqual(["t-o"]);
+    expect(r.all_synced).toBe(false);
+  });
+
+  it("one failure among several: the others are synced, only the failure is reported", async () => {
+    mockDirectQuery.mockResolvedValue([]);
+    mockDirectUpsert
+      .mockResolvedValueOnce([{ id: "a" }])
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce([{ id: "c" }]);
+
+    const r = await syncThreadsToSupabase([thread("t-a"), thread("t-b"), thread("t-c")], "gitmem", "s-1");
+    expect(r.synced).toEqual(["t-a", "t-c"]);
+    expect(r.failed.map((f) => f.id)).toEqual(["t-b"]);
+  });
+
+  it("every write confirmed -> all synced (the contract did not get stricter than the store)", async () => {
+    mockDirectQuery
+      .mockResolvedValueOnce([])                                                  // t-new: create
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r", status: "open" }])    // t-r: exists
+      .mockResolvedValueOnce([{ id: "u1", thread_id: "t-r" }]);                   // t-r: resolve lookup
+    const r = await syncThreadsToSupabase([thread("t-new"), thread("t-r", "resolved")], "gitmem", "s-1");
+    expect(r.failed).toEqual([]);
+    expect(r.all_synced).toBe(true);
   });
 });

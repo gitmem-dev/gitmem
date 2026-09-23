@@ -40,6 +40,9 @@ vi.mock("../../../src/services/display-protocol.js", () => ({
 
 vi.mock("../../../src/services/startup.js", () => ({
   flushCache: vi.fn(() => Promise.resolve()),
+  // GIT-118: create_learning awaits this; omitting it made every call report
+  // "index NOT refreshed" through a swallowed mock-export error.
+  refreshIndexAfterWrite: vi.fn(() => Promise.resolve({ success: true, previous_scar_count: 0, new_scar_count: 1, elapsed_ms: 1 })),
 }));
 
 vi.mock("../../../src/services/triple-writer.js", () => ({
@@ -188,5 +191,27 @@ describe("create_learning: DB error surfacing", () => {
 
     expect(result.success).toBe(true);
     expect(result.errors).toBeUndefined();
+  });
+});
+
+// GIT-118: the post-write index refresh is awaited and its failure reported.
+describe("create_learning: recall index refresh after the write (GIT-118)", () => {
+  it("says so in the display when the index could not be refreshed; the learning is still saved", async () => {
+    const startup = await import("../../../src/services/startup.js");
+    vi.mocked(startup.refreshIndexAfterWrite).mockResolvedValueOnce({
+      success: false, previous_scar_count: 5, new_scar_count: 5, elapsed_ms: 1, error: "fetch failed: ECONNRESET",
+    });
+    const result = await createLearning({
+      learning_type: "win", title: "t", description: "d",
+    } as never);
+    expect(result.success).toBe(true);
+    expect(result.index_refreshed).toBe(false);
+    expect(result.display).toMatch(/Recall index NOT refreshed \(fetch failed: ECONNRESET\)\. The learning is saved/);
+  });
+
+  it("says nothing extra when the refresh succeeds", async () => {
+    const result = await createLearning({ learning_type: "win", title: "t", description: "d" } as never);
+    expect(result.index_refreshed).toBeUndefined();
+    expect(result.display).not.toMatch(/NOT refreshed/);
   });
 });

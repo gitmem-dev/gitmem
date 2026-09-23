@@ -527,3 +527,99 @@ export function compare(scan: ScanResult, floor: Schema, current: Schema): Findi
   for (const t of scan.tables) if (!floor.has(t.table)) note(t.table, null, "table", `${t.file}:${t.line}`);
   return [...byKey.values()].sort((x, y) => `${x.table}.${x.column}`.localeCompare(`${y.table}.${y.column}`));
 }
+
+// ---------------------------------------------------------------- RPCs (GIT-114)
+
+/** setup.sql -> function names (CREATE [OR REPLACE] FUNCTION name(...)). */
+export function parseFunctions(sql: string): Set<string> {
+  const names = new Set<string>();
+  const re = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)\s*\(/gi;
+  let m: RegExpExecArray | null;
+  const clean = sql.replace(/--[^\n]*/g, "");
+  while ((m = re.exec(clean))) names.add(m[1]);
+  return names;
+}
+
+export interface RpcRef {
+  file: string;
+  line: number;
+  name: string;
+  /** A fixed https:// URL — another project (e.g. licensing), not the customer's store. */
+  external: boolean;
+}
+
+/**
+ * Text of a string or template literal, with getTableName("x") substitutions
+ * expanded to the default table name; any other substitution becomes "\0".
+ */
+function literalText(n: ts.Node): string | null {
+  if (ts.isStringLiteralLike(n)) return n.text;
+  if (ts.isTemplateExpression(n)) {
+    let out = n.head.text;
+    for (const span of n.templateSpans) {
+      const e = span.expression;
+      out += ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === "getTableName" &&
+        e.arguments[0] && ts.isStringLiteralLike(e.arguments[0])
+        ? DEFAULT_PREFIX + e.arguments[0].text
+        : "\0";
+      out += span.literal.text;
+    }
+    return out;
+  }
+  return null;
+}
+
+/**
+ * Every RPC name src/ can call. Two shapes:
+ *   - a literal or template URL containing "/rpc/<name>";
+ *   - in a file that builds "/rpc/${…}" dynamically, every `name:` property of
+ *     an object literal (the candidate list the URL is built from).
+ * Returns the refs and the dynamic call sites whose names could not be resolved.
+ */
+export function scanRpcNames(srcDir: string): { refs: RpcRef[]; unresolved: Unresolved[] } {
+  const refs: RpcRef[] = [];
+  const unresolved: Unresolved[] = [];
+  const files: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && !e.name.endsWith(".d.ts")) files.push(p);
+    }
+  };
+  walk(srcDir);
+  for (const file of files) {
+    const rel = path.relative(path.dirname(srcDir), file);
+    const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf-8"), ts.ScriptTarget.Latest, true);
+    const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart()).line + 1;
+    const dynamicSites: ts.Node[] = [];
+    const nameProps: ts.PropertyAssignment[] = [];
+    const visit = (n: ts.Node): void => {
+      const text = literalText(n);
+      if (text !== null && text.includes("/rpc/")) {
+        const seg = text.slice(text.indexOf("/rpc/") + 5).split(/[/?"'\s]/)[0];
+        if (seg && !seg.includes("\0")) {
+          refs.push({ file: rel, line: lineOf(n), name: seg, external: /^https?:\/\//.test(text) });
+        } else {
+          dynamicSites.push(n);
+        }
+      }
+      if (ts.isPropertyAssignment(n) && propName(n) === "name") nameProps.push(n);
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    if (dynamicSites.length === 0) continue;
+    let found = 0;
+    for (const p of nameProps) {
+      const t = literalText(p.initializer);
+      if (t && /^[a-z][a-z0-9_]*$/.test(t)) {
+        refs.push({ file: rel, line: lineOf(p), name: t, external: false });
+        found++;
+      }
+    }
+    if (found === 0) {
+      for (const d of dynamicSites) unresolved.push({ file: rel, line: lineOf(d), call: "rpc", what: `dynamic RPC name ${d.getText().slice(0, 60)}` });
+    }
+  }
+  return { refs, unresolved };
+}

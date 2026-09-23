@@ -200,7 +200,7 @@ function isolatedHome(tag) {
   return { home, gitmemDir };
 }
 const STRIP = /^(OPENAI_API_KEY|OPENROUTER_API_KEY|GITMEM_|SUPABASE_|OLLAMA_|NODE_OPTIONS$|CLAUDE_CODE_ENTRYPOINT$)/;
-async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
+async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink, extraEnv = {} }) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !STRIP.test(k)));
   Object.assign(env, {
     HOME: home,
@@ -216,6 +216,7 @@ async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
     GITMEM_NETLOG: netlog,
     NODE_OPTIONS: `--import=${pathToFileURL(NETLOG_PRELOAD).href}`,
     NO_COLOR: "1",
+    ...extraEnv,
   });
   const transport = new StdioClientTransport({ command: process.execPath, args: [SERVER], env, cwd: home, stderr: "pipe" });
   transport.stderr?.on("data", (d) => stderrSink.push(d.toString()));
@@ -422,6 +423,33 @@ async function flow() {
   const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));
   await waitQuiet(netlog, { minMs: 1000, quietMs: 2000 });
   await srv.close();
+
+  // GIT-114: recall served by the store, not the local index. (1) Forced with
+  // GITMEM_SEARCH_MODE=remote. (2) A fresh server asked before its index has
+  // loaded — the cold-start path every customer hits first. Both must return a
+  // seeded scar; the store must answer the RPC (a 404 fails the run below).
+  const recallProbe = async (tag, extraEnv) => {
+    const h = isolatedHome(`${label}-${tag}`);
+    const probeLog = join(outDir, `netlog-${label}-${tag}.jsonl`);
+    writeFileSync(probeLog, "");
+    const errs = [];
+    const p = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs, extraEnv });
+    let text = "";
+    try {
+      text = await p.call("recall", { plan: "Supabase migrations must be dry-run before push", project: PROJECT, match_count: 3 });
+    } catch (e) { text = `ERROR ${e}`; }
+    await p.close();
+    allVenueRequests.push(...venueReqs(readNet(probeLog)));
+    const errText = errs.join("");
+    return {
+      found_seeded_scar: /Supabase migrations must be dry-run/.test(text),
+      used_store_rpc: venueReqs(readNet(probeLog)).some((r) => r.path.includes("/rpc/") && r.status < 300),
+      fell_back_from_local: /Local cache not ready/.test(errText),
+      text: text.slice(0, 300),
+    };
+  };
+  const recallRemote = await recallProbe("recall-remote", { GITMEM_SEARCH_MODE: "remote" });
+  const recallCold = await recallProbe("recall-cold", {});
   ollama.close();
 
   const reqs = readNet(netlog);
@@ -441,6 +469,8 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    recall_remote: recallRemote,
+    recall_cold: recallCold,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
     close_warns: closeWarns,
@@ -647,6 +677,12 @@ if (mode === "flow" && !result.thread_triples_linked) {
 }
 if (mode === "flow" && result.false_stranded_notice) {
   failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
+if (mode === "flow" && !(result.recall_remote.found_seeded_scar && result.recall_remote.used_store_rpc)) {
+  failureCheck.unexpected.push(`recall with GITMEM_SEARCH_MODE=remote did not return a seeded scar from the store (GIT-114): ${result.recall_remote.text}`);
+}
+if (mode === "flow" && !result.recall_cold.found_seeded_scar) {
+  failureCheck.unexpected.push(`cold-start recall returned no seeded scar (GIT-114): ${result.recall_cold.text}`);
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

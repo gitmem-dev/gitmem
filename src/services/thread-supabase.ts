@@ -205,17 +205,22 @@ export async function createThreadInSupabase(
   }
 
   try {
-    const row = threadObjectToRow(thread, project, embedding);
-    const result = await supabase.directUpsert<ThreadRow>(
-      getTableName("threads"),
-      row
-    );
-    console.error(`[thread-supabase] Created thread ${thread.id} in Supabase`);
-    return result;
+    return await writeThreadRow(thread, project, embedding);
   } catch (error) {
     console.error("[thread-supabase] Failed to create thread:", error instanceof Error ? error.message : error);
     return null;
   }
+}
+
+/**
+ * GIT-117: create a thread row, or throw. directUpsert asks for the stored
+ * representation and throws on an empty one, so a return is a confirmed row.
+ */
+async function writeThreadRow(thread: ThreadObject, project: Project, embedding?: string | null): Promise<ThreadRow> {
+  const row = threadObjectToRow(thread, project, embedding);
+  const result = await supabase.directUpsert<ThreadRow>(getTableName("threads"), row);
+  console.error(`[thread-supabase] Created thread ${thread.id} in Supabase`);
+  return result;
 }
 
 /**
@@ -236,38 +241,39 @@ export async function resolveThreadInSupabase(
   }
 
   try {
-    // First, find the UUID primary key for this thread_id
-    const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
-      select: "id,thread_id",
-      filters: { thread_id: threadId },
-      limit: 1,
-    });
-
-    if (rows.length === 0) {
-      console.error(`[thread-supabase] Thread ${threadId} not found in Supabase (will proceed with local-only)`);
-      return false;
-    }
-
-    const uuid = rows[0].id;
-    const patchData: Record<string, unknown> = {
-      status: "resolved",
-      resolved_at: options.resolvedAt || new Date().toISOString(),
-    };
-
-    if (options.resolutionNote) {
-      patchData.resolution_note = options.resolutionNote;
-    }
-    if (options.resolvedBySession) {
-      patchData.resolved_by_session = options.resolvedBySession;
-    }
-
-    await supabase.directPatch(getTableName("threads"), { id: uuid }, patchData);
-    console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
+    await resolveThreadRow(threadId, options);
     return true;
   } catch (error) {
     console.error("[thread-supabase] Failed to resolve thread:", error instanceof Error ? error.message : error);
     return false;
   }
+}
+
+/**
+ * GIT-117: resolve a thread row, or throw. Confirmed only when the PATCH
+ * returns the row: an empty result means nothing was updated.
+ */
+async function resolveThreadRow(
+  threadId: string,
+  options: { resolvedAt?: string; resolutionNote?: string; resolvedBySession?: string }
+): Promise<void> {
+  const rows = await supabase.directQuery<ThreadRow>(getTableName("threads"), {
+    select: "id,thread_id",
+    filters: { thread_id: threadId },
+    limit: 1,
+  });
+  if (rows.length === 0) throw new Error(`thread ${threadId} not found in the store`);
+
+  const patchData: Record<string, unknown> = {
+    status: "resolved",
+    resolved_at: options.resolvedAt || new Date().toISOString(),
+  };
+  if (options.resolutionNote) patchData.resolution_note = options.resolutionNote;
+  if (options.resolvedBySession) patchData.resolved_by_session = options.resolvedBySession;
+
+  const patched = await supabase.directPatch(getTableName("threads"), { id: rows[0].id }, patchData);
+  if (!Array.isArray(patched) || patched.length === 0) throw new Error(`resolve of ${threadId} updated no row`);
+  console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
 }
 
 /**
@@ -508,9 +514,10 @@ export async function loadActiveThreadsFromSupabase(
  */
 export async function touchThreadsInSupabase(
   threadIds: string[]
-): Promise<void> {
+): Promise<{ touched: string[]; failed: { id: string; error: string }[] }> {
+  const outcome = { touched: [] as string[], failed: [] as { id: string; error: string }[] };
   if (!hasSupabase() || !supabase.isConfigured() || threadIds.length === 0) {
-    return;
+    return outcome;
   }
 
   for (const threadId of threadIds) {
@@ -522,12 +529,17 @@ export async function touchThreadsInSupabase(
         limit: 1,
       });
 
-      if (rows.length === 0) continue;
+      // GIT-117: a thread we believe exists but the store does not have is a
+      // failed write, not a no-op.
+      if (rows.length === 0) throw new Error(`thread ${threadId} not found in the store`);
 
       const row = rows[0];
 
       // Skip resolved/archived threads — no point recomputing vitality
-      if (row.status === "resolved" || row.status === "archived") continue;
+      if (row.status === "resolved" || row.status === "archived") {
+        outcome.touched.push(threadId);
+        continue;
+      }
 
       const now = new Date();
       const newTouchCount = (row.touch_count || 0) + 1;
@@ -551,18 +563,23 @@ export async function touchThreadsInSupabase(
         delete metadata.dormant_since;
       }
 
-      await supabase.directPatch(getTableName("threads"), { id: row.id }, {
+      const patched = await supabase.directPatch(getTableName("threads"), { id: row.id }, {
         touch_count: newTouchCount,
         last_touched_at: nowIso,
         vitality_score: vitality.vitality_score,
         status: lifecycle_status,
         metadata,
       });
+      if (!Array.isArray(patched) || patched.length === 0) throw new Error(`touch of ${threadId} updated no row`);
+      outcome.touched.push(threadId);
     } catch (error) {
-      console.error(`[thread-supabase] Failed to touch thread ${threadId}:`, error instanceof Error ? error.message : error);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[thread-supabase] Failed to touch thread ${threadId}:`, message);
+      outcome.failed.push({ id: threadId, error: message });
       // Continue with other threads
     }
   }
+  return outcome;
 }
 
 /**
@@ -665,13 +682,18 @@ export async function syncThreadsToSupabase(
         const normalizedNewText = normalizeText(thread.text || "");
         const matchedThreadId = normalizedNewText ? textToExistingId.get(normalizedNewText) : undefined;
 
+        // GIT-117: every write below throws unless the store confirmed a row.
+        // The helpers this loop called before swallowed their failures and
+        // returned null / false / void, so a thread was counted as synced —
+        // and pruned from threads.json — when nothing had been written.
         if (matchedThreadId) {
           // Duplicate text found — touch existing instead of creating
           console.error(`[thread-supabase] Dedup: "${thread.id}" matches existing "${matchedThreadId}" by text — touching instead of creating`);
-          await touchThreadsInSupabase([matchedThreadId]);
+          const touched = await touchThreadsInSupabase([matchedThreadId]);
+          if (touched.failed.length > 0) throw new Error(touched.failed[0].error);
         } else {
           // Genuinely new thread — create it
-          await createThreadInSupabase(thread, project);
+          await writeThreadRow(thread, project);
           // Register in lookup so subsequent threads in this batch also dedup
           if (normalizedNewText) {
             textToExistingId.set(normalizedNewText, thread.id);
@@ -679,14 +701,15 @@ export async function syncThreadsToSupabase(
         }
       } else if (thread.status === "resolved" && existing[0].status !== "resolved") {
         // Thread was resolved during this session
-        await resolveThreadInSupabase(thread.id, {
+        await resolveThreadRow(thread.id, {
           resolvedAt: thread.resolved_at,
           resolutionNote: thread.resolution_note,
           resolvedBySession: thread.resolved_by_session || sessionId,
         });
       } else {
         // Existing thread, just touch it
-        await touchThreadsInSupabase([thread.id]);
+        const touched = await touchThreadsInSupabase([thread.id]);
+        if (touched.failed.length > 0) throw new Error(touched.failed[0].error);
       }
       synced.push(thread.id);
     } catch (error) {

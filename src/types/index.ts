@@ -86,6 +86,12 @@ export interface ThreadObject {
   source_session?: string;
   /** Session ID that resolved this thread */
   resolved_by_session?: string;
+  /**
+   * GIT-117: a close could not write this thread (or its resolution) to the
+   * durable store. Kept locally, whatever its age, and preferred over the
+   * store's copy until a later close writes it.
+   */
+  sync_pending?: boolean;
   /** Brief resolution note */
   resolution_note?: string;
 }

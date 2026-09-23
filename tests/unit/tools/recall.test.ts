@@ -3,33 +3,53 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { recall, type RecallParams, type RecallResult } from "./recall.js";
-import * as supabase from "../services/supabase-client.js";
+
+// --- Mock external dependencies before importing the tool ---
+//
+// Factory defaults use plain arrow functions rather than
+// `vi.fn().mockReturnValue(...)`. A `vi.fn()` built inside a hoisted
+// `vi.mock` factory is subject to the suite-wide `clearMocks`/`restoreMocks`
+// settings in vitest.config.ts, which strip the implementation and leave the
+// mock returning `undefined`. For `hasSupabase()` that silently routes recall
+// down its free-tier branch. Plain functions cannot be cleared.
 
 // Mock the tier module to simulate pro/dev tier (Supabase available)
-vi.mock("../services/tier.js", () => ({
-  getTier: vi.fn().mockReturnValue("pro"),
-  hasSupabase: vi.fn().mockReturnValue(true),
-  hasVariants: vi.fn().mockReturnValue(false),
-  hasMetrics: vi.fn().mockReturnValue(false),
-  hasCacheManagement: vi.fn().mockReturnValue(true),
-  hasCompliance: vi.fn().mockReturnValue(false),
-  hasTranscripts: vi.fn().mockReturnValue(false),
-  hasBatchOperations: vi.fn().mockReturnValue(false),
-  hasEmbeddings: vi.fn().mockReturnValue(true),
-  hasAdvancedAgentDetection: vi.fn().mockReturnValue(false),
-  hasMultiProject: vi.fn().mockReturnValue(false),
-  hasEnforcementFields: vi.fn().mockReturnValue(false),
-  getTablePrefix: vi.fn().mockReturnValue("gitmem_"),
-  getTableName: vi.fn((base: string) => `gitmem_${base}`),
+vi.mock("../../../src/services/tier.js", () => ({
+  getTier: () => "pro",
+  hasSupabase: () => true,
+  hasVariants: () => false,
+  hasMetrics: () => false,
+  hasProInsights: () => false,
+  hasCacheManagement: () => true,
+  hasCompliance: () => false,
+  hasTranscripts: () => false,
+  hasBatchOperations: () => false,
+  hasEmbeddings: () => true,
+  hasAdvancedAgentDetection: () => false,
+  hasMultiProject: () => false,
+  hasEnforcementFields: () => false,
+  getTablePrefix: () => "gitmem_",
+  getTableName: (base: string) => `gitmem_${base}`,
 }));
 
 // Mock the supabase client
-vi.mock("../services/supabase-client.js", () => ({
+vi.mock("../../../src/services/supabase-client.js", () => ({
   isConfigured: vi.fn(),
   cachedScarSearch: vi.fn(), // now uses cached version
-  upsertRecord: vi.fn().mockResolvedValue(undefined), // For metrics recording
+  upsertRecord: () => Promise.resolve(undefined), // For metrics recording
+  directUpsert: () => Promise.resolve(undefined), // For variant metrics
+  fetchRelatedTriples: () => Promise.resolve(new Map()),
+  safeInFilter: (values: string[]) => values.join(","), // used by behavioral-decay
 }));
+
+// Force the Supabase branch — local vector search must report "not ready"
+vi.mock("../../../src/services/local-vector-search.js", () => ({
+  isLocalSearchReady: () => false,
+  localScarSearch: () => Promise.resolve([]),
+}));
+
+import { recall } from "../../../src/tools/recall.js";
+import * as supabase from "../../../src/services/supabase-client.js";
 
 describe("recall", () => {
   beforeEach(() => {
@@ -69,7 +89,8 @@ describe("recall", () => {
     expect(result.scars[0].title).toBe("Test Scar");
     expect(result.scars[0].severity).toBe("high");
     expect(result.scars[0].similarity).toBe(0.85);
-    expect(result.formatted_response).toContain("scars to review");
+    // Header pluralizes on count (nudge-variants.ts) — one scar reads "1 scar"
+    expect(result.formatted_response).toContain("1 scar to review");
     expect(result.formatted_response).toContain("Test Scar");
   });
 
@@ -82,7 +103,9 @@ describe("recall", () => {
     expect(result.activated).toBe(false);
     expect(result.scars).toHaveLength(0);
     expect(result.formatted_response).toContain("No relevant scars found");
-    expect(result.formatted_response).toContain("new territory");
+    // Empty-state copy was rewritten in 4d02930 (signal-to-noise pass); the
+    // old "new territory" phrasing is gone.
+    expect(result.formatted_response).toContain("Scars accumulate as you work");
   });
 
   it("uses default project and match_count", async () => {

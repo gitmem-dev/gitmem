@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "fs";
 import { join } from "path";
-import { CacheService, TTL, getCache, resetCache } from "./cache.js";
+import { CacheService, TTL, getCache, resetCache } from "../../../src/services/cache.js";
 
 // Test cache directory (isolated from production)
 const TEST_CACHE_DIR = "/tmp/gitmem-cache-test";

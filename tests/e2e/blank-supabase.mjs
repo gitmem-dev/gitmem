@@ -400,6 +400,25 @@ async function flow() {
   await waitQuiet(netlog, { minMs: 2000, quietMs: 3000 });
   const health = await step("health", { failure_limit: 20 });
 
+  // GIT-119: archive_learning by id prefix sent id=like.<prefix>% against a
+  // uuid column (42883), and a full UUID that matched no row still reported
+  // "Archived". The row below is inserted after the server loaded its index,
+  // so the prefix must be resolved by the store (UUID range), not locally.
+  const archiveRowId = randomUUID();
+  await rest("POST", "gitmem_learnings", [{
+    id: archiveRowId, learning_type: "scar", title: `Driver archive target (${label})`,
+    description: "Inserted after startup so archive_learning resolves its prefix from the store.",
+    severity: "low", counter_arguments: ["You might think it is permanent — but it is archived here."],
+    project: PROJECT, is_active: true,
+  }]);
+  const archivePrefix = archiveRowId.slice(0, 8);
+  const ap = await step("archive_learning", { id: archivePrefix, reason: "venue driver (GIT-119)" });
+  const archivedRow = await rest("GET", `gitmem_learnings?select=is_active&id=eq.${archiveRowId}`, undefined, { Prefer: "" }).then((r) => r.json());
+  const archivePrefixDurable = /Archived learning/.test(ap) && archivedRow[0]?.is_active === false;
+  const ghostId = "00000000-0000-4000-8000-00000000d119";
+  const ag = await step("archive_learning", { id: ghostId, reason: "venue driver (GIT-119)" });
+  const archiveGhostHonest = !/Archived learning/.test(ag) && /nothing was archived|not found|No learning/i.test(ag);
+
   // GIT-102: every WARN on the close names a subsystem and cause and says
   // whether the session content was stored; health reports the write-path verdict.
   const closeWarns = sc.replace(/\x1b\[[0-9;]*m/g, "").split("\n").filter((l) => /^WARN /.test(l));
@@ -443,6 +462,10 @@ async function flow() {
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
+    archive_prefix_durable: archivePrefixDurable,
+    archive_prefix_text: ap.slice(0, 300),
+    archive_ghost_honest: archiveGhostHonest,
+    archive_ghost_text: ag.slice(0, 300),
     close_warns: closeWarns,
     close_warns_self_describing: closeWarnsSelfDescribing,
     health_has_write_path: healthHasWritePath,
@@ -623,6 +646,12 @@ const edgeCalls = allVenueRequests.filter((r) => r.path.startsWith("/functions/v
 if (edgeCalls.length) failureCheck.unexpected.push(...edgeCalls.map((c) => `edge function called (GIT-97): ${c}`));
 if (mode === "flow" && !result.resolve_thread_durable) {
   failureCheck.unexpected.push("resolve_thread did not land durably in gitmem_threads, or claimed it did not (GIT-101)");
+}
+if (mode === "flow" && !result.archive_prefix_durable) {
+  failureCheck.unexpected.push(`archive_learning by id prefix did not archive the row (GIT-119): ${result.archive_prefix_text}`);
+}
+if (mode === "flow" && !result.archive_ghost_honest) {
+  failureCheck.unexpected.push(`archive_learning of a nonexistent id claimed success (GIT-119): ${result.archive_ghost_text}`);
 }
 if (mode === "flow" && !result.missing_payload_named) {
   failureCheck.unexpected.push("session_close without a payload did not name the absolute closing-payload.json path (GIT-99)");

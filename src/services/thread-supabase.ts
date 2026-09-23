@@ -261,7 +261,12 @@ export async function resolveThreadInSupabase(
       patchData.resolved_by_session = options.resolvedBySession;
     }
 
-    await supabase.directPatch(getTableName("threads"), { id: uuid }, patchData);
+    const patched = await supabase.directPatch(getTableName("threads"), { id: uuid }, patchData);
+    // GIT-119: 0 rows = not resolved.
+    if (patched.count === 0) {
+      console.error(`[thread-supabase] Resolve of ${threadId} updated no row`);
+      return false;
+    }
     console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
     return true;
   } catch (error) {
@@ -551,13 +556,15 @@ export async function touchThreadsInSupabase(
         delete metadata.dormant_since;
       }
 
-      await supabase.directPatch(getTableName("threads"), { id: row.id }, {
+      const patched = await supabase.directPatch(getTableName("threads"), { id: row.id }, {
         touch_count: newTouchCount,
         last_touched_at: nowIso,
         vitality_score: vitality.vitality_score,
         status: lifecycle_status,
         metadata,
       });
+      // GIT-119: 0 rows = not touched.
+      if (patched.count === 0) throw new Error(`touch of ${threadId} updated no row`);
     } catch (error) {
       console.error(`[thread-supabase] Failed to touch thread ${threadId}:`, error instanceof Error ? error.message : error);
       // Continue with other threads
@@ -752,10 +759,12 @@ export async function archiveDormantThreads(
       const daysDormant = (now.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysDormant >= dormantDays) {
-        await supabase.directPatch(getTableName("threads"), { id: row.id }, {
+        const patched = await supabase.directPatch(getTableName("threads"), { id: row.id }, {
           status: "archived",
         });
-        archived_ids.push(row.thread_id);
+        // GIT-119: count only rows the store actually archived.
+        if (patched.count > 0) archived_ids.push(row.thread_id);
+        else console.error(`[thread-supabase] Archive of ${row.thread_id} updated no row`);
       }
     }
 

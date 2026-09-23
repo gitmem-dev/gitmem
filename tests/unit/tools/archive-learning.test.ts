@@ -7,7 +7,9 @@ import { SUPABASE_TIER_MOCKS } from "../../helpers/supabase-mocks.js";
 
 // --- Mocks ---
 
-const mockDirectPatch = vi.fn().mockResolvedValue(undefined);
+// GIT-119: directPatch returns what it changed; the default is one row.
+const PATCHED_ONE = { count: 1, rows: [{ id: "a501c95e-1234-5678-9abc-def012345678" }] };
+const mockDirectPatch = vi.fn().mockResolvedValue(PATCHED_ONE);
 const mockDirectQuery = vi.fn().mockResolvedValue([]);
 const mockIsConfigured = vi.fn(() => true);
 
@@ -44,6 +46,11 @@ vi.mock("../../../src/services/startup.js", () => ({
   flushCache: vi.fn().mockResolvedValue(undefined),
 }));
 
+const localIds = vi.hoisted(() => ({ ids: [] as string[] }));
+vi.mock("../../../src/services/local-vector-search.js", () => ({
+  getLocalVectorSearch: () => ({ getScarIds: () => localIds.ids }),
+}));
+
 vi.mock("../../../src/services/metrics.js", () => ({
   Timer: class { stop() { return 42; } },
 }));
@@ -52,7 +59,7 @@ vi.mock("../../../src/services/display-protocol.js", () => ({
   wrapDisplay: (msg: string) => msg,
 }));
 
-import { archiveLearning } from "../../../src/tools/archive-learning.js";
+import { archiveLearning, uuidRangeForPrefix } from "../../../src/tools/archive-learning.js";
 import { hasSupabase } from "../../../src/services/tier.js";
 
 const FULL_UUID = "a501c95e-1234-5678-9abc-def012345678";
@@ -60,6 +67,8 @@ const FULL_UUID = "a501c95e-1234-5678-9abc-def012345678";
 describe("archive_learning prefix resolution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDirectPatch.mockResolvedValue(PATCHED_ONE);
+    localIds.ids = [];
     vi.mocked(hasSupabase).mockReturnValue(true);
     mockIsConfigured.mockReturnValue(true);
   });
@@ -107,19 +116,21 @@ describe("archive_learning prefix resolution", () => {
 
   // --- Supabase prefix resolution ---
 
-  it("resolves 8-char prefix via Supabase like filter", async () => {
+  // GIT-119: these asserted id=like.<prefix>%. Postgres has no LIKE on a UUID
+  // column (42883 on every store), so they pinned the bug; the store is now
+  // asked for the UUID range the prefix spans.
+  it("resolves 8-char prefix via a UUID range query", async () => {
     mockDirectQuery.mockResolvedValueOnce([{ id: FULL_UUID }]);
 
     const result = await archiveLearning({ id: "a501c95e" });
     expect(result.success).toBe(true);
     expect(result.id).toBe(FULL_UUID);
 
-    // Check directQuery was called with like filter
     expect(mockDirectQuery).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         select: "id",
-        filters: { id: "like.a501c95e%" },
+        filters: { and: "(id.gte.a501c95e-0000-0000-0000-000000000000,id.lte.a501c95e-ffff-ffff-ffff-ffffffffffff)" },
         limit: 2,
       }),
     );
@@ -141,7 +152,7 @@ describe("archive_learning prefix resolution", () => {
     expect(mockDirectQuery).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        filters: { id: "like.a501%" },
+        filters: { and: "(id.gte.a5010000-0000-0000-0000-000000000000,id.lte.a501ffff-ffff-ffff-ffff-ffffffffffff)" },
       }),
     );
   });
@@ -222,5 +233,44 @@ describe("archive_learning prefix resolution", () => {
     expect(result.success).toBe(true);
     expect(result.reason).toBe("superseded");
     expect(result.display).toContain("superseded");
+  });
+});
+
+describe("GIT-119: archive_learning on a store that has no LIKE for UUIDs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDirectPatch.mockResolvedValue(PATCHED_ONE);
+    localIds.ids = [];
+    vi.mocked(hasSupabase).mockReturnValue(true);
+    mockIsConfigured.mockReturnValue(true);
+  });
+
+  it("uuidRangeForPrefix spans exactly the ids with that prefix", () => {
+    expect(uuidRangeForPrefix("a501c95e1")).toEqual([
+      "a501c95e-1000-0000-0000-000000000000",
+      "a501c95e-1fff-ffff-ffff-ffffffffffff",
+    ]);
+    const [lo, hi] = uuidRangeForPrefix("a501");
+    for (const id of ["a5010000-0000-0000-0000-000000000000", FULL_UUID, "a501ffff-ffff-ffff-ffff-ffffffffffff"]) {
+      expect(id >= lo && id <= hi).toBe(true);
+    }
+    for (const id of ["a500ffff-ffff-ffff-ffff-ffffffffffff", "a5020000-0000-0000-0000-000000000000"]) {
+      expect(id >= lo && id <= hi).toBe(false);
+    }
+  });
+
+  it("resolves from the warm local index without a query", async () => {
+    localIds.ids = [FULL_UUID, "b1111111-1111-1111-1111-111111111111"];
+    const result = await archiveLearning({ id: "a501c9" });
+    expect(result.id).toBe(FULL_UUID);
+    expect(mockDirectQuery).not.toHaveBeenCalled();
+  });
+
+  it("an id the PATCH matched no row for is not archived, and not durable", async () => {
+    mockDirectPatch.mockResolvedValueOnce({ count: 0, rows: [] });
+    const result = await archiveLearning({ id: FULL_UUID });
+    expect(result.success).toBe(false);
+    expect(result.durable).toBe(false);
+    expect(result.error).toMatch(/nothing was archived/);
   });
 });

@@ -49,7 +49,10 @@ vi.mock("../../../src/services/embedding.js", () => ({
   embed: async () => null,
   isEmbeddingAvailable: () => false,
 }));
-vi.mock("../../../src/services/startup.js", () => ({ flushCache: async () => undefined }));
+vi.mock("../../../src/services/startup.js", () => ({
+  flushCache: async () => undefined,
+  refreshIndexAfterWrite: async () => ({ success: true, previous_scar_count: 0, new_scar_count: 1, elapsed_ms: 1 }), // GIT-118
+}));
 vi.mock("../../../src/services/triple-writer.js", () => ({ writeTriplesForLearning: async () => 0 }));
 
 const { resetTier, hasVariants } = await import("../../../src/services/tier.js");

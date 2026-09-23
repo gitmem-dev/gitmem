@@ -149,7 +149,14 @@ async function deltaSyncFromCache(storeKey: string, fingerprint: StoreFingerprin
 export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean } = {}): Promise<{
   scars: ScarWithEmbedding[];
   latestUpdatedAt: string | null;
-  source: "disk" | "network";
+  source: "disk" | "network" | "disk-stale";
+  /**
+   * GIT-118: false when the store could not be read. `scars` is then the last
+   * disk cache (possibly stale) or [] — never to be mistaken for "the store is
+   * empty", which is ok: true with no rows.
+   */
+  ok: boolean;
+  error?: string;
 }> {
   const startTime = Date.now();
 
@@ -167,7 +174,7 @@ export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean
         `[startup] Vector cache HIT: ${cached.rows.length} learnings from disk in ${Date.now() - startTime}ms ` +
         `(${cached.bytesOnDisk} bytes on disk, bulk download skipped)`
       );
-      return { scars: cached.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk" };
+      return { scars: cached.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk", ok: true };
     }
     console.error(`[startup] Vector cache MISS: ${cached.reason}`);
   }
@@ -183,7 +190,7 @@ export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean
       console.error(
         `[startup] Vector cache HIT (via leader): ${fromLeader.rows.length} learnings in ${Date.now() - startTime}ms, bulk download skipped`
       );
-      return { scars: fromLeader.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk" };
+      return { scars: fromLeader.rows, latestUpdatedAt: fingerprint.latestUpdatedAt, source: "disk", ok: true };
     }
     console.error("[startup] Leader did not produce a usable cache — downloading");
   }
@@ -195,7 +202,7 @@ export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean
     if (!options.bypassDiskCache && fingerprint.count >= 0) {
       const synced = await deltaSyncFromCache(storeKey, fingerprint);
       if (synced) {
-        return { scars: synced, latestUpdatedAt: synced[0]?.updated_at || null, source: "network" };
+        return { scars: synced, latestUpdatedAt: synced[0]?.updated_at || null, source: "network", ok: true };
       }
     }
 
@@ -221,10 +228,18 @@ export async function loadScarsFromSupabase(options: { bypassDiskCache?: boolean
       writeVectorCache(storeKey, fingerprint, learnings);
     }
 
-    return { scars: learnings, latestUpdatedAt, source: "network" };
+    return { scars: learnings, latestUpdatedAt, source: "network", ok: true };
   } catch (error) {
-    console.error("[startup] Failed to load learnings:", error);
-    return { scars: [], latestUpdatedAt: null, source: "network" };
+    // GIT-118: this returned [] with no flag, and every caller reinitialised
+    // the index and the hooks' scar cache with it — one failed request emptied
+    // recall until the next successful load. Say it failed, and offer the last
+    // disk cache (possibly stale) for a caller that has nothing better.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[startup] Failed to load learnings:", message);
+    const stale = readVectorCacheBase<ScarWithEmbedding>(storeKey);
+    return stale && stale.length > 0
+      ? { scars: stale, latestUpdatedAt: stale[0]?.updated_at || null, source: "disk-stale", ok: false, error: message }
+      : { scars: [], latestUpdatedAt: null, source: "network", ok: false, error: message };
   } finally {
     releaseLock();
   }
@@ -312,10 +327,33 @@ export async function initializeGitMem(_project?: Project): Promise<{
 
   try {
     // Load ALL scars from Supabase (cross-project unified cache)
-    const { scars, latestUpdatedAt } = await loadScarsFromSupabase();
+    const loaded = await loadScarsFromSupabase();
+    const { scars, latestUpdatedAt } = loaded;
 
-    // Initialize unified local vector search
-    await initializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
+    if (!loaded.ok) {
+      // GIT-118: the store could not be read. Serve the last disk cache if
+      // there is one (stale beats empty), leave the hooks' cache alone, report
+      // failure so ensureInitialized tries again, and retry in the background.
+      if (scars.length > 0) await initializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
+      scheduleReloadRetry(loaded.error ?? "store unreachable");
+      return {
+        success: false,
+        scar_count: getLocalVectorSearch().getScarCount(),
+        elapsed_ms: Date.now() - startTime,
+        search_mode: "local",
+        error: `could not load learnings from the store (${loaded.error})${scars.length > 0 ? `; serving ${scars.length} from the disk cache, possibly stale` : ""}`,
+      };
+    }
+
+    // Initialize unified local vector search. GIT-118: if an earlier failed
+    // start left the stale disk copy in the index, replace it — initialize()
+    // is a no-op on an index that is already initialized.
+    if (getLocalVectorSearch().getScarCount() > 0) {
+      await reinitializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
+    } else {
+      await initializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
+    }
+    clearReloadRetry();
 
     // Persist scars to disk for hook processes (no embeddings)
     persistScarsForHooks(scars);
@@ -370,6 +408,9 @@ export async function ensureInitialized(_project?: Project): Promise<void> {
     startupCompleted.set(UNIFIED_KEY, result.success);
     if (!result.success) {
       console.warn(`[startup] GitMem not fully initialized: ${result.error}`);
+      // GIT-118: a failed init was cached as this promise forever, so no later
+      // call ever tried again. Forget it; the next call (or the retry) loads.
+      startupPromises.delete(UNIFIED_KEY);
     }
   })();
 
@@ -653,9 +694,29 @@ async function checkThreadHealth(project?: Project): Promise<ThreadCacheHealth> 
 }
 
 /**
- * Flush and reload the cache
+ * Flush and reload the cache. A flush is the user saying "I do not trust what
+ * you have": the disk cache is bypassed (GIT-98) and rewritten.
  */
 export async function flushCache(_project?: Project): Promise<CacheFlushResult> {
+  return reloadIndex({ bypassDiskCache: true });
+}
+
+/**
+ * GIT-118: bring the index up to date after a write (create_learning). Uses
+ * the per-row delta (GIT-98), so a new learning costs its own row rather than
+ * the whole index — cheap enough for the tool to await and report.
+ */
+export async function refreshIndexAfterWrite(_project?: Project): Promise<CacheFlushResult> {
+  return reloadIndex({ bypassDiskCache: false });
+}
+
+/**
+ * Reload the index from the store — or, if the store cannot be read, keep
+ * what is there (GIT-118). A failed load used to reinitialise the index and
+ * overwrite the hooks' scar cache with [] and report success, so one failed
+ * request emptied recall until the next successful load.
+ */
+async function reloadIndex(options: { bypassDiskCache: boolean }): Promise<CacheFlushResult> {
   const startTime = Date.now();
   const config = getConfig();
 
@@ -672,15 +733,32 @@ export async function flushCache(_project?: Project): Promise<CacheFlushResult> 
   const previousCount = getLocalVectorSearch().getScarCount();
 
   try {
-    // Load ALL fresh scars (cross-project). A flush is the user saying "I do not
-    // trust what you have" — bypass the disk cache (GIT-98) and rewrite it.
-    const { scars, latestUpdatedAt } = await loadScarsFromSupabase({ bypassDiskCache: true });
+    const loaded = await loadScarsFromSupabase({ bypassDiskCache: options.bypassDiskCache });
+
+    if (!loaded.ok) {
+      // Keep the index and the hooks' cache. Only an EMPTY index takes the
+      // stale disk copy: it has nothing better to lose.
+      if (previousCount === 0 && loaded.scars.length > 0) {
+        await reinitializeLocalSearch(loaded.scars, undefined, loaded.latestUpdatedAt || undefined);
+      }
+      scheduleReloadRetry(loaded.error ?? "store unreachable");
+      const kept = getLocalVectorSearch().getScarCount();
+      console.error(`[cache] Reload failed (${loaded.error}); kept ${kept} scars, hook cache unchanged`);
+      return {
+        success: false,
+        previous_scar_count: previousCount,
+        new_scar_count: kept,
+        elapsed_ms: Date.now() - startTime,
+        error: loaded.error ?? "store unreachable",
+      };
+    }
 
     // Reinitialize the unified index
-    await reinitializeLocalSearch(scars, undefined, latestUpdatedAt || undefined);
+    await reinitializeLocalSearch(loaded.scars, undefined, loaded.latestUpdatedAt || undefined);
 
     // Update disk cache for hook processes too
-    persistScarsForHooks(scars);
+    persistScarsForHooks(loaded.scars);
+    clearReloadRetry();
 
     const newCount = getLocalVectorSearch().getScarCount();
     const elapsed = Date.now() - startTime;
@@ -697,15 +775,57 @@ export async function flushCache(_project?: Project): Promise<CacheFlushResult> 
     const elapsed = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error("[cache] Flush failed:", errorMsg);
+    scheduleReloadRetry(errorMsg);
 
     return {
       success: false,
       previous_scar_count: previousCount,
-      new_scar_count: previousCount,
+      new_scar_count: getLocalVectorSearch().getScarCount(),
       elapsed_ms: elapsed,
       error: errorMsg,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// GIT-118: retry a failed load with backoff (30 s, doubling, capped at 10 min)
+// ---------------------------------------------------------------------------
+
+const RELOAD_RETRY_BASE_MS = 30_000;
+const RELOAD_RETRY_MAX_MS = 10 * 60_000;
+let reloadRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let reloadRetryAttempt = 0;
+
+function scheduleReloadRetry(reason: string): void {
+  if (reloadRetryTimer) return; // one pending retry at a time
+  const delay = Math.min(RELOAD_RETRY_BASE_MS * 2 ** reloadRetryAttempt, RELOAD_RETRY_MAX_MS);
+  reloadRetryAttempt++;
+  console.error(`[startup] Index reload failed (${reason}); retry ${reloadRetryAttempt} in ${Math.round(delay / 1000)} s`);
+  reloadRetryTimer = setTimeout(() => {
+    reloadRetryTimer = null;
+    reloadIndex({ bypassDiskCache: false })
+      .then((r) => {
+        if (r.success) startupCompleted.set(UNIFIED_KEY, true);
+      })
+      .catch(() => { /* reloadIndex reschedules itself */ });
+  }, delay);
+  reloadRetryTimer.unref?.();
+}
+
+function clearReloadRetry(): void {
+  if (reloadRetryTimer) clearTimeout(reloadRetryTimer);
+  reloadRetryTimer = null;
+  reloadRetryAttempt = 0;
+}
+
+/** For tests and health. */
+export function getReloadRetryState(): { pending: boolean; attempt: number } {
+  return { pending: reloadRetryTimer !== null, attempt: reloadRetryAttempt };
+}
+
+/** For tests. */
+export function resetReloadRetry(): void {
+  clearReloadRetry();
 }
 
 /**

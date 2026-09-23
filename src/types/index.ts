@@ -352,6 +352,8 @@ export interface CreateLearningParams {
 export interface CreateLearningResult extends WriteResult {
   learning_id: string;
   embedding_generated: boolean;
+  /** GIT-118: false when the recall index could not be refreshed after the write. */
+  index_refreshed?: boolean;
   /** Error details when success=false */
   errors?: string[];
   display?: string;

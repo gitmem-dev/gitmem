@@ -211,6 +211,11 @@ export class LocalVectorSearch {
     return this.scars.length;
   }
 
+  /** Ids of the indexed scars (GIT-119: prefix resolution without a query). */
+  getScarIds(): string[] {
+    return this.scars.map((s) => s.scar.id);
+  }
+
   /**
    * Search for scars similar to the query
    *

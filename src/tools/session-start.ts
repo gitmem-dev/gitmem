@@ -478,7 +478,8 @@ async function createSessionRecord(
  * Fire-and-forget — failures logged but don't block session_start.
  * Only sets close_compliance if it's currently null (truly abandoned).
  */
-async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
+/** @internal exported for the GIT-119 zero-row test. */
+export async function markSessionSuperseded(oldSessionId: string, newSessionId: string): Promise<void> {
   if (!hasSupabase()) return; // Free tier: no remote session tracking
   try {
     // Check if session already has close_compliance (was properly closed)
@@ -490,7 +491,7 @@ async function markSessionSuperseded(oldSessionId: string, newSessionId: string)
       // Already closed — don't overwrite
       return;
     }
-    await supabase.directPatch(getTableName("sessions"),
+    const patched = await supabase.directPatch(getTableName("sessions"),
       { id: oldSessionId },
       {
         close_compliance: {
@@ -500,6 +501,8 @@ async function markSessionSuperseded(oldSessionId: string, newSessionId: string)
         },
       }
     );
+    // GIT-119: 0 rows = the superseded row isn't there; not marked.
+    if (patched.count === 0) throw new Error(`no session row ${oldSessionId.slice(0, 8)} to mark superseded`);
     console.error(`[session_start] Marked session ${oldSessionId.slice(0, 8)} as superseded by ${newSessionId.slice(0, 8)}`);
   } catch (error) {
     console.error(`[session_start] Failed to mark session ${oldSessionId.slice(0, 8)} as superseded:`, error);

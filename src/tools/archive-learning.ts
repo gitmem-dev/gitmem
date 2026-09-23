@@ -14,6 +14,7 @@ import { supportedColumns } from "../services/store-columns.js";
 import { hasSupabase, getTableName } from "../services/tier.js";
 import { getStorage } from "../services/storage.js";
 import { flushCache } from "../services/startup.js";
+import { getLocalVectorSearch } from "../services/local-vector-search.js";
 import { Timer } from "../services/metrics.js";
 import { wrapDisplay } from "../services/display-protocol.js";
 import { writeResult, notStored } from "../services/write-result.js";
@@ -37,6 +38,25 @@ export interface ArchiveLearningResult extends WriteResult {
 }
 
 const FULL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * GIT-119: the UUIDs a hex prefix covers, as an inclusive range. uuid values
+ * order bytewise, i.e. by their hex digits, so prefix+"000…" .. prefix+"fff…"
+ * is exactly the set that starts with the prefix.
+ */
+export function uuidRangeForPrefix(prefix: string): [string, string] {
+  const fmt = (hex: string) => `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return [fmt(prefix.padEnd(32, "0")), fmt(prefix.padEnd(32, "f"))];
+}
+
+/** Ids in the warm local vector index (empty when it is not loaded). */
+function localIndexIds(): string[] {
+  try {
+    return getLocalVectorSearch().getScarIds();
+  } catch {
+    return [];
+  }
+}
 const HEX_PREFIX_RE = /^[0-9a-f]{4,32}$/i;
 
 /**
@@ -58,10 +78,19 @@ async function resolveIdPrefix(input: string): Promise<{ id: string } | { error:
   const prefix = input.toLowerCase();
 
   if (hasSupabase() && isConfigured()) {
-    // Supabase: use PostgREST like filter
+    // GIT-119: this sent id=like.<prefix>% — Postgres has no LIKE on a UUID
+    // column (42883 "operator does not exist: uuid ~~ unknown"), so prefix
+    // archiving failed on every store. Resolve from the local index when it
+    // has the answer, else ask the store for the UUID range the prefix spans.
+    const local = localIndexIds().filter((id) => id.replace(/-/g, "").startsWith(prefix));
+    if (local.length === 1) return { id: local[0] };
+    if (local.length > 1) {
+      return { error: `Ambiguous prefix "${prefix}" — matches multiple learnings: ${local.slice(0, 2).map((m) => m.slice(0, 12) + "…").join(", ")}` };
+    }
+    const [low, high] = uuidRangeForPrefix(prefix);
     const matches = await directQuery<{ id: string }>(getTableName("learnings"), {
       select: "id",
-      filters: { id: `like.${prefix}%` },
+      filters: { and: `(id.gte.${low},id.lte.${high})` },
       limit: 2,
     });
 
@@ -130,10 +159,24 @@ export async function archiveLearning(params: ArchiveLearningParams): Promise<Ar
       // updated_at (trigger) still records when it happened.
       const learningsTable = getTableName("learnings");
       const hasArchivedAt = (await supportedColumns(learningsTable, ["archived_at"])).has("archived_at");
-      await directPatch(learningsTable, { id: `eq.${resolvedId}` }, {
+      const patched = await directPatch(learningsTable, { id: `eq.${resolvedId}` }, {
         is_active: false,
         ...(hasArchivedAt && { archived_at: archivedAt }),
       });
+      // GIT-119: a full UUID skips resolution, and PostgREST answers 200 with
+      // no rows when nothing matched — so this reported "Archived", durable,
+      // for a learning that does not exist.
+      if (patched.count === 0) {
+        const msg = `No learning ${resolvedId} in the store — nothing was archived`;
+        return {
+          ...notStored(),
+          id: resolvedId,
+          cache_flushed: false,
+          display: wrapDisplay(msg),
+          error: msg,
+          performance_ms: timer.stop(),
+        };
+      }
 
       try {
         await flushCache();

@@ -488,6 +488,15 @@ export function formatWriteWarnings(
 }
 
 /**
+ * Store a session's embedding (PATCH, not upsert — the row already exists).
+ * GIT-119: 0 rows = not saved; throwing lets the effect tracker record it.
+ */
+export async function saveSessionEmbedding(sessionId: string, embeddingJson: string): Promise<void> {
+  const patched = await supabase.directPatch(getTableName("sessions"), { id: sessionId }, { embedding: embeddingJson });
+  if (patched.count === 0) throw new Error(`session ${sessionId.slice(0, 8)}: embedding PATCH updated no row`);
+}
+
+/**
  * GIT-21: Clean up all session files for a closed session.
  * Unregisters from registry, deletes per-session directory, and removes legacy file.
  */
@@ -1578,11 +1587,7 @@ export async function sessionClose(
           const embeddingVector = await embed(embeddingText);
           if (embeddingVector) {
             const embeddingJson = JSON.stringify(embeddingVector);
-            // Update session with embedding (PATCH, not upsert — row already exists)
-            await supabase.directPatch(getTableName("sessions"),
-              { id: sessionId },
-              { embedding: embeddingJson }
-            );
+            await saveSessionEmbedding(sessionId, embeddingJson);
             console.error("[session_close] Embedding saved to session");
 
             // Phase 5: Implicit thread detection (chained after embedding)

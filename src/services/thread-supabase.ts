@@ -272,7 +272,8 @@ async function resolveThreadRow(
   if (options.resolvedBySession) patchData.resolved_by_session = options.resolvedBySession;
 
   const patched = await supabase.directPatch(getTableName("threads"), { id: rows[0].id }, patchData);
-  if (!Array.isArray(patched) || patched.length === 0) throw new Error(`resolve of ${threadId} updated no row`);
+  // GIT-119: directPatch reports the rows it updated; 0 = not resolved.
+  if (patched.count === 0) throw new Error(`resolve of ${threadId} updated no row`);
   console.error(`[thread-supabase] Resolved thread ${threadId} in Supabase`);
 }
 
@@ -570,7 +571,8 @@ export async function touchThreadsInSupabase(
         status: lifecycle_status,
         metadata,
       });
-      if (!Array.isArray(patched) || patched.length === 0) throw new Error(`touch of ${threadId} updated no row`);
+      // GIT-119: 0 rows = not touched.
+      if (patched.count === 0) throw new Error(`touch of ${threadId} updated no row`);
       outcome.touched.push(threadId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -775,10 +777,12 @@ export async function archiveDormantThreads(
       const daysDormant = (now.getTime() - dormantStart.getTime()) / (1000 * 60 * 60 * 24);
 
       if (daysDormant >= dormantDays) {
-        await supabase.directPatch(getTableName("threads"), { id: row.id }, {
+        const patched = await supabase.directPatch(getTableName("threads"), { id: row.id }, {
           status: "archived",
         });
-        archived_ids.push(row.thread_id);
+        // GIT-119: count only rows the store actually archived.
+        if (patched.count > 0) archived_ids.push(row.thread_id);
+        else console.error(`[thread-supabase] Archive of ${row.thread_id} updated no row`);
       }
     }
 

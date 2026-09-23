@@ -418,11 +418,22 @@ export async function directUpsert<T = unknown>(
  * @param filters PostgREST filter to identify the row(s) to update
  * @param data    Fields to update (partial — omitted columns stay unchanged)
  */
+/**
+ * GIT-119: what a PATCH changed. PostgREST answers 200 with [] when the filter
+ * matched nothing (a wrong id, a row not created yet, RLS), so a PATCH that
+ * returns is not evidence of a write: `count` is. All callers treat 0 as not
+ * durable.
+ */
+export interface PatchResult<T = unknown> {
+  count: number;
+  rows: T[];
+}
+
 export async function directPatch<T = unknown>(
   table: string,
   filters: Record<string, string>,
   data: Record<string, unknown>
-): Promise<T[]> {
+): Promise<PatchResult<T>> {
   if (!isConfigured()) {
     throw new Error("Supabase not configured");
   }
@@ -452,7 +463,8 @@ export async function directPatch<T = unknown>(
     throw new Error(`Supabase patch error: ${response.status} - ${text.slice(0, 200)}`);
   }
 
-  return response.json() as Promise<T[]>;
+  const rows = ((await response.json()) as T[]) || [];
+  return { count: Array.isArray(rows) ? rows.length : 0, rows: Array.isArray(rows) ? rows : [] };
 }
 
 /**
@@ -891,10 +903,12 @@ export async function saveTranscript(
   // Update the session record with transcript_path (direct REST API)
   let patch_warning: string | undefined;
   try {
-    await directPatch(getTableName("sessions"),
+    const patched = await directPatch(getTableName("sessions"),
       { id: sessionId },
       { transcript_path: path }
     );
+    // GIT-119: 0 rows = no session row to update, not a success.
+    if (patched.count === 0) throw new Error(`no session row ${sessionId} to update`);
   } catch (error) {
     // File is saved; session record update failed — warn, don't fail
     const msg = error instanceof Error ? error.message : String(error);

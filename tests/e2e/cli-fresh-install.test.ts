@@ -17,6 +17,7 @@ import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
 import {
   mkdirSync,
+  mkdtempSync,
   rmSync,
   existsSync,
   readFileSync,
@@ -38,6 +39,11 @@ import {
 } from "./mcp-client.js";
 
 const execFile = promisify(execFileCb);
+
+// GIT-115: init writes the store to the root the server reads (~/.gitmem).
+// Every CLI call here runs against a scratch HOME, never the developer's.
+const SANDBOX_HOME = mkdtempSync(join(tmpdir(), "gitmem-cli-home-"));
+afterAll(() => rmSync(SANDBOX_HOME, { recursive: true, force: true }));
 const GITMEM_BIN = join(__dirname, "../../bin/gitmem.js");
 
 /**
@@ -52,6 +58,9 @@ async function runGitmem(
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const env = {
     ...process.env,
+    HOME: SANDBOX_HOME,
+    GITMEM_DIR: "",
+    GITMEM_HOME: "",
     // Ensure free tier unless overridden
     SUPABASE_URL: "",
     SUPABASE_SERVICE_ROLE_KEY: "",
@@ -90,15 +99,16 @@ describe("Fresh Install: Free Tier CLI", () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
   });
 
-  it("gitmem init creates .gitmem/ with starter scars", async () => {
+  it("gitmem init creates the store in ~/.gitmem with starter scars", async () => {
     const { stdout, exitCode } = await runGitmem(["init", "--yes"], { cwd: TEST_DIR });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toLowerCase()).toContain("free");
+    expect(stdout).toContain("Created ~/.gitmem");
 
-    // .gitmem/ directory created
-    const gitmemDir = join(TEST_DIR, ".gitmem");
+    // GIT-115: the store is where the server reads it, not <cwd>/.gitmem
+    const gitmemDir = join(SANDBOX_HOME, ".gitmem");
     expect(existsSync(gitmemDir)).toBe(true);
+    expect(existsSync(join(TEST_DIR, ".gitmem", "learnings.json"))).toBe(false);
 
     // learnings.json has starter scars
     const learningsPath = join(gitmemDir, "learnings.json");
@@ -112,20 +122,20 @@ describe("Fresh Install: Free Tier CLI", () => {
     expect(existsSync(join(gitmemDir, "scar-usage.json"))).toBe(true);
 
     // stdout shows scar count
-    const countMatch = stdout.match(/(\d+) starter scars/) || stdout.match(/(\d+) new scars added/);
+    const countMatch = stdout.match(/(\d+) lessons from common mistakes/);
     expect(countMatch).not.toBeNull();
     expect(parseInt(countMatch![1])).toBeGreaterThan(0);
   });
 
   it("gitmem init is idempotent (no duplicates on re-run)", async () => {
     // Count scars before second run
-    const learningsPath = join(TEST_DIR, ".gitmem", "learnings.json");
+    const learningsPath = join(SANDBOX_HOME, ".gitmem", "learnings.json");
     const beforeCount = JSON.parse(readFileSync(learningsPath, "utf-8")).length;
 
     const { stdout, exitCode } = await runGitmem(["init", "--yes"], { cwd: TEST_DIR });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toLowerCase()).toContain("already configured");
+    expect(stdout.toLowerCase()).toContain("already set up");
 
     // Same count — no duplicates
     const afterCount = JSON.parse(readFileSync(learningsPath, "utf-8")).length;
@@ -340,15 +350,16 @@ describe("Fresh Install: MCP Server Lifecycle", () => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
     mkdirSync(TEST_DIR, { recursive: true });
 
-    // Run init to populate .gitmem/
+    // Run init to populate the store (GIT-115: ~/.gitmem, here the sandbox HOME)
     await runGitmem(["init", "--yes"], { cwd: TEST_DIR });
 
-    // Start MCP server with CWD in the initialized directory
-    // so it walks up and finds .gitmem/ with starter scars
+    // Start the MCP server on the same HOME, so it reads what init wrote
     mcp = await createMcpClient(
       {
         ...createTierEnv("free"),
-        HOME: TEST_DIR,
+        HOME: SANDBOX_HOME,
+        GITMEM_DIR: "",
+        GITMEM_HOME: "",
       },
       { cwd: TEST_DIR }
     );
@@ -558,6 +569,9 @@ describe("Fresh Install: Hook Script Output", () => {
             ...process.env,
             CLAUDE_SESSION_ID: sessionId,
             HOME: TEST_DIR,
+            // GIT-99: the hook reads the registry from the server's root, not
+            // its cwd; name the test's root explicitly.
+            GITMEM_DIR: join(sessionDir, ".gitmem"),
           },
           timeout: 10_000,
         }

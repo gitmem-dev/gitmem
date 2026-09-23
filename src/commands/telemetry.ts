@@ -9,6 +9,8 @@
  */
 
 import { getTelemetry, Telemetry } from "../lib/telemetry.js";
+// GIT-115: telemetry state lives in the store the server reads, not <cwd>/.gitmem.
+import { getGitmemDir } from "../services/gitmem-dir.js";
 import { join } from "path";
 import { readFileSync } from "fs";
 
@@ -23,9 +25,6 @@ function getPackageVersion(): string {
   }
 }
 
-function getGitmemDir(): string {
-  return join(process.cwd(), ".gitmem");
-}
 
 export function main(args: string[]): void {
   const subcommand = args[0];
@@ -117,7 +116,7 @@ function cmdEnable(telemetry: Telemetry): void {
   console.log("  ✗ IP addresses or persistent IDs");
   console.log("");
   console.log("Transparency:");
-  console.log("  • All events logged to .gitmem/telemetry.log");
+  console.log(`  • All events logged to ${join(getGitmemDir(), "telemetry.log")}`);
   console.log("  • View before sending: gitmem telemetry show");
   console.log("  • Disable anytime: gitmem telemetry disable");
   console.log("");
@@ -139,7 +138,7 @@ function cmdEnable(telemetry: Telemetry): void {
         telemetry.enable();
         console.log("");
         console.log("\x1b[32m✓\x1b[0m Telemetry enabled");
-        console.log("  Data logged to: .gitmem/telemetry.log");
+        console.log(`  Data logged to: ${join(getGitmemDir(), "telemetry.log")}`);
         console.log("  Review anytime: gitmem telemetry show");
         console.log("  Disable anytime: gitmem telemetry disable");
       } else {
@@ -160,7 +159,7 @@ function cmdDisable(telemetry: Telemetry): void {
   console.log("==========================\n");
   console.log("\x1b[32m✓\x1b[0m Telemetry disabled");
   console.log("  Pending events: will not be sent");
-  console.log("  Local logs: preserved at .gitmem/telemetry.log");
+  console.log(`  Local logs: preserved at ${join(getGitmemDir(), "telemetry.log")}`);
   console.log("");
   console.log("To re-enable: gitmem telemetry enable");
 }

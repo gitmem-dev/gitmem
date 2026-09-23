@@ -128,6 +128,22 @@ else
     pass "Output is plain text, not JSON"
 fi
 
+# Test 1.2b (GIT-115): the project hint comes from the repo's .gitmem/config.json,
+# with or without jq (node fallback).
+# A repo of its own: the suite's GITMEM_DIR ($TMPDIR/.gitmem) is the store.
+mkdir -p "$TMPDIR/repo-git115/.gitmem"
+cp "$TMPDIR/.mcp.json" "$TMPDIR/repo-git115/.mcp.json"
+echo '{"project":"acme-hooks"}' > "$TMPDIR/repo-git115/.gitmem/config.json"
+OUTPUT=$(cd "$TMPDIR/repo-git115" && echo '{}' | bash "$SCRIPT_DIR/scripts/session-start.sh" 2>/dev/null)
+if echo "$OUTPUT" | grep -q 'session_start(project: "acme-hooks")'; then
+    pass "Project hint read from the repo's .gitmem/config.json"
+else
+    fail "Project hint read from the repo's .gitmem/config.json" \
+         'Contains session_start(project: "acme-hooks")' \
+         "$OUTPUT"
+fi
+rm -rf "$TMPDIR/repo-git115"
+
 # Test 1.3: Gitmem NOT in .mcp.json (may still detect via disk fallback)
 rm "$TMPDIR/.mcp.json"
 echo '{"mcpServers":{"other-tool":{}}}' > "$TMPDIR/.mcp.json"

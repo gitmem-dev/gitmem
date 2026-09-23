@@ -200,7 +200,7 @@ function isolatedHome(tag) {
   return { home, gitmemDir };
 }
 const STRIP = /^(OPENAI_API_KEY|OPENROUTER_API_KEY|GITMEM_|SUPABASE_|OLLAMA_|NODE_OPTIONS$|CLAUDE_CODE_ENTRYPOINT$)/;
-async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
+async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink, extraEnv = {} }) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !STRIP.test(k)));
   Object.assign(env, {
     HOME: home,
@@ -216,6 +216,7 @@ async function startServer({ home, gitmemDir, ollamaUrl, netlog, stderrSink }) {
     GITMEM_NETLOG: netlog,
     NODE_OPTIONS: `--import=${pathToFileURL(NETLOG_PRELOAD).href}`,
     NO_COLOR: "1",
+    ...extraEnv,
   });
   const transport = new StdioClientTransport({ command: process.execPath, args: [SERVER], env, cwd: home, stderr: "pipe" });
   transport.stderr?.on("data", (d) => stderrSink.push(d.toString()));
@@ -422,6 +423,56 @@ async function flow() {
   const relevance = relevanceRows.map((m) => ({ tool: m.tool_name, memories_applied: m.metadata.memories_applied, memory_relevance: m.metadata.memory_relevance }));
   await waitQuiet(netlog, { minMs: 1000, quietMs: 2000 });
   await srv.close();
+
+  // GIT-118: the store fails the index READS while writes still land. A
+  // forwarding proxy in front of the venue fails GET gitmem_learnings… on
+  // demand. create_learning must save and say its index refresh failed; a
+  // recall right after must still find the seeded scars (index kept).
+  const reloadFailureProbe = async () => {
+    let failIndexReads = false;
+    const proxy = createServer(async (req, res) => {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      if (failIndexReads && req.method === "GET" && /^\/rest\/v1\/gitmem_learnings(\?|$)/.test(req.url)) {
+        res.writeHead(503, { "content-type": "application/json" });
+        res.end('{"message":"injected by the venue driver (GIT-118)"}');
+        return;
+      }
+      const headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !["host", "connection", "content-length", "accept-encoding"].includes(k)));
+      const upstream = await fetch(`${SUPABASE_URL}${req.url}`, { method: req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
+      const body = Buffer.from(await upstream.arrayBuffer());
+      const out = {};
+      upstream.headers.forEach((v, k) => { if (!["content-encoding", "content-length", "transfer-encoding", "connection"].includes(k)) out[k] = v; });
+      res.writeHead(upstream.status, out);
+      res.end(body);
+    });
+    await new Promise((r) => proxy.listen(0, "127.0.0.1", r));
+    const h = isolatedHome(`${label}-reload`);
+    const probeLog = join(outDir, `netlog-${label}-reload.jsonl`);
+    writeFileSync(probeLog, "");
+    const errs = [];
+    const p = await startServer({ home: h.home, gitmemDir: h.gitmemDir, ollamaUrl: ollama.url, netlog: probeLog, stderrSink: errs,
+      extraEnv: { SUPABASE_URL: `http://127.0.0.1:${proxy.address().port}`, GITMEM_SEARCH_MODE: "local" } });
+    await p.call("session_start", { project: PROJECT, agent_identity: "cli", force: true });
+    for (let i = 0; i < 60 && !/GitMem initialized: [1-9]\d* scars/.test(errs.join("")); i++) await new Promise((r) => setTimeout(r, 500));
+    failIndexReads = true;
+    const created = await p.call("create_learning", { learning_type: "win", title: `Reload probe win (${label}) ${randomUUID().slice(0, 8)}`, description: "written while the index reads fail", project: PROJECT });
+    // Let any background reload the write started finish before the next
+    // prompt's recall (1.11.0 did not await it; a user's next prompt comes later).
+    await waitQuiet(probeLog, { minMs: 3000, quietMs: 2500 });
+    const recall = await p.call("recall", { plan: "Supabase migrations must be dry-run before push", project: PROJECT, match_count: 3 });
+    failIndexReads = false;
+    await p.close();
+    proxy.close();
+    writeFileSync(join(outDir, `stderr-${label}-reload.log`), errs.join(""));
+    return {
+      learning_saved: /Created win/.test(created),
+      create_says_not_refreshed: /Recall index NOT refreshed/.test(created),
+      recall_still_finds_seeded_scar: /Supabase migrations must be dry-run/.test(recall),
+      create_head: created.split("\n").slice(0, 3).join(" | ").slice(0, 240),
+    };
+  };
+  const reloadFailure = await reloadFailureProbe();
   ollama.close();
 
   const reqs = readNet(netlog);
@@ -441,6 +492,7 @@ async function flow() {
     remote_sessions_after: await count("gitmem_sessions"),
     remote_scar_usage_after: await count("gitmem_scar_usage"),
     session_close_persisted: closedRows.length === 1 && closedRows[0].closing_reflection != null,
+    reload_failure: reloadFailure,
     missing_payload_named: missingPayloadNamed,
     resolve_thread_durable: resolveDurable,
     close_warns: closeWarns,
@@ -647,6 +699,12 @@ if (mode === "flow" && !result.thread_triples_linked) {
 }
 if (mode === "flow" && result.false_stranded_notice) {
   failureCheck.unexpected.push("session_start reported the store it reads as 'NOT being read' (GIT-107)");
+}
+if (mode === "flow") {
+  const r = result.reload_failure;
+  if (!(r.learning_saved && r.create_says_not_refreshed && r.recall_still_finds_seeded_scar)) {
+    failureCheck.unexpected.push(`a failed index reload was hidden or emptied recall (GIT-118): ${JSON.stringify(r)}`);
+  }
 }
 if (mode === "flow" && !result.session_close_persisted) {
   failureCheck.unexpected.push(`session_close did not persist session ${result.session_id} (closing_reflection missing)`);

@@ -7,13 +7,16 @@
 
 set -e
 
-# Debug logging — verify hook actually fires
-PLUGIN_LOG="/tmp/gitmem-hooks-plugin-debug.log"
-echo "[$(date)] PLUGIN SessionStart hook invoked" >> "$PLUGIN_LOG"
+# Debug logging — verify hook actually fires. GIT-116: per user and in
+# $TMPDIR (macOS gives each user its own), and never fatal: under `set -e` an
+# unwritable log — e.g. /tmp/…debug.log created by another user — used to kill
+# the whole SessionStart hook.
+PLUGIN_LOG="${TMPDIR:-/tmp}/gitmem-hooks-plugin-debug-$(id -u).log"
+echo "[$(date)] PLUGIN SessionStart hook invoked" >> "$PLUGIN_LOG" 2>/dev/null || true
 
 # Read hook input from stdin
 HOOK_INPUT=$(cat -)
-echo "[$(date)] Input: $HOOK_INPUT" >> "$PLUGIN_LOG"
+echo "[$(date)] Input: $HOOK_INPUT" >> "$PLUGIN_LOG" 2>/dev/null || true
 
 # ============================================================================
 # Detect gitmem MCP server
@@ -98,8 +101,7 @@ fi
 if [ "$GITMEM_DETECTED" = "false" ]; then
     for SERVER_PATH in \
         "${GITMEM_SERVER_PATH:-}" \
-        "$(which gitmem-mcp 2>/dev/null || echo '')" \
-        "$(which gitmem 2>/dev/null || echo '')"; do
+        "$(command -v gitmem-mcp 2>/dev/null || echo '')"; do
         if [ -n "$SERVER_PATH" ] && [ -f "$SERVER_PATH" ]; then
             GITMEM_DETECTED=true
             DETECT_SOURCE="binary $SERVER_PATH"
@@ -122,13 +124,13 @@ fi
 # MCP handshake completion. Total budget: ~8s (within 10s hook timeout).
 
 if [ "$GITMEM_DETECTED" = "true" ]; then
-    GATE_START=$(date +%s%N 2>/dev/null || date +%s)
+    GATE_START=$(date +%s)
     MAX_WAIT_SECS=7
     POLL_INTERVAL=0.3
     HANDSHAKE_BUFFER=0.5
     SERVER_FOUND=false
 
-    echo "[$(date)] MCP readiness gate: waiting up to ${MAX_WAIT_SECS}s for gitmem server process..." >> "$PLUGIN_LOG"
+    echo "[$(date)] MCP readiness gate: waiting up to ${MAX_WAIT_SECS}s for gitmem server process..." >> "$PLUGIN_LOG" 2>/dev/null || true
 
     # Build list of patterns to match the gitmem server process
     # Covers: direct node invocation, npx, and symlinked binaries
@@ -140,12 +142,19 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     # Poll every 0.3s. Max iterations = MAX_WAIT_SECS / 0.3 ≈ 23
     MAX_POLLS=$(( MAX_WAIT_SECS * 10 / 3 ))
     POLL=0
+    # GIT-116: pgrep ships with macOS and procps, but not with every slim
+    # image. Without it every poll failed and the gate stalled for its full
+    # 7 s before continuing; skip the wait instead, and say so.
+    if ! command -v pgrep >/dev/null 2>&1; then
+        echo "[$(date)] MCP readiness gate: pgrep not available — not waiting for the server process" >> "$PLUGIN_LOG" 2>/dev/null || true
+        MAX_POLLS=0
+    fi
     while [ "$POLL" -lt "$MAX_POLLS" ]; do
         for PATTERN in "${GITMEM_PATTERNS[@]}"; do
             if pgrep -f "$PATTERN" > /dev/null 2>&1; then
                 SERVER_FOUND=true
                 WAIT_SECS=$(( POLL * 3 / 10 ))
-                echo "[$(date)] MCP readiness gate: gitmem process found (pattern: $PATTERN) after ~${WAIT_SECS}.$(( POLL * 3 % 10 ))s" >> "$PLUGIN_LOG"
+                echo "[$(date)] MCP readiness gate: gitmem process found (pattern: $PATTERN) after ~${WAIT_SECS}.$(( POLL * 3 % 10 ))s" >> "$PLUGIN_LOG" 2>/dev/null || true
                 # Buffer for MCP protocol handshake to complete
                 sleep "$HANDSHAKE_BUFFER"
                 break 2
@@ -156,11 +165,11 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     done
 
     if [ "$SERVER_FOUND" = "false" ]; then
-        echo "[$(date)] MCP readiness gate: gitmem process NOT found after ${MAX_WAIT_SECS}s — proceeding anyway (config detected, server may use different process name)" >> "$PLUGIN_LOG"
+        echo "[$(date)] MCP readiness gate: gitmem process NOT found after ${MAX_WAIT_SECS}s — proceeding anyway (config detected, server may use different process name)" >> "$PLUGIN_LOG" 2>/dev/null || true
     fi
 
-    GATE_END=$(date +%s%N 2>/dev/null || date +%s)
-    echo "[$(date)] MCP readiness gate completed" >> "$PLUGIN_LOG"
+    GATE_END=$(date +%s)
+    echo "[$(date)] MCP readiness gate completed" >> "$PLUGIN_LOG" 2>/dev/null || true
 fi
 
 # ============================================================================
@@ -179,7 +188,7 @@ echo "0" > "$STATE_DIR/last_nag_time"
 # ============================================================================
 
 if [ "$GITMEM_DETECTED" = "true" ]; then
-    echo "[$(date)] Gitmem DETECTED via ${DETECT_SOURCE} — instructing agent to call session_start via MCP" >> "$PLUGIN_LOG"
+    echo "[$(date)] Gitmem DETECTED via ${DETECT_SOURCE} — instructing agent to call session_start via MCP" >> "$PLUGIN_LOG" 2>/dev/null || true
 
     # Instruct agent to call session_start via MCP.
     # The MCP server creates sessions with its own PID, enabling multi-session
@@ -197,7 +206,7 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     fi
 
     if [ -n "$GITMEM_PROJECT" ]; then
-        echo "[$(date)] Project from config: ${GITMEM_PROJECT}" >> "$PLUGIN_LOG"
+        echo "[$(date)] Project from config: ${GITMEM_PROJECT}" >> "$PLUGIN_LOG" 2>/dev/null || true
         cat <<HOOK_MSG
 SESSION START — ACTIVE
 
@@ -224,10 +233,10 @@ every session. Use recall before tasks to see what past sessions discovered.
 The more you use it, the better it gets.
 HOOK_MSG2
 else
-    echo "[$(date)] Gitmem NOT detected (checked: project .mcp.json, mcp-config, ~/.claude.json, disk)" >> "$PLUGIN_LOG"
+    echo "[$(date)] Gitmem NOT detected (checked: project .mcp.json, mcp-config, ~/.claude.json, disk)" >> "$PLUGIN_LOG" 2>/dev/null || true
     echo "GITMEM PLUGIN: GitMem MCP server not detected. Session lifecycle hooks are inactive. To enable, ensure gitmem is configured via --mcp-config, project .mcp.json, or set GITMEM_ENABLED=true."
 fi
 
-echo "[$(date)] Hook completed, exit 0" >> "$PLUGIN_LOG"
+echo "[$(date)] Hook completed, exit 0" >> "$PLUGIN_LOG" 2>/dev/null || true
 
 exit 0

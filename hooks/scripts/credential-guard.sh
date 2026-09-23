@@ -111,6 +111,10 @@ if [ "$TOOL_NAME" = "Read" ]; then
 
     # Block reading known credential files
     if echo "$BASENAME" | grep -qEi "$CREDENTIAL_FILES_PATTERN"; then
+        # GIT-116: escape for the JSON below. A quote or backslash in the path
+        # made the output invalid JSON, which Claude Code treats as "allow".
+        FILE_PATH=$(printf '%s' "$FILE_PATH" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+        BASENAME=$(printf '%s' "$BASENAME" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
         cat <<HOOKJSON
 {
   "decision": "block",

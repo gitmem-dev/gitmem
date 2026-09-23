@@ -36,7 +36,20 @@ HOOK_INPUT=$(cat -)
 # Extract prompt from hook input
 # ============================================================================
 
-# Use node if available, fallback to basic extraction
+# GIT-116: a missing tool is a visible, non-blocking hook error (exit 1 with a
+# reason on stderr; exit 2 would block the prompt), never a silent "nothing
+# relevant". Retrieval needs node, which the MCP server needs anyway — but the
+# hook runs with the launcher's PATH, where an nvm/volta node may be absent.
+gitmem_unavailable() {
+    echo "gitmem auto-retrieve is not running: $1" >&2
+    exit 1
+}
+
+if ! command -v node &>/dev/null; then
+    gitmem_unavailable "node is not on the hook's PATH (PATH=$PATH)"
+fi
+
+# Extract the prompt (node is required; checked above)
 PROMPT=""
 if command -v node &>/dev/null; then
     PROMPT=$(echo "$HOOK_INPUT" | node -e "
@@ -134,10 +147,6 @@ fi
 # Invoke quick-retrieve (Node module)
 # ============================================================================
 
-# Require node for retrieval
-if ! command -v node &>/dev/null; then
-    exit 0
-fi
 
 # Locate quick-retrieve.js relative to plugin root
 # Hook scripts are at: ${CLAUDE_PLUGIN_ROOT}/scripts/
@@ -150,13 +159,17 @@ if [ ! -f "$QUICK_RETRIEVE" ]; then
     QUICK_RETRIEVE="${CLAUDE_PLUGIN_ROOT}/../dist/hooks/quick-retrieve.js"
 fi
 
-# If still not found, try the gitmem package location
+# Hooks copied into <repo>/.gitmem/hooks (init, install-hooks) have no dist/
+# beside them, so look where the package itself is installed. GIT-116: this
+# searched for a package called "gitmem"; it is "gitmem-mcp". Most installs run
+# it through npx, so npx's cache is searched too (newest first).
 if [ ! -f "$QUICK_RETRIEVE" ]; then
-    # Check common install locations
+    REL="gitmem-mcp/dist/hooks/quick-retrieve.js"
+    BIN="$(command -v gitmem-mcp 2>/dev/null || true)"
     for CANDIDATE in \
-        "/workspace/gitmem/dist/hooks/quick-retrieve.js" \
-        "$(npm root -g 2>/dev/null)/gitmem/dist/hooks/quick-retrieve.js" \
-        "$(dirname "$(which gitmem 2>/dev/null)")/../lib/node_modules/gitmem/dist/hooks/quick-retrieve.js"; do
+        ${BIN:+"$(dirname "$BIN")/../lib/node_modules/$REL"} \
+        $(ls -1t "$HOME"/.npm/_npx/*/node_modules/$REL 2>/dev/null) \
+        "$(npm root -g 2>/dev/null)/$REL"; do
         if [ -f "$CANDIDATE" ]; then
             QUICK_RETRIEVE="$CANDIDATE"
             break
@@ -165,13 +178,13 @@ if [ ! -f "$QUICK_RETRIEVE" ]; then
 fi
 
 if [ ! -f "$QUICK_RETRIEVE" ]; then
-    # Can't find quick-retrieve module — fail open
-    exit 0
+    gitmem_unavailable "quick-retrieve.js not found next to the hook, in npx's cache, or in the global node_modules"
 fi
 
-# Call quick-retrieve with prompt and level
-# Timeout: 2.5s (leave 500ms buffer within 3s hook timeout)
-RESULT=$(timeout 2.5 node "$QUICK_RETRIEVE" "$PROMPT" "$RETRIEVAL_LEVEL" 2>/dev/null) || true
+# Call quick-retrieve with prompt and level. It bounds its own run (2.5 s,
+# inside the 3 s hook budget): GIT-116 dropped the `timeout` wrapper, which
+# macOS does not ship.
+RESULT=$(node "$QUICK_RETRIEVE" "$PROMPT" "$RETRIEVAL_LEVEL" 2>/dev/null) || true
 
 # Empty result → nothing relevant found
 if [ -z "$RESULT" ]; then

@@ -51,6 +51,12 @@ jobs:
       - name: E2E — session identity survives MCP restart
         run: npx vitest run --config vitest.e2e.config.ts tests/e2e/git-89-session-identity.test.ts
 
+      # GIT-115: a fresh install in a clean HOME — init, the SessionStart hook,
+      # the built server — plus the CLI/wizard suite. Both run the real CLI in
+      # scratch directories with a scratch HOME; no Docker or credentials.
+      - name: E2E — fresh install reads what init wrote; CLI and wizard
+        run: npx vitest run --config vitest.e2e.config.ts tests/e2e/git-115-fresh-install.test.ts tests/e2e/cli-fresh-install.test.ts
+
       - name: Dependency audit (no unused deps)
         run: npx depcheck --ignores="@types/*" --json | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); const unused=d.dependencies||[]; if(unused.length){console.error('Unused dependencies:',unused);process.exit(1)}"
 

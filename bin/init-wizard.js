@@ -20,6 +20,8 @@ import {
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline/promises";
+import { storeRoot, repoGitmemDir, displayPath } from "./gitmem-root.js";
+import { hasGitmemHooks, mergeGitmemHooks, removeGitmemHooks, backupFile } from "./hooks-merge.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
@@ -166,7 +168,11 @@ const CLIENT_CONFIGS = {
 };
 
 // Shared paths
-const gitmemDir = join(cwd, ".gitmem");
+// GIT-115: the store goes where the server reads it; the repo keeps only
+// config.json (project name, read by the SessionStart hook) and the hooks.
+const repoDir = repoGitmemDir(cwd);
+const storeDir = storeRoot();
+const storeName = displayPath(storeDir);
 const gitignorePath = join(cwd, ".gitignore");
 const starterScarsPath = join(__dirname, "..", "schema", "starter-scars.json");
 const hooksScriptsDir = join(__dirname, "..", "hooks", "scripts");
@@ -351,14 +357,9 @@ function buildCursorHooks() {
   };
 }
 
-function isGitmemHook(entry) {
-  if (entry.hooks && Array.isArray(entry.hooks)) {
-    return entry.hooks.some((h) => typeof h.command === "string" && h.command.includes("gitmem"));
-  }
-  if (typeof entry.command === "string") {
-    return entry.command.includes("gitmem");
-  }
-  return false;
+/** Commands in a hooks object that are not gitmem's (GIT-120 matching). */
+function countOtherHooks(hooks) {
+  return removeGitmemHooks(hooks).kept;
 }
 
 function getInstructionsTemplate() {
@@ -370,7 +371,7 @@ function getInstructionsTemplate() {
 }
 
 function copyHookScripts() {
-  const destHooksDir = join(gitmemDir, "hooks");
+  const destHooksDir = join(repoDir, "hooks");
   if (!existsSync(destHooksDir)) {
     mkdirSync(destHooksDir, { recursive: true });
   }
@@ -393,8 +394,22 @@ function copyHookScripts() {
 // ── Steps ──
 // Each returns { done: bool } so main can track progress
 
+/**
+ * GIT-115: the repo's .gitmem/config.json carries the project name, which the
+ * SessionStart hook reads from the repo. It is not the store's config.json.
+ */
+function writeRepoConfig() {
+  if (dryRun) return;
+  const configPath = join(repoDir, "config.json");
+  const config = readJson(configPath) || {};
+  if (projectName) config.project = projectName;
+  else if (existsSync(configPath)) return;
+  mkdirSync(repoDir, { recursive: true });
+  writeJson(configPath, config);
+}
+
 async function stepMemoryStore() {
-  const learningsPath = join(gitmemDir, "learnings.json");
+  const learningsPath = join(storeDir, "learnings.json");
   const exists = existsSync(learningsPath);
   let existingCount = 0;
   if (exists) {
@@ -412,15 +427,16 @@ async function stepMemoryStore() {
   }
 
   if (exists && existingCount >= starterScars.length) {
-    log(CHECK, `Memory store already set up ${C.dim}(${existingCount} lessons in .gitmem/)${C.reset}`);
+    writeRepoConfig();
+    log(CHECK, `Memory store already set up ${C.dim}(${existingCount} lessons in ${storeName})${C.reset}`);
     return { done: false };
   }
 
   // Needs merge — prompt if existing data OR interactive mode
   if (exists || interactive) {
     const prompt = exists
-      ? `Merge ${starterScars.length} lessons into .gitmem/? (${existingCount} existing)`
-      : `Create .gitmem/ with ${starterScars.length} starter lessons?`;
+      ? `Merge ${starterScars.length} lessons into ${storeName}? (${existingCount} existing)`
+      : `Create ${storeName} with ${starterScars.length} starter lessons?`;
     if (!(await confirm(prompt))) {
       log(SKIP, "Memory store skipped");
       return { done: false };
@@ -428,28 +444,18 @@ async function stepMemoryStore() {
   }
 
   if (dryRun) {
-    log(CHECK, `Would create .gitmem/ with ${starterScars.length} starter lessons`, "[dry-run]");
+    log(CHECK, `Would create ${storeName} with ${starterScars.length} starter lessons`, "[dry-run]");
     return { done: true };
   }
 
-  if (!existsSync(gitmemDir)) {
-    mkdirSync(gitmemDir, { recursive: true });
+  if (!existsSync(storeDir)) {
+    mkdirSync(storeDir, { recursive: true });
   }
 
-  // Config
-  const configPath = join(gitmemDir, "config.json");
-  if (!existsSync(configPath)) {
-    const config = { feedback_enabled: false, telemetry_enabled: false };
-    if (projectName) config.project = projectName;
-    writeJson(configPath, config);
-  } else if (projectName) {
-    const config = readJson(configPath) || {};
-    config.project = projectName;
-    writeJson(configPath, config);
-  }
+  writeRepoConfig();
 
   // Closing payload template (prevents permission prompt on first session close)
-  const payloadPath = join(gitmemDir, "closing-payload.json");
+  const payloadPath = join(storeDir, "closing-payload.json");
   if (!existsSync(payloadPath)) {
     writeJson(payloadPath, {
       closing_reflection: {
@@ -495,7 +501,7 @@ async function stepMemoryStore() {
   writeJson(learningsPath, existing);
 
   // Starter thread — nudges user to add their own project-specific scar
-  const threadsPath = join(gitmemDir, "threads.json");
+  const threadsPath = join(storeDir, "threads.json");
   if (!existsSync(threadsPath)) {
     writeJson(threadsPath, [
       {
@@ -509,14 +515,14 @@ async function stepMemoryStore() {
 
   // Empty collection files
   for (const file of ["sessions.json", "decisions.json", "scar-usage.json"]) {
-    const filePath = join(gitmemDir, file);
+    const filePath = join(storeDir, file);
     if (!existsSync(filePath)) {
       writeFileSync(filePath, "[]");
     }
   }
 
   // Closing payload template
-  const templatePath = join(gitmemDir, "closing-payload-template.json");
+  const templatePath = join(storeDir, "closing-payload-template.json");
   if (!existsSync(templatePath)) {
     writeJson(templatePath, {
       closing_reflection: {
@@ -541,7 +547,7 @@ async function stepMemoryStore() {
     : "";
 
   log(CHECK,
-    "Created .gitmem/ \u2014 your local memory store",
+    `Created ${storeName} \u2014 your local memory store`,
     `${starterScars.length} lessons from common mistakes included${mergeNote}`
   );
   return { done: true };
@@ -722,19 +728,14 @@ async function stepHooks() {
 async function stepHooksClaude() {
   const existing = readJson(cc.settingsFile);
   const hooks = existing?.hooks || {};
-  const hasGitmem = JSON.stringify(hooks).includes("gitmem");
+  const hasGitmem = hasGitmemHooks(hooks);
 
   if (hasGitmem) {
     log(CHECK, `Automatic memory hooks already configured`);
     return { done: false };
   }
 
-  let existingHookCount = 0;
-  for (const entries of Object.values(hooks)) {
-    if (Array.isArray(entries)) {
-      existingHookCount += entries.filter((e) => !isGitmemHook(e)).length;
-    }
-  }
+  const existingHookCount = countOtherHooks(hooks);
 
   // Existing hooks — prompt for merge
   if (existingHookCount > 0 || interactive) {
@@ -759,16 +760,9 @@ async function stepHooksClaude() {
     mkdirSync(cc.configDir, { recursive: true });
   }
 
-  const gitmemHooks = buildClaudeHooks();
-  const merged = { ...(settings.hooks || {}) };
-
-  for (const [eventType, gitmemEntries] of Object.entries(gitmemHooks)) {
-    const existingEntries = merged[eventType] || [];
-    const nonGitmem = existingEntries.filter((e) => !isGitmemHook(e));
-    merged[eventType] = [...nonGitmem, ...gitmemEntries];
-  }
-
-  settings.hooks = merged;
+  // GIT-120 merge: per event and per command; other hooks untouched.
+  settings.hooks = mergeGitmemHooks(settings.hooks, buildClaudeHooks()).hooks;
+  backupFile(cc.settingsFile);
   writeJson(cc.settingsFile, settings);
 
   const preserveNote = existingHookCount > 0
@@ -795,21 +789,14 @@ async function stepHooksCursor() {
   const hooksName = cc.hooksFileName;
 
   const existing = readJson(hooksPath);
-  const hasGitmem = existing ? JSON.stringify(existing).includes("gitmem") : false;
+  const hasGitmem = hasGitmemHooks(existing?.hooks);
 
   if (hasGitmem) {
     log(CHECK, `Automatic memory hooks already configured ${C.dim}(${hooksName})${C.reset}`);
     return { done: false };
   }
 
-  let existingHookCount = 0;
-  if (existing?.hooks) {
-    for (const entries of Object.values(existing.hooks)) {
-      if (Array.isArray(entries)) {
-        existingHookCount += entries.filter((e) => !isGitmemHook(e)).length;
-      }
-    }
-  }
+  const existingHookCount = countOtherHooks(existing?.hooks);
 
   if (existingHookCount > 0 || interactive) {
     const prompt = existingHookCount > 0
@@ -832,17 +819,9 @@ async function stepHooksCursor() {
     mkdirSync(cc.configDir, { recursive: true });
   }
 
-  const gitmemHooks = buildCursorHooks();
   const config = existing || {};
-  const merged = { ...(config.hooks || {}) };
-
-  for (const [eventType, gitmemEntries] of Object.entries(gitmemHooks)) {
-    const existingEntries = merged[eventType] || [];
-    const nonGitmem = existingEntries.filter((e) => !isGitmemHook(e));
-    merged[eventType] = [...nonGitmem, ...gitmemEntries];
-  }
-
-  config.hooks = merged;
+  config.hooks = mergeGitmemHooks(config.hooks, buildCursorHooks()).hooks;
+  backupFile(hooksPath);
   writeJson(hooksPath, config);
 
   const preserveNote = existingHookCount > 0
@@ -937,7 +916,8 @@ async function stepAgentsMd() {
 }
 
 async function stepFeedbackOptIn() {
-  const configPath = join(gitmemDir, "config.json");
+  // The server reads feedback_enabled from the store's config.json.
+  const configPath = join(storeDir, "config.json");
   const config = readJson(configPath) || {};
 
   // Already opted in — skip
@@ -950,7 +930,7 @@ async function stepFeedbackOptIn() {
   if (!interactive && autoYes) {
     log(CHECK,
       "Anonymous feedback sharing is off",
-      "Run with --interactive to enable, or set feedback_enabled in .gitmem/config.json"
+      `Run with --interactive to enable, or set feedback_enabled in ${storeName}/config.json`
     );
     return { done: false };
   }
@@ -964,7 +944,7 @@ async function stepFeedbackOptIn() {
   if (!accepted) {
     log(CHECK,
       "Anonymous feedback sharing is off",
-      "You can enable it later in .gitmem/config.json"
+      `You can enable it later in ${storeName}/config.json`
     );
     return { done: false };
   }
@@ -975,6 +955,7 @@ async function stepFeedbackOptIn() {
   }
 
   config.feedback_enabled = true;
+  mkdirSync(storeDir, { recursive: true });
   writeJson(configPath, config);
 
   log(CHECK,

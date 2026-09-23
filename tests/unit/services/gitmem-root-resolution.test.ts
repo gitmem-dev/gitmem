@@ -140,10 +140,38 @@ describe("GIT-91: isLiveGitmemRoot only counts real evidence", () => {
     vi.restoreAllMocks();
   });
 
-  it("counts a deliberate project-scoped install (config.json)", () => {
+  // GIT-115: a repo's .gitmem/ holds config.json (the project name) and the
+  // hook scripts on purpose; the store lives in the root the server reads.
+  it("does not count a repo .gitmem/ holding only config.json and hooks", () => {
+    const gitmem = path.join(tmp, ".gitmem");
+    fs.mkdirSync(path.join(gitmem, "hooks"), { recursive: true });
+    fs.writeFileSync(path.join(gitmem, "config.json"), JSON.stringify({ project: "x" }));
+    fs.writeFileSync(path.join(gitmem, "hooks", "session-start.sh"), "#!/bin/bash\n");
+
+    expect(isLiveGitmemRoot(gitmem)).toBe(false);
+  });
+
+  it("does not count what an older init seeded: starter lessons and the welcome thread", () => {
     const gitmem = path.join(tmp, ".gitmem");
     fs.mkdirSync(gitmem, { recursive: true });
-    fs.writeFileSync(path.join(gitmem, "config.json"), JSON.stringify({ project: "x" }));
+    const starters = JSON.parse(fs.readFileSync(path.join(__dirname, "../../../schema/starter-scars.json"), "utf-8"));
+    fs.writeFileSync(path.join(gitmem, "learnings.json"), JSON.stringify(starters));
+    fs.writeFileSync(path.join(gitmem, "threads.json"), JSON.stringify([{ id: "t-welcome01", text: "welcome" }]));
+    fs.writeFileSync(path.join(gitmem, "decisions.json"), "[]");
+    fs.writeFileSync(path.join(gitmem, "config.json"), "{}");
+
+    expect(isLiveGitmemRoot(gitmem)).toBe(false);
+  });
+
+  it.each([
+    ["a learning of the user's own", "learnings.json", [{ id: "user-learning-1", title: "mine" }]],
+    ["a thread of the user's own", "threads.json", [{ id: "t-abc12345", text: "mine" }]],
+    ["a decision", "decisions.json", [{ id: "d-1", title: "chose X" }]],
+    ["records in the {key: array} shape", "learnings.json", { learnings: [{ id: "user-learning-2" }] }],
+  ])("counts %s", (_label, file, content) => {
+    const gitmem = path.join(tmp, ".gitmem");
+    fs.mkdirSync(gitmem, { recursive: true });
+    fs.writeFileSync(path.join(gitmem, file), JSON.stringify(content));
 
     expect(isLiveGitmemRoot(gitmem)).toBe(true);
   });

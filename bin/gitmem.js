@@ -28,6 +28,7 @@ import {
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
+import { storeRoot, displayPath } from "./gitmem-root.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const command = process.argv[2];
@@ -42,7 +43,7 @@ Usage:
   npx gitmem-mcp init --dry-run    Show what would be configured
   npx gitmem-mcp init --client cursor   Set up for Cursor IDE
   npx gitmem-mcp uninstall         Clean removal of gitmem from project
-  npx gitmem-mcp uninstall --all   Also delete .gitmem/ data directory
+  npx gitmem-mcp uninstall --all   Also delete the memory store (~/.gitmem, shared by all projects)
 
 Pro Tier Activation:
   npx gitmem-mcp activate           Activate Pro tier (license key + credentials wizard)
@@ -115,25 +116,25 @@ async function cmdInit() {
   }
 
   if (!supabaseUrl || !supabaseKey) {
-    // Free tier: copy starter scars to local .gitmem/ directory
+    // Free tier: copy starter scars into the store the server reads (GIT-115).
     console.log("No Supabase credentials found — initializing free tier (local storage).");
     console.log("");
 
-    const gitmemDir = join(process.cwd(), ".gitmem");
+    const gitmemDir = storeRoot();
+    const storeName = displayPath(gitmemDir);
     if (!existsSync(gitmemDir)) {
       mkdirSync(gitmemDir, { recursive: true });
     }
 
-    // Write config.json (with project if specified via --project)
-    const configPath = join(gitmemDir, "config.json");
+    // The project name stays in the repo's .gitmem/config.json, where the
+    // SessionStart hook reads it.
+    const repoDir = join(process.cwd(), ".gitmem");
+    const configPath = join(repoDir, "config.json");
     if (!existsSync(configPath)) {
-      const config = {};
-      if (projectArg) config.project = projectArg;
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
       if (projectArg) {
+        mkdirSync(repoDir, { recursive: true });
+        writeFileSync(configPath, JSON.stringify({ project: projectArg }, null, 2));
         console.log(`  + Created .gitmem/config.json (project: "${projectArg}")`);
-      } else {
-        console.log("  + Created .gitmem/config.json");
       }
     } else if (projectArg) {
       // Config exists — update project field
@@ -205,7 +206,7 @@ async function cmdInit() {
     }
 
     console.log("");
-    console.log(`Done: ${added} new scars added to .gitmem/learnings.json`);
+    console.log(`Done: ${added} new scars added to ${storeName}/learnings.json`);
     console.log("");
     console.log("Add .gitmem/ to your .gitignore:");
     console.log("  echo '.gitmem/' >> .gitignore");

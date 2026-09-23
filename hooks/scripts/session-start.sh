@@ -191,9 +191,15 @@ if [ "$GITMEM_DETECTED" = "true" ]; then
     #
     # Read project from .gitmem/config.json if available.
     # Fallback: let session_start default (reads config.json server-side too).
+    # GIT-115: this is the repo's config.json, not the store's; it stays in the
+    # repo so each repo keeps its own project. node when jq is absent.
     GITMEM_PROJECT=""
-    if [ -f ".gitmem/config.json" ] && command -v jq &>/dev/null; then
-        GITMEM_PROJECT=$(jq -r '.project // empty' .gitmem/config.json 2>/dev/null || true)
+    if [ -f ".gitmem/config.json" ]; then
+        if command -v jq &>/dev/null; then
+            GITMEM_PROJECT=$(jq -r '.project // empty' .gitmem/config.json 2>/dev/null || true)
+        elif command -v node &>/dev/null; then
+            GITMEM_PROJECT=$(node -e "try{const p=JSON.parse(require('fs').readFileSync('.gitmem/config.json','utf8')).project;if(typeof p==='string')process.stdout.write(p)}catch(e){}" 2>/dev/null || true)
+        fi
     fi
 
     if [ -n "$GITMEM_PROJECT" ]; then

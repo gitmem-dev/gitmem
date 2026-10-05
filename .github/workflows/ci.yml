@@ -203,6 +203,10 @@ jobs:
     needs: [build, hooks-without-jq, hooks-macos, venue-gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    # A v* tag only queues the publish. The job waits here until a required
+    # reviewer approves the `npm-production` environment (Settings → Environments).
+    # 1.11.2 published straight from the tag because this was missing.
+    environment: npm-production
     permissions:
       contents: read
       packages: write

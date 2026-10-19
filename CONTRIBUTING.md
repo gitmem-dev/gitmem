@@ -14,9 +14,11 @@ Thanks for your interest in contributing to GitMem! This guide covers developmen
 ```bash
 git clone https://github.com/gitmem-dev/gitmem.git
 cd gitmem
-npm install
+npm install --legacy-peer-deps
 npm run build
 ```
+
+`--legacy-peer-deps` is required: `@anthropic-ai/claude-agent-sdk` (used only by the e2e tests) peers on zod 4 while the MCP SDK and this package use zod 3. CI uses the same flag.
 
 The `build` script compiles TypeScript and runs unit tests. If tests fail, the build fails.
 

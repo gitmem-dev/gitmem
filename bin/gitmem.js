@@ -52,7 +52,11 @@ Pro Tier Activation:
 
 Remote (Pro):
   npx gitmem-mcp --http            Serve over Streamable HTTP for claude.ai / mobile / cloud clients
-                                   Requires GITMEM_HTTP_TOKEN (bearer). Port: GITMEM_HTTP_PORT (3737)
+                                   Port: GITMEM_HTTP_PORT (3737)  Host: GITMEM_HTTP_HOST (127.0.0.1)
+    Bearer mode (dev / Claude Code --header):  GITMEM_HTTP_TOKEN=<secret>
+    OAuth mode (claude.ai connector):          GITMEM_OAUTH_ISSUER=https://<ref>.supabase.co/auth/v1
+                                               GITMEM_PUBLIC_URL=https://<your-host>
+                                               [GITMEM_OAUTH_AUDIENCE=authenticated] [GITMEM_OAUTH_JWT_SECRET=<legacy HS256>]
 
 Other commands:
   npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)

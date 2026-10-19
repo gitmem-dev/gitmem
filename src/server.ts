@@ -489,12 +489,17 @@ export async function runServer(options: { transport?: "stdio" | "http" } = {}):
   if (transportKind === "http") {
     // GIT-130 Phase 1: Streamable HTTP for surfaces that cannot spawn a process.
     const { startHttpServer } = await import("./transport/http.js");
+    const { oauthConfigFromEnv } = await import("./transport/oauth.js");
+    const path = process.env.GITMEM_HTTP_PATH || "/mcp";
+    const oauth = oauthConfigFromEnv(process.env, path);
     await startHttpServer({
       createServer,
-      token: process.env.GITMEM_HTTP_TOKEN,
+      auth: oauth
+        ? { mode: "oauth", config: oauth }
+        : { mode: "bearer", token: process.env.GITMEM_HTTP_TOKEN },
       port: Number(process.env.GITMEM_HTTP_PORT ?? process.env.PORT ?? 3737),
       host: process.env.GITMEM_HTTP_HOST,
-      path: process.env.GITMEM_HTTP_PATH,
+      path,
     });
   } else {
     const server = createServer();

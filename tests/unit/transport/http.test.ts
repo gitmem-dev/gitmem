@@ -38,7 +38,7 @@ describe("Streamable HTTP transport", () => {
   it("answers /healthz without auth", async () => {
     const res = await fetch(`${base}/healthz`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, transport: "streamable-http" });
+    expect(await res.json()).toEqual({ ok: true, transport: "streamable-http", auth: "bearer" });
   });
 
   it("returns 401 with WWW-Authenticate when the bearer is missing or wrong", async () => {

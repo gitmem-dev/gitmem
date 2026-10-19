@@ -26,12 +26,26 @@ import type { IncomingMessage, ServerResponse, Server as NodeHttpServer } from "
 import { timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
+import {
+  createTokenVerifier,
+  protectedResourceMetadata,
+  wwwAuthenticateChallenge,
+} from "./oauth.js";
+import type { OAuthConfig, TokenVerifier } from "./oauth.js";
+
+export type HttpAuth =
+  /** Static shared secret. Dev, CI, and Claude Code `--header` use. */
+  | { mode: "bearer"; token: string | undefined }
+  /** OAuth 2.1 resource server; Supabase Auth is the authorization server. */
+  | { mode: "oauth"; config: OAuthConfig };
 
 export interface HttpServerOptions {
   /** Factory for a configured MCP server; called once per request (stateless mode). */
   createServer: () => McpServer;
-  /** Bearer token clients must present. Empty/undefined refuses to start. */
-  token: string | undefined;
+  /** How clients authenticate. `token` (below) is shorthand for bearer mode. */
+  auth?: HttpAuth;
+  /** Bearer token clients must present. Shorthand for `auth: { mode: "bearer", token }`. */
+  token?: string | undefined;
   /** Port to listen on. 0 picks a free port (tests). */
   port: number;
   /** Interface to bind. Default 127.0.0.1; set 0.0.0.0 behind a reverse proxy. */
@@ -44,8 +58,11 @@ export interface RunningHttpServer {
   port: number;
   host: string;
   path: string;
+  authMode: "bearer" | "oauth";
   close: () => Promise<void>;
 }
+
+const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 
 const MIN_TOKEN_LENGTH = 24;
 
@@ -76,13 +93,31 @@ function json(res: ServerResponse, status: number, body: unknown, extraHeaders: 
 export async function startHttpServer(opts: HttpServerOptions): Promise<RunningHttpServer> {
   const host = opts.host ?? "127.0.0.1";
   const path = opts.path ?? "/mcp";
-  const token = opts.token?.trim();
+  const auth: HttpAuth = opts.auth ?? { mode: "bearer", token: opts.token };
 
-  if (!token || token.length < MIN_TOKEN_LENGTH) {
-    throw new Error(
-      `GITMEM_HTTP_TOKEN must be set to at least ${MIN_TOKEN_LENGTH} characters to run the HTTP transport. ` +
-        `Generate one with: openssl rand -base64 32`
-    );
+  // Resolve the authenticator once, up front, so misconfiguration fails at start.
+  let authenticate: (req: IncomingMessage) => Promise<boolean>;
+  let challenge: string;
+
+  if (auth.mode === "bearer") {
+    const token = auth.token?.trim();
+    if (!token || token.length < MIN_TOKEN_LENGTH) {
+      throw new Error(
+        `GITMEM_HTTP_TOKEN must be set to at least ${MIN_TOKEN_LENGTH} characters to run the HTTP transport ` +
+          `(or set GITMEM_OAUTH_ISSUER for OAuth mode). Generate one with: openssl rand -base64 32`
+      );
+    }
+    challenge = 'Bearer realm="gitmem"';
+    authenticate = async (req) => tokenMatches(bearerFrom(req), token);
+  } else {
+    const cfg: OAuthConfig = { ...auth.config, mcpPath: auth.config.mcpPath || path };
+    const verifier: TokenVerifier = createTokenVerifier(cfg);
+    challenge = wwwAuthenticateChallenge(cfg);
+    authenticate = async (req) => {
+      const presented = bearerFrom(req);
+      if (!presented) return false;
+      return (await verifier.verify(presented)) !== null;
+    };
   }
 
   const httpServer: NodeHttpServer = createHttpServer(async (req, res) => {
@@ -91,7 +126,14 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<RunningH
 
       // Unauthenticated liveness probe for load balancers / uptime checks.
       if (url.pathname === "/healthz" && req.method === "GET") {
-        json(res, 200, { ok: true, transport: "streamable-http" });
+        json(res, 200, { ok: true, transport: "streamable-http", auth: auth.mode });
+        return;
+      }
+
+      // RFC 9728: unauthenticated discovery document (OAuth mode only).
+      if (auth.mode === "oauth" && req.method === "GET" &&
+          (url.pathname === PROTECTED_RESOURCE_PATH || url.pathname === `${PROTECTED_RESOURCE_PATH}${path}`)) {
+        json(res, 200, protectedResourceMetadata({ ...auth.config, mcpPath: auth.config.mcpPath || path }));
         return;
       }
 
@@ -100,8 +142,8 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<RunningH
         return;
       }
 
-      if (!tokenMatches(bearerFrom(req), token)) {
-        json(res, 401, { error: "unauthorized" }, { "www-authenticate": 'Bearer realm="gitmem"' });
+      if (!(await authenticate(req))) {
+        json(res, 401, { error: "unauthorized" }, { "www-authenticate": challenge });
         return;
       }
 
@@ -141,12 +183,13 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<RunningH
   const address = httpServer.address();
   const port = typeof address === "object" && address ? address.port : opts.port;
 
-  console.error(`[gitmem:http] listening on http://${host}:${port}${path}`);
+  console.error(`[gitmem:http] listening on http://${host}:${port}${path} | auth: ${auth.mode}`);
 
   return {
     port,
     host,
     path,
+    authMode: auth.mode,
     close: () =>
       new Promise<void>((resolve, reject) => {
         httpServer.close((err) => (err ? reject(err) : resolve()));

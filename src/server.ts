@@ -472,7 +472,8 @@ export function createServer(): Server {
 }
 
 /**
- * Run the server with stdio transport
+ * Run the server with stdio transport (default) or Streamable HTTP
+ * (`--http` / GITMEM_TRANSPORT=http; see transport/http.ts).
  *
  * Initializes local vector search in background for fast startup.
  * Uses direct Supabase queries to get embeddings for local cache.
@@ -480,17 +481,35 @@ export function createServer(): Server {
  * Server starts immediately; cache loads in background.
  * First few queries may use Supabase fallback until cache is ready.
  */
-export async function runServer(): Promise<void> {
+export async function runServer(options: { transport?: "stdio" | "http" } = {}): Promise<void> {
   const tier = getTier();
+  const transportKind = options.transport ?? (process.env.GITMEM_TRANSPORT === "http" ? "http" : "stdio");
 
   // Start server immediately (don't block on cache loading or license validation)
-  const server = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  if (transportKind === "http") {
+    // GIT-130 Phase 1: Streamable HTTP for surfaces that cannot spawn a process.
+    const { startHttpServer } = await import("./transport/http.js");
+    const { oauthConfigFromEnv } = await import("./transport/oauth.js");
+    const path = process.env.GITMEM_HTTP_PATH || "/mcp";
+    const oauth = oauthConfigFromEnv(process.env, path);
+    await startHttpServer({
+      createServer,
+      auth: oauth
+        ? { mode: "oauth", config: oauth }
+        : { mode: "bearer", token: process.env.GITMEM_HTTP_TOKEN },
+      port: Number(process.env.GITMEM_HTTP_PORT ?? process.env.PORT ?? 3737),
+      host: process.env.GITMEM_HTTP_HOST,
+      path,
+    });
+  } else {
+    const server = createServer();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 
   const toolCount = getRegisteredTools().length;
   const storage = hasSupabase() ? "supabase" : "local";
-  console.error(`[gitmem] Tier: ${tier} | Storage: ${storage} | Tools: ${toolCount}`);
+  console.error(`[gitmem] Tier: ${tier} | Storage: ${storage} | Tools: ${toolCount} | Transport: ${transportKind}`);
 
   // Async license validation (non-blocking)
   const apiKey = getLicenseKey();

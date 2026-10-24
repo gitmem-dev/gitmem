@@ -113,12 +113,21 @@ gitmem_hook_client_pid() {
         echo "$GITMEM_CLIENT_PID"
         return 0
     fi
-    command -v ps >/dev/null 2>&1 || return 0
-    local pid="$PPID" line ppid cmd name depth=0
+    local pid="$PPID" line stat ppid cmd name depth=0
     while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 12 ]; do
-        line=$(ps -o ppid=,command= -p "$pid" 2>/dev/null) || return 0
-        [ -n "$line" ] || return 0
-        read -r ppid cmd <<< "$line"
+        if [ -r "/proc/$pid/stat" ]; then
+            # Linux, ps not required: ppid is the 2nd field after the "(comm)".
+            stat=$(cat "/proc/$pid/stat" 2>/dev/null) || return 0
+            stat="${stat##*) }"
+            read -r _ ppid _ <<< "$stat"
+            cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+        elif command -v ps >/dev/null 2>&1; then
+            line=$(ps -o ppid=,command= -p "$pid" 2>/dev/null) || return 0
+            [ -n "$line" ] || return 0
+            read -r ppid cmd <<< "$line"
+        else
+            return 0
+        fi
         name="${cmd%% *}"
         name="${name##*/}"
         name="${name#-}"

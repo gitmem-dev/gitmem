@@ -393,6 +393,22 @@ export interface SurfacedScar {
   surfaced_at: string; // ISO timestamp
   source: "session_start" | "recall";
   variant_id?: string; // UUID of assigned variant from scar_enforcement_variants
+  writer?: WriterIdentity; // GIT-128: which process recorded the surfacing
+}
+
+/**
+ * GIT-128: who wrote an entry into a session, and who owns a session.
+ *
+ * server_pid is the gitmem server process; client_pid is the process that
+ * launched it (Claude Code, the desktop app, Cursor), found by skipping the
+ * npx/npm wrappers in between. A server restart changes server_pid and keeps
+ * client_pid, which is how a restart is told apart from another client.
+ */
+export interface WriterIdentity {
+  agent: AgentIdentity;
+  server_pid: number;
+  client_pid: number | null;
+  client?: string; // MCP clientInfo name/version, when the client sent one
 }
 
 // Scar confirmation decisions (refute-or-obey protocol for CLI)
@@ -408,6 +424,7 @@ export interface ScarConfirmation {
   evidence: string;
   confirmed_at: string; // ISO timestamp
   relevance?: ScarRelevance; // Optional relevance rating
+  writer?: WriterIdentity; // GIT-128: which process recorded the confirmation
 }
 
 export interface ConfirmScarsParams {
@@ -643,8 +660,9 @@ export interface ActiveSessionEntry {
   agent: AgentIdentity;
   started_at: string; // ISO-8601
   hostname: string; // os.hostname()
-  pid: number; // process.pid
+  pid: number; // process.pid of the server that serves the session
   project: Project;
+  client_pid?: number; // GIT-128: the client that launched that server (hooks match on it)
 }
 
 /** The shape of .gitmem/active-sessions.json on disk */

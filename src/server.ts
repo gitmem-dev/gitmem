@@ -98,6 +98,7 @@ import type {
 import type { RecallParams } from "./tools/recall.js";
 import type { SearchParams } from "./tools/search.js";
 import type { LogParams } from "./tools/log.js";
+import { setClientInfo } from "./services/process-identity.js";
 
 /**
  * Create and configure the MCP server
@@ -114,6 +115,9 @@ export function createServer(): Server {
       },
     }
   );
+
+  // GIT-128: name the client in the writer identity stamped on session entries.
+  server.oninitialized = () => setClientInfo(server.getClientVersion());
 
   // Register list tools handler (tier-gated)
   const registeredTools = getRegisteredTools();

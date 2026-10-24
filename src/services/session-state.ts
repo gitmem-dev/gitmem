@@ -13,9 +13,12 @@
  */
 
 import fs from "fs";
-import type { SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
-import { getSessionPath } from "./gitmem-dir.js";
+import path from "path";
+import type { AgentIdentity, SurfacedScar, ScarConfirmation, ScarReflection, Observation, SessionChild, ThreadObject } from "../types/index.js";
+import { getSessionPath, getGitmemDir, sanitizePathComponent } from "./gitmem-dir.js";
 import { findResumableSessionOnDisk, listActiveSessions, getRegistryFingerprint } from "./active-sessions.js";
+import { withLockSync } from "./file-lock.js";
+import { getWriterIdentity } from "./process-identity.js";
 
 interface SessionContext {
   sessionId: string;
@@ -79,11 +82,15 @@ let lastFailedRecoveryFingerprint: number | null | undefined = undefined;
  * Called by session_start
  */
 export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' | 'surfacedScars' | 'confirmations' | 'reflections' | 'observations' | 'children' | 'threads' | 'feedbackSubmitCount'> & { surfacedScars?: SurfacedScar[]; confirmations?: ScarConfirmation[]; observations?: Observation[]; children?: SessionChild[]; threads?: ThreadObject[] }): void {
+  // GIT-128: what the session file already holds is part of the session. A
+  // resume, refresh or restart used to start from whatever the caller passed,
+  // and the next write replaced the file's confirmations with that.
+  const onDisk = readOwnSessionFile(context.sessionId);
   currentSession = {
     ...context,
     recallCalled: false,
-    surfacedScars: context.surfacedScars || [],
-    confirmations: context.confirmations || [],
+    surfacedScars: mergeSurfaced(onDisk?.surfaced_scars, context.surfacedScars),
+    confirmations: mergeConfirmations(onDisk?.confirmations, context.confirmations),
     reflections: [],
     observations: context.observations || [],
     children: context.children || [],
@@ -92,6 +99,95 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
   };
   recoveryAttempted = false;
   console.error(`[session-state] Active session set: ${context.sessionId}${context.linearIssue ? ` (issue: ${context.linearIssue})` : ''}`);
+}
+
+// --- GIT-128: append-only session file writes, by the session's own server ---
+
+/** session.json's path without creating the session directory as a side effect. */
+function existingSessionFile(sessionId: string): string | null {
+  try {
+    sanitizePathComponent(sessionId, "sessionId");
+    const p = path.join(getGitmemDir(), "sessions", sessionId, "session.json");
+    return fs.existsSync(p) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+function readOwnSessionFile(sessionId: string): { surfaced_scars?: unknown; confirmations?: unknown } | null {
+  try {
+    const p = existingSessionFile(sessionId);
+    if (!p) return null;
+    const data = JSON.parse(fs.readFileSync(p, "utf-8"));
+    return data?.session_id === sessionId ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Existing entries first and untouched; new scar ids appended. */
+function mergeSurfaced(existing: unknown, added: SurfacedScar[] | undefined): SurfacedScar[] {
+  const out: SurfacedScar[] = Array.isArray(existing) ? [...existing] : [];
+  for (const scar of added || []) {
+    if (!out.some((s) => s.scar_id === scar.scar_id)) out.push(scar);
+  }
+  return out;
+}
+
+const confirmationKey = (c: ScarConfirmation) => `${c.scar_id}|${c.confirmed_at}|${c.writer?.server_pid ?? ""}`;
+
+/** Union of two confirmation logs. Nothing is replaced; a re-confirmation is a new entry. */
+function mergeConfirmations(existing: unknown, added: ScarConfirmation[] | undefined): ScarConfirmation[] {
+  const out: ScarConfirmation[] = Array.isArray(existing) ? [...existing] : [];
+  const seen = new Set(out.map(confirmationKey));
+  for (const conf of added || []) {
+    if (!seen.has(confirmationKey(conf))) {
+      out.push(conf);
+      seen.add(confirmationKey(conf));
+    }
+  }
+  return out;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Read-modify-write session.json under a per-session lock, only while this
+ * process serves the session.
+ *
+ * If session.json names another live server, that server owns the session
+ * now and this process must not write into it; the caller is told so instead
+ * of the write being dropped or, worse, landing in someone else's session.
+ */
+function updateOwnSessionFile(
+  sessionId: string,
+  mutate: (data: Record<string, unknown>) => void,
+): { ok: true } | { ok: false; reason: string } {
+  try {
+    const sessionFilePath = existingSessionFile(sessionId);
+    if (!sessionFilePath) return { ok: true }; // nothing on disk to keep in step
+    return withLockSync(path.join(path.dirname(sessionFilePath), "session.lock"), () => {
+      const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
+      const filePid = typeof data.pid === "number" ? data.pid : null;
+      if (filePid !== null && filePid !== process.pid && isPidAlive(filePid)) {
+        return { ok: false as const, reason: `session ${sessionId.slice(0, 8)} is served by another gitmem process (pid ${filePid})` };
+      }
+      mutate(data);
+      const tmp = `${sessionFilePath}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, sessionFilePath);
+      return { ok: true as const };
+    });
+  } catch (error) {
+    return { ok: false, reason: `could not write session file: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 /**
@@ -166,6 +262,8 @@ function recoverSessionFromDisk(): SessionContext | null {
       project: data.project ?? entry.project,
       startedAt: data.started_at ? new Date(data.started_at) : new Date(entry.started_at),
       surfacedScars: Array.isArray(data.surfaced_scars) ? data.surfaced_scars : [],
+      // GIT-128: confirmations survive the restart too; confirm_scars credits them.
+      confirmations: Array.isArray(data.confirmations) ? data.confirmations : [],
       threads: Array.isArray(data.threads) ? data.threads : [],
       recoveryConflict,
     });
@@ -381,15 +479,19 @@ export function addSurfacedScars(scars: SurfacedScar[]): boolean {
     return false;
   }
 
-  for (const scar of scars) {
-    const exists = session.surfacedScars.some(s => s.scar_id === scar.scar_id);
-    if (!exists) {
-      session.surfacedScars.push(scar);
-    }
+  // GIT-128: refuse before tracking anything if another live server owns the
+  // session — tracking in memory alone would show this agent scars its gate
+  // never sees.
+  const writer = getWriterIdentity((session.agent as AgentIdentity) || "Unknown");
+  const stamped = scars.map((s) => (s.writer ? s : { ...s, writer }));
+  const persisted = persistSurfacedScars(session, stamped);
+  if (!persisted.ok) {
+    console.warn(`[session-state] Surfaced scars not tracked: ${persisted.reason}`);
+    return false;
   }
 
+  session.surfacedScars = mergeSurfaced(session.surfacedScars, stamped);
   console.error(`[session-state] Surfaced scars tracked: ${session.surfacedScars.length} total`);
-  persistSurfacedScars(session);
   return true;
 }
 
@@ -400,18 +502,14 @@ export function addSurfacedScars(scars: SurfacedScar[]): boolean {
  * an MCP restart between recall and confirm_scars loses it, and the identity
  * break turns into a tracking break. Centralised here so there is exactly one
  * writer — callers previously did this inline and only on their own success path.
+ *
+ * GIT-128: appends to what the file holds rather than replacing it with this
+ * process's in-memory list, and only while this process serves the session.
  */
-function persistSurfacedScars(session: SessionContext): void {
-  try {
-    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
-    if (!fs.existsSync(sessionFilePath)) return;
-    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf-8"));
-    data.surfaced_scars = session.surfacedScars;
-    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
-  } catch (error) {
-    // Non-fatal: scars remain tracked in memory for this process.
-    console.warn("[session-state] Failed to persist surfaced scars:", error);
-  }
+function persistSurfacedScars(session: SessionContext, added: SurfacedScar[]): { ok: true } | { ok: false; reason: string } {
+  return updateOwnSessionFile(session.sessionId, (data) => {
+    data.surfaced_scars = mergeSurfaced(data.surfaced_scars, mergeSurfaced(session.surfacedScars, added));
+  });
 }
 
 /**
@@ -456,30 +554,50 @@ export function getSurfacedScars(): SurfacedScar[] {
 /**
  * Add scar confirmations (refute-or-obey) to the current session.
  * Called by confirm_scars tool after validation.
+ *
+ * GIT-128: append-only, in memory and in session.json, each entry stamped with
+ * its writer. This used to replace by scar_id in memory and write only the
+ * latest batch to the file, so a second confirm_scars call — from this agent
+ * or from another client attached to the same file — erased the first.
+ * Returns why the confirmations could not be recorded, or null on success.
  */
-export function addConfirmations(confirmations: ScarConfirmation[]): void {
-  if (!currentSession) {
+export function addConfirmations(confirmations: ScarConfirmation[]): string | null {
+  const session = resolveCurrentSession();
+  if (!session) {
     console.warn("[session-state] Cannot add confirmations: no active session");
-    return;
+    return "no active session";
   }
 
-  for (const conf of confirmations) {
-    // Replace existing confirmation for same scar_id (allow re-confirmation)
-    const idx = currentSession.confirmations.findIndex(c => c.scar_id === conf.scar_id);
-    if (idx >= 0) {
-      currentSession.confirmations[idx] = conf;
-    } else {
-      currentSession.confirmations.push(conf);
-    }
+  const writer = getWriterIdentity((session.agent as AgentIdentity) || "Unknown");
+  const stamped = confirmations.map((c) => (c.writer ? c : { ...c, writer }));
+  const persisted = updateOwnSessionFile(session.sessionId, (data) => {
+    data.confirmations = mergeConfirmations(data.confirmations, stamped);
+    data.surfaced_scars = mergeSurfaced(data.surfaced_scars, session.surfacedScars);
+  });
+  if (!persisted.ok) {
+    console.warn(`[session-state] Confirmations not recorded: ${persisted.reason}`);
+    return persisted.reason;
   }
 
-  console.error(`[session-state] Confirmations tracked: ${currentSession.confirmations.length} total`);
+  session.confirmations = mergeConfirmations(session.confirmations, stamped);
+  console.error(`[session-state] Confirmations tracked: ${session.confirmations.length} entries`);
+  return null;
 }
 
 /**
- * Get all scar confirmations for the current session.
+ * The current confirmation for each scar: the latest entry per scar_id.
+ * The full history is getConfirmationLog().
  */
 export function getConfirmations(): ScarConfirmation[] {
+  const latest = new Map<string, ScarConfirmation>();
+  for (const conf of currentSession?.confirmations || []) {
+    latest.set(conf.scar_id, conf);
+  }
+  return [...latest.values()];
+}
+
+/** GIT-128: every confirmation recorded in this session, oldest first. */
+export function getConfirmationLog(): ScarConfirmation[] {
   return currentSession?.confirmations || [];
 }
 

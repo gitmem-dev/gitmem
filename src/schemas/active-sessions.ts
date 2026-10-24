@@ -14,6 +14,8 @@ export const ActiveSessionEntrySchema = z.object({
   hostname: z.string(),
   pid: z.number().int().nonnegative(),
   project: ProjectSchema,
+  // GIT-128: optional so registries written by older servers still parse.
+  client_pid: z.number().int().positive().optional(),
 });
 
 export const ActiveSessionsRegistrySchema = z.object({

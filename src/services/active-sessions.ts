@@ -18,6 +18,7 @@ import { getGitmemDir, getSessionPath, sanitizePathComponent } from "./gitmem-di
 import { ActiveSessionsRegistrySchema } from "../schemas/active-sessions.js";
 import type { ActiveSessionEntry, ActiveSessionsRegistry, AgentIdentity } from "../types/index.js";
 import { withLockSync } from "./file-lock.js";
+import { canAdoptSession } from "./process-identity.js";
 
 const REGISTRY_FILENAME = "active-sessions.json";
 const LOCK_FILENAME = "active-sessions.lock";
@@ -299,7 +300,7 @@ export function findResumableSessionOnDisk(project?: string): ActiveSessionEntry
   }
 
   const now = Date.now();
-  const candidates: { entry: ActiveSessionEntry; pidAlive: boolean }[] = [];
+  const candidates: { entry: ActiveSessionEntry; pidAlive: boolean; adoptable: boolean }[] = [];
 
   for (const dirName of dirNames) {
     const sessionFile = path.join(sessionsDir, dirName, "session.json");
@@ -329,6 +330,7 @@ export function findResumableSessionOnDisk(project?: string): ActiveSessionEntry
     if (project !== undefined && sessionProject !== project) continue;
 
     const pid = typeof data.pid === "number" ? data.pid : -1;
+    const ownerClient = (data.owner as { client_pid?: unknown } | undefined)?.client_pid;
     candidates.push({
       entry: {
         session_id: data.session_id,
@@ -337,8 +339,10 @@ export function findResumableSessionOnDisk(project?: string): ActiveSessionEntry
         hostname: currentHostname,
         pid,
         project: sessionProject,
+        ...(typeof ownerClient === "number" && ownerClient > 1 && { client_pid: ownerClient }),
       },
       pidAlive: pid > 0 && pid !== currentPid && isPidAlive(pid),
+      adoptable: canAdoptSession(data.owner),
     });
   }
 
@@ -356,7 +360,13 @@ export function findResumableSessionOnDisk(project?: string): ActiveSessionEntry
 
   // 2. Orphaned by a restart. Adopt at most one — rebinding every dead-PID
   //    session would leave several rows sharing hostname+pid+project.
-  const orphaned = candidates.filter((c) => !c.pidAlive).sort(newestFirst)[0];
+  //
+  //    GIT-128: and only one this process's client owns. A dead server pid
+  //    means "restarted" only to the client that launched it; to any other
+  //    client on the machine it is someone else's session, and adopting it is
+  //    how the desktop server took over a CLI session and overwrote its
+  //    confirmations.
+  const orphaned = candidates.filter((c) => !c.pidAlive && c.adoptable).sort(newestFirst)[0];
   if (!orphaned) return null;
 
   const rebound: ActiveSessionEntry = { ...orphaned.entry, pid: currentPid };
@@ -383,6 +393,10 @@ function persistSessionPid(sessionId: string, pid: number): void {
     const sessionFile = path.join(getGitmemDir(), "sessions", sessionId, "session.json");
     const data = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
     data.pid = pid;
+    // GIT-128: the same client now serves it from a new process.
+    if (data.owner && typeof data.owner === "object") {
+      data.owner = { ...data.owner, server_pid: pid };
+    }
     atomicWriteFileSync(sessionFile, JSON.stringify(data, null, 2));
   } catch (error) {
     // Non-fatal: identity is resolved either way, the next scan just re-adopts.

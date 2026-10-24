@@ -39,6 +39,7 @@ import type { ThreadScopeCounts } from "../services/thread-scope.js";
 import type { ThreadDisplayInfo } from "../services/thread-supabase.js";
 import { setGitmemDir, getGitmemDir, getSessionPath, getConfigProject, findStrandedProjectRoots, describeGitmemRoot } from "../services/gitmem-dir.js";
 import { registerSession, findSessionByHostPid, findResumableSessionOnDisk, pruneStale, migrateFromLegacy } from "../services/active-sessions.js";
+import { getWriterIdentity, getClientPid } from "../services/process-identity.js";
 import * as os from "os";
 import { formatDate } from "../services/timezone.js";
 import { productLine, dimText, boldText } from "../services/display-protocol.js";
@@ -805,18 +806,32 @@ function writeSessionFiles(
   // session.json wholesale, so a refresh would otherwise clear the flag and
   // enforcement would warn that recall never ran in a session where it had.
   let effectiveRecallCalled = false;
-  if (isRefresh || startedAt) {
-    // On refresh or resume, try to read the existing state from the session file
-    try {
-      const existingPath = getSessionPath(sessionId, "session.json");
-      if (fs.existsSync(existingPath)) {
-        const existing = JSON.parse(fs.readFileSync(existingPath, "utf-8"));
-        if (existing.started_at) {
-          effectiveStartedAt = existing.started_at;
+  // GIT-128: this write replaces session.json wholesale, so on resume/refresh
+  // it carried only what the caller passed — confirmations were dropped and
+  // surfaced scars reset. Both are append-only session history; keep them.
+  let existingSurfaced: SurfacedScar[] = [];
+  let existingConfirmations: ScarConfirmation[] = [];
+  try {
+    const existingPath = getSessionPath(sessionId, "session.json");
+    if (fs.existsSync(existingPath)) {
+      const existing = JSON.parse(fs.readFileSync(existingPath, "utf-8"));
+      if (existing.session_id === sessionId) {
+        if (Array.isArray(existing.surfaced_scars)) existingSurfaced = existing.surfaced_scars;
+        if (Array.isArray(existing.confirmations)) existingConfirmations = existing.confirmations;
+        if (isRefresh || startedAt) {
+          // On refresh or resume, keep the original start and recall flag
+          if (existing.started_at) {
+            effectiveStartedAt = existing.started_at;
+          }
+          effectiveRecallCalled = existing.recall_called === true;
         }
-        effectiveRecallCalled = existing.recall_called === true;
       }
-    } catch { /* use calculated values */ }
+    }
+  } catch { /* use calculated values */ }
+
+  const mergedSurfaced = [...existingSurfaced];
+  for (const scar of surfacedScars) {
+    if (!mergedSurfaced.some((s) => s.scar_id === scar.scar_id)) mergedSurfaced.push(scar);
   }
 
   const data = {
@@ -826,8 +841,12 @@ function writeSessionFiles(
     project,
     hostname: os.hostname(),
     pid: process.pid,
+    // GIT-128: the client whose server serves this session. Only that client
+    // may adopt it after its server dies; hooks find their session by it.
+    owner: getWriterIdentity(agent),
     gitmem_dir: gitmemDir,
-    surfaced_scars: surfacedScars,
+    surfaced_scars: mergedSurfaced,
+    confirmations: existingConfirmations,
     recall_called: effectiveRecallCalled,
     threads,
     ...(recordingPath && { recording_path: recordingPath }),
@@ -847,6 +866,7 @@ function writeSessionFiles(
 
   // 3. Register in active-sessions registry (skip on refresh — already registered)
   if (!isRefresh) {
+    const clientPid = getClientPid();
     const displaced = registerSession({
       session_id: sessionId,
       agent,
@@ -854,6 +874,7 @@ function writeSessionFiles(
       hostname: os.hostname(),
       pid: process.pid,
       project,
+      ...(clientPid && { client_pid: clientPid }),
     });
     // Mark displaced sessions as superseded in Supabase (fire-and-forget)
     for (const oldId of displaced) {

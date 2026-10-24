@@ -24,7 +24,6 @@ import {
   getRecallFailure,
 } from "../services/session-state.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
-import { getSessionPath } from "../services/gitmem-dir.js";
 import { wrapDisplay, productLine, STATUS, ANSI } from "../services/display-protocol.js";
 import type {
   ConfirmScarsParams,
@@ -34,8 +33,6 @@ import type {
   SurfacedScar,
   PerformanceData,
 } from "../types/index.js";
-import * as fs from "fs";
-import * as path from "path";
 
 // Minimum evidence length per decision type
 const MIN_EVIDENCE_LENGTH = 50;
@@ -132,30 +129,6 @@ function formatResponse(
   }
 
   return lines.join("\n");
-}
-
-/**
- * Update per-session dir with confirmation data.
- */
-function persistConfirmationsToFile(confirmations: ScarConfirmation[]): void {
-  try {
-    const session = getCurrentSession();
-    if (!session) return;
-
-    const sessionFilePath = getSessionPath(session.sessionId, "session.json");
-    if (!fs.existsSync(sessionFilePath)) return;
-
-    const data = JSON.parse(fs.readFileSync(sessionFilePath, "utf8"));
-    data.confirmations = confirmations;
-    // Also persist surfaced_scars so they survive MCP restart for reflect_scars
-    if (session.surfacedScars && session.surfacedScars.length > 0) {
-      data.surfaced_scars = session.surfacedScars;
-    }
-    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2));
-    console.error(`[confirm_scars] Confirmations persisted to ${sessionFilePath}`);
-  } catch (error) {
-    console.warn("[confirm_scars] Failed to persist confirmations to file:", error);
-  }
 }
 
 /**
@@ -303,13 +276,17 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
     }
   }
 
-  const valid = errors.length === 0 && missingScars.length === 0;
-
-  // If valid, persist to session state and file
-  if (valid) {
-    addConfirmations(validConfirmations);
-    persistConfirmationsToFile(validConfirmations);
+  // If valid, persist to session state and file. GIT-128: appended, never
+  // replacing earlier confirmations, and refused when another process now
+  // serves this session — an ACCEPTED that did not persist is the failure the
+  // ticket was opened on.
+  if (errors.length === 0 && missingScars.length === 0) {
+    const notRecorded = addConfirmations(validConfirmations);
+    if (notRecorded) {
+      errors.push(`Confirmations were not recorded: ${notRecorded}. Nothing was unblocked.`);
+    }
   }
+  const valid = errors.length === 0 && missingScars.length === 0;
 
   const performance = buildPerformanceData("confirm_scars", timer.elapsed(), validConfirmations.length);
   const formatted_response = formatResponse(valid, validConfirmations, errors, missingScars);

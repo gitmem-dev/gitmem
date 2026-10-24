@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Two agents on one machine no longer share a session.** If you ran Claude Code next to Claude
+Desktop (or Brain through the desktop bridge) against the same gitmem store, one agent's
+`confirm_scars` could open the other's push gate, and could replace confirmations the other had
+already made. Now:
+
+- A session belongs to the app that started it. Another app's gitmem server will not take it over,
+  even after the first one's server restarts. The app that owns it still picks it up again after a
+  restart.
+- Confirmations and surfaced scars are only ever added, never replaced. Each entry records which
+  agent, server and app wrote it.
+- The push gate checks your own session, scar by scar. A scar from a new `recall` holds the gate
+  until you confirm it.
+- `confirm_scars` no longer says ACCEPTED when its write did not land.
+
+Nothing to change on your database. For the full fix, update every gitmem install on the machine:
+an older server still ignores who owns a session. Thank you to everyone running more than one
+agent at a time. Your reports showed us this. (GIT-128)
+
 ## [1.11.2] - 2026-10-04
 
 **Just upgrade the package. Nothing to change on your database.** No schema change; setup.sql is

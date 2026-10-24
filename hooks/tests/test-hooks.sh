@@ -834,6 +834,91 @@ echo "$OUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{p
     || fail "credential-guard JSON" "valid JSON, decision block" "$OUT"
 
 # ============================================================================
+# TEST GROUP: one machine, two clients (GIT-128)
+# ============================================================================
+
+echo ""
+echo -e "${YELLOW}=== Two clients, one store (GIT-128) ===${NC}"
+
+HOST_NOW="${HOSTNAME:-$(hostname)}"
+SCAR_A='{"scar_id":"aaaa1111","scar_title":"Scar A","scar_severity":"high","surfaced_at":"2026-01-01T00:00:00Z","source":"recall"}'
+SCAR_A2='{"scar_id":"aaaa2222","scar_title":"Scar A2","scar_severity":"high","surfaced_at":"2026-01-01T00:01:00Z","source":"recall"}'
+SCAR_B='{"scar_id":"bbbb1111","scar_title":"Scar B","scar_severity":"high","surfaced_at":"2026-01-01T00:00:00Z","source":"recall"}'
+CONF_A='{"scar_id":"aaaa1111","decision":"N_A","evidence":"x"}'
+CONF_B='{"scar_id":"bbbb1111","decision":"N_A","evidence":"x"}'
+PUSH='{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
+
+# Two live sessions (server pid = this shell, alive): A owned by client 1111,
+# B owned by client 2222 and started later, so B is the newest.
+two_client_registry() {
+    remove_session_registry
+    mkdir -p "$TMPDIR/.gitmem"
+    cat > "$TMPDIR/.gitmem/active-sessions.json" <<REG
+{"sessions":[
+ {"session_id":"sess-a","started_at":"2026-01-01T00:00:00Z","hostname":"$HOST_NOW","pid":$$,"client_pid":1111},
+ {"session_id":"sess-b","started_at":"2026-01-01T00:05:00Z","hostname":"$HOST_NOW","pid":$$,"client_pid":2222}
+]}
+REG
+}
+
+setup_state 0 0
+two_client_registry
+create_session_data "sess-a" "[$SCAR_A]" "[]"
+create_session_data "sess-b" "[$SCAR_B]" "[$CONF_B]"
+OUT=$(echo "$PUSH" | GITMEM_CLIENT_PID=1111 bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+echo "$OUT" | grep -q '"decision": "block"' && echo "$OUT" | grep -q "Scar A" \
+    && pass "A unconfirmed, B (newer session) confirmed its own → A's push still blocked" \
+    || fail "A's gate survives B's confirmations" "block naming Scar A" "$OUT"
+
+OUT=$(echo "$PUSH" | GITMEM_CLIENT_PID=2222 bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+[ -z "$OUT" ] && pass "B's gate reads only B's session (confirmed) → not blocked by A's scars" \
+    || fail "B's gate reads B's session" "empty output" "$OUT"
+
+OUT=$(echo "$PUSH" | GITMEM_CLIENT_PID=3333 bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+[ -z "$OUT" ] && pass "a client with no session of its own is not gated by other clients' sessions" \
+    || fail "no own session" "empty output" "$OUT"
+
+# Per scar: one confirmation no longer opens the gate for a later recall's scar.
+setup_state 0 0
+two_client_registry
+create_session_data "sess-a" "[$SCAR_A,$SCAR_A2]" "[$CONF_A]"
+OUT=$(echo "$PUSH" | GITMEM_CLIENT_PID=1111 bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+echo "$OUT" | grep -q '"decision": "block"' && echo "$OUT" | grep -q "Scar A2" && ! echo "$OUT" | grep -q "Scar A," \
+    && pass "a scar surfaced after the last confirmation keeps the gate shut (names only that scar)" \
+    || fail "per-scar gate" "block naming only Scar A2" "$OUT"
+
+# Registries from servers older than GIT-128 carry no client_pid: still gated.
+setup_state 0 0
+remove_session_registry
+mkdir -p "$TMPDIR/.gitmem"
+echo "{\"sessions\":[{\"session_id\":\"legacy\",\"started_at\":\"2026-01-01T00:00:00Z\",\"hostname\":\"$HOST_NOW\",\"pid\":$$}]}" > "$TMPDIR/.gitmem/active-sessions.json"
+create_session_data "legacy" "[$SCAR_A]" "[]"
+OUT=$(echo "$PUSH" | GITMEM_CLIENT_PID=1111 bash "$SCRIPT_DIR/scripts/recall-check.sh" 2>/dev/null)
+echo "$OUT" | grep -q '"decision": "block"' && pass "legacy entry without client_pid is still gated" \
+    || fail "legacy entry gated" "block" "$OUT"
+
+# Detection without the override: the hook's client is its nearest non-shell
+# ancestor. A node process stands in for Claude Code: it registers sessions with
+# its own pid as client_pid and runs the hook through a shell, as Claude does.
+setup_state 0 0
+remove_session_registry
+create_session_data "sess-a" "[$SCAR_A]" "[]"
+create_session_data "sess-b" "[$SCAR_B]" "[$CONF_B]"
+OUT=$(env -u GITMEM_CLIENT_PID REG="$TMPDIR/.gitmem/active-sessions.json" HOOK="$SCRIPT_DIR/scripts/recall-check.sh" \
+    HOSTN="$HOST_NOW" SRV=$$ PUSH="$PUSH" node -e '
+    const fs = require("fs"); const { spawnSync } = require("child_process");
+    fs.writeFileSync(process.env.REG, JSON.stringify({ sessions: [
+      { session_id: "sess-a", started_at: "2026-01-01T00:00:00Z", hostname: process.env.HOSTN, pid: Number(process.env.SRV), client_pid: process.pid },
+      { session_id: "sess-b", started_at: "2026-01-01T00:05:00Z", hostname: process.env.HOSTN, pid: Number(process.env.SRV), client_pid: 2222 },
+    ] }));
+    const r = spawnSync("/bin/sh", ["-c", "bash \"$HOOK\""], { input: process.env.PUSH, encoding: "utf8" });
+    process.stdout.write(r.stdout);' 2>/dev/null)
+echo "$OUT" | grep -q '"decision": "block"' && pass "client detected from process ancestry (no override) → own session gated" \
+    || fail "ancestry detection" "block" "$OUT"
+
+remove_session_registry
+
+# ============================================================================
 # Summary
 # ============================================================================
 

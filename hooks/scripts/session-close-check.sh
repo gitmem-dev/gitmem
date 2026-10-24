@@ -40,7 +40,7 @@ IS_MEANINGFUL=false
 # A live registry entry means a session is open. Entries whose server pid is
 # dead are skipped: nobody can close those from here (GIT-99).
 SESSION_STARTED=false
-[ -n "$(gitmem_live_session_ids)" ] && SESSION_STARTED=true
+[ -n "$(gitmem_own_session_ids)" ] && SESSION_STARTED=true
 
 # Without state dir, we have no tracking data — can't determine meaningfulness.
 # This happens when the SessionStart hook didn't fire (plugin hooks issue).

@@ -22,6 +22,9 @@
 # Provides:
 #   gitmem_live_session_ids   registry session ids, newest first, skipping
 #                             entries on this host whose pid is dead
+#   gitmem_own_session_ids    the live sessions of the client running this hook
+#                             (GIT-128), newest first
+#   gitmem_hook_client_pid    that client's pid
 #   gitmem_pid_alive          whether a pid is running (no `ps` needed)
 #   gitmem_json_escape        escape a string for a JSON string literal
 # ============================================================================
@@ -62,38 +65,103 @@ gitmem_pid_alive() {
     return 1
 }
 
-# A registry entry whose server died is not a session anyone can be in. Only
-# entries on THIS host can be checked; entries without a pid, or from another
-# host, are kept.
-gitmem_live_session_ids() {
+# Live registry rows as "session_id|client_pid", newest first. A registry
+# entry whose server died is not a session anyone can be in. Only entries on
+# THIS host can be checked; entries without a pid, or from another host, are
+# kept.
+_gitmem_live_rows() {
     [ -f "$GITMEM_ACTIVE_SESSIONS" ] || return 0
     local host rows
     # bash's own HOSTNAME is gethostname(), what the server's os.hostname() is.
     host="${HOSTNAME:-$(hostname 2>/dev/null || echo "")}"
     if command -v jq &>/dev/null; then
         rows=$(jq -r '(.sessions // []) | sort_by(.started_at // "") | reverse | .[]
-            | [(.session_id // ""), ((.pid // "") | tostring), (.hostname // "")] | join("|")' \
+            | [(.session_id // ""), ((.pid // "") | tostring), (.hostname // ""), ((.client_pid // "") | tostring)] | join("|")' \
             "$GITMEM_ACTIVE_SESSIONS" 2>/dev/null) || return 0
     elif command -v node &>/dev/null; then
         rows=$(GITMEM_REG="$GITMEM_ACTIVE_SESSIONS" node -e '
             try {
               const r = JSON.parse(require("fs").readFileSync(process.env.GITMEM_REG, "utf8"));
               const s = (r.sessions || []).slice().sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
-              process.stdout.write(s.map((e) => [e.session_id || "", e.pid ?? "", e.hostname || ""].join("|")).join("\n"));
+              process.stdout.write(s.map((e) => [e.session_id || "", e.pid ?? "", e.hostname || "", e.client_pid ?? ""].join("|")).join("\n"));
             } catch (e) {}' 2>/dev/null) || return 0
     else
         return 0
     fi
-    local sid pid h
+    local sid pid h cpid
     # "|" rather than a tab: read collapses runs of whitespace separators, so an
     # empty pid would shift the hostname into its place.
-    while IFS='|' read -r sid pid h; do
+    while IFS='|' read -r sid pid h cpid; do
         [ -n "$sid" ] || continue
         if [ -n "$pid" ] && [ "$h" = "$host" ] && ! gitmem_pid_alive "$pid"; then
             continue
         fi
-        echo "$sid"
+        echo "$sid|$cpid"
     done <<< "$rows"
+}
+
+gitmem_live_session_ids() {
+    _gitmem_live_rows | cut -d'|' -f1
+}
+
+# GIT-128: the client this hook runs for — its nearest ancestor that is not a
+# shell. Claude Code (or any client) runs hooks through a shell; the server's
+# registry entry records the same client as client_pid. GITMEM_CLIENT_PID
+# overrides detection, as it does for the server.
+gitmem_hook_client_pid() {
+    if [ -n "${GITMEM_CLIENT_PID:-}" ]; then
+        echo "$GITMEM_CLIENT_PID"
+        return 0
+    fi
+    local pid="$PPID" line stat ppid cmd name depth=0
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$depth" -lt 12 ]; do
+        if [ -r "/proc/$pid/stat" ]; then
+            # Linux, ps not required: ppid is the 2nd field after the "(comm)".
+            stat=$(cat "/proc/$pid/stat" 2>/dev/null) || return 0
+            stat="${stat##*) }"
+            read -r _ ppid _ <<< "$stat"
+            cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+        elif command -v ps >/dev/null 2>&1; then
+            line=$(ps -o ppid=,command= -p "$pid" 2>/dev/null) || return 0
+            [ -n "$line" ] || return 0
+            read -r ppid cmd <<< "$line"
+        else
+            return 0
+        fi
+        name="${cmd%% *}"
+        name="${name##*/}"
+        name="${name#-}"
+        case "$name" in
+            sh|bash|zsh|dash|ksh|fish|env) ;;
+            *) echo "$pid"; return 0 ;;
+        esac
+        pid="$ppid"
+        depth=$((depth + 1))
+    done
+}
+
+# GIT-128: the live sessions this hook's client owns. The newest live session
+# used to stand in for "mine", so a second client's session — or its
+# confirmations — decided this client's gate. Entries written by servers older
+# than GIT-128 carry no client_pid; they are used only when no entry names this
+# client, which keeps single-client setups working across the upgrade.
+gitmem_own_session_ids() {
+    local me rows sid cpid owned="" legacy=""
+    me=$(gitmem_hook_client_pid)
+    rows=$(_gitmem_live_rows)
+    while IFS='|' read -r sid cpid; do
+        [ -n "$sid" ] || continue
+        if [ -z "$cpid" ]; then
+            legacy="$legacy$sid"$'\n'
+        elif [ -n "$me" ] && [ "$cpid" = "$me" ]; then
+            owned="$owned$sid"$'\n'
+        fi
+    done <<< "$rows"
+    if [ -n "$owned" ]; then
+        printf '%s' "$owned"
+    else
+        printf '%s' "$legacy"
+    fi
 }
 
 gitmem_json_escape() {

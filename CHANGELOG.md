@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.3] - 2026-10-24
+
 **Two agents on one machine no longer share a session.** If you ran Claude Code next to Claude
 Desktop (or Brain through the desktop bridge) against the same gitmem store, one agent's
 `confirm_scars` could open the other's push gate, and could replace confirmations the other had

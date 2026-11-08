@@ -21,7 +21,7 @@ GitMem writes to the local filesystem for session state, caching, and free-tier 
 ```
 .gitmem/
 +-- active-sessions.json          # Process lifecycle
-+-- config.json                   # Project defaults
++-- config.json                   # Project defaults; Pro credentials after `activate` (mode 0600 on macOS and Linux)
 +-- sessions.json                 # Recent session index (free tier SOT)
 +-- threads.json                  # Thread state cache / free tier SOT
 +-- suggested-threads.json        # AI-suggested threads

@@ -27,6 +27,7 @@ import {
 import { getCache, CacheService } from "../services/cache.js";
 import { getTier, hasSupabase } from "../services/tier.js";
 import { getGitmemDir } from "../services/gitmem-dir.js";
+import { getOpenRouterUrl } from "../services/license.js";
 
 // Report version for schema compatibility
 const REPORT_VERSION = "1.0.0";
@@ -63,7 +64,8 @@ export function parseArgs(args: string[]): CheckOptions {
 /**
  * Run quick health check (~5s)
  */
-async function runQuickCheck(): Promise<{
+/** @internal exported for tests */
+export async function runQuickCheck(): Promise<{
   health: DiagnosticReport["health"];
   configuration: DiagnosticReport["configuration"];
   dataVolume?: DiagnosticReport["dataVolume"];
@@ -211,34 +213,42 @@ async function runQuickCheck(): Promise<{
         };
       }
     } else if (embeddingProvider === "openrouter") {
-      try {
-        const startTime = Date.now();
-        const response = await fetch("https://openrouter.ai/api/v1/models", {
-          headers: {
-            Authorization: `Bearer ${openrouterKey}`,
-          },
-          signal: AbortSignal.timeout(5_000),
-        });
-        const durationMs = Date.now() - startTime;
-
-        if (response.ok) {
-          health.embedding = {
-            status: "pass",
-            message: "OpenRouter API accessible",
-            durationMs,
-          };
-        } else {
-          health.embedding = {
-            status: "fail",
-            message: `OpenRouter API returned ${response.status}`,
-            durationMs,
-          };
-        }
-      } catch (error) {
+      const modelsUrl = getOpenRouterUrl("models");
+      if (!modelsUrl) {
         health.embedding = {
           status: "fail",
-          message: `OpenRouter connection failed: ${error instanceof Error ? error.message : String(error)}`,
+          message: "OPENROUTER_BASE_URL is not usable (see the warning above); OpenRouter was not checked",
         };
+      } else {
+        try {
+          const startTime = Date.now();
+          const response = await fetch(modelsUrl, {
+            headers: {
+              Authorization: `Bearer ${openrouterKey}`,
+            },
+            signal: AbortSignal.timeout(5_000),
+          });
+          const durationMs = Date.now() - startTime;
+
+          if (response.ok) {
+            health.embedding = {
+              status: "pass",
+              message: "OpenRouter API accessible",
+              durationMs,
+            };
+          } else {
+            health.embedding = {
+              status: "fail",
+              message: `OpenRouter API returned ${response.status}`,
+              durationMs,
+            };
+          }
+        } catch (error) {
+          health.embedding = {
+            status: "fail",
+            message: `OpenRouter connection failed: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
       }
     } else if (embeddingProvider === "ollama") {
       try {

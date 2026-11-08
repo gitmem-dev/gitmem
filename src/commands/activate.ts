@@ -1,7 +1,12 @@
 /**
  * GitMem Pro Activation Wizard
  *
- * Usage: npx gitmem-mcp activate [license-key]
+ * Usage: npx gitmem-mcp activate [license-key] [--no-save-keys]
+ *
+ * --no-save-keys: validate and set up as usual, but write none of the credentials
+ * (api_key, supabase_url, supabase_key, openrouter_key, database_url) to config.json.
+ * gitmem reads GITMEM_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and
+ * OPENROUTER_API_KEY from the environment, so a secret manager can supply them.
  *
  * Credential resolution (priority order):
  *   1. Environment variables (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENROUTER_API_KEY)
@@ -245,6 +250,10 @@ async function applySchema(
 }
 
 export async function main(args: string[]): Promise<void> {
+  // --no-save-keys may come before or after the license key
+  const noSaveKeys = args.includes("--no-save-keys");
+  const positionalArgs = args.filter((a) => a !== "--no-save-keys");
+
   console.log("");
   console.log("GitMem Pro Activation");
   console.log("─────────────────────");
@@ -272,7 +281,7 @@ export async function main(args: string[]): Promise<void> {
   }
 
   // Step 1: Get license key (arg → env → prompt)
-  let apiKey = args[0] || process.env.GITMEM_API_KEY || (config.api_key as string) || "";
+  let apiKey = positionalArgs[0] || process.env.GITMEM_API_KEY || (config.api_key as string) || "";
 
   if (!apiKey) {
     if (!process.stdin.isTTY) {
@@ -440,8 +449,8 @@ export async function main(args: string[]): Promise<void> {
             console.log("  Applying schema via direct connection...");
             const pgResult = await applySchemaViaPg(dbUrlResult.value, setupSql);
             if (pgResult.success) {
-              // Save DATABASE_URL to config for future use
-              config.database_url = dbUrlResult.value;
+              // Save DATABASE_URL to config for future use (not with --no-save-keys)
+              if (!noSaveKeys) config.database_url = dbUrlResult.value;
               // Wait for PostgREST cache reload
               await new Promise((r) => setTimeout(r, 2000));
               const stillMissing = await checkSchemaExists(supabaseUrl, supabaseKey);
@@ -524,10 +533,14 @@ export async function main(args: string[]): Promise<void> {
   if (rl) rl.close();
 
   // Step 6: Write config (preserves existing fields like project, install_id, feedback_enabled)
-  config.api_key = apiKey;
-  if (supabaseUrl) config.supabase_url = supabaseUrl;
-  if (supabaseKey) config.supabase_key = supabaseKey;
-  if (openrouterKey) config.openrouter_key = openrouterKey;
+  // With --no-save-keys none of the credentials is written (values already in the
+  // file are left as they are); gitmem reads them from the environment at run time.
+  if (!noSaveKeys) {
+    config.api_key = apiKey;
+    if (supabaseUrl) config.supabase_url = supabaseUrl;
+    if (supabaseKey) config.supabase_key = supabaseKey;
+    if (openrouterKey) config.openrouter_key = openrouterKey;
+  }
 
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
@@ -539,6 +552,9 @@ export async function main(args: string[]): Promise<void> {
   } else if (wasReadableByOthers(writeResult)) {
     const was = (writeResult.previousMode as number).toString(8).padStart(4, "0");
     console.log(`  ✓ Restricted ${configPath} to your user account (was ${was})`);
+  }
+  if (noSaveKeys) {
+    console.log("  ✓ Credentials not saved (--no-save-keys). gitmem reads GITMEM_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and OPENROUTER_API_KEY from the environment.");
   }
 
   // Clear any stale license cache

@@ -99,6 +99,22 @@ HOOKJSON
 HOOKJSON
         exit 0
     fi
+
+    # Guard 4: cat/head/tail/less/more/bat of gitmem's own config.json
+    # (activate keeps the license, Supabase and OpenRouter keys there).
+    # A word-anchored check of its own rather than an entry in
+    # CREDENTIAL_FILES_PATTERN: Guard 3 pairs that list with an unanchored
+    # "(cat|head|tail...)\s+" anywhere, which would block `... | head -3` and
+    # `grep -c detail ...`. Best effort: default ".gitmem" folder name only.
+    if echo "$COMMAND" | grep -qEi '(^|[[:space:];&|(])(cat|head|tail|less|more|bat)[[:space:]]+[^;&|]*\.gitmem[/\\]config\.json'; then
+        cat <<'HOOKJSON'
+{
+  "decision": "block",
+  "reason": "RED LINE — CREDENTIAL EXPOSURE BLOCKED: This command would dump .gitmem/config.json, which can hold your license, Supabase and OpenRouter keys, into the conversation. Use targeted, value-safe searches instead:\n\n  grep -c '\"api_key\"' .gitmem/config.json  # check structure, not secrets\n\nThis rule is constitutional. There is no override."
+}
+HOOKJSON
+        exit 0
+    fi
 fi
 
 # ============================================================================
@@ -119,6 +135,21 @@ if [ "$TOOL_NAME" = "Read" ]; then
 {
   "decision": "block",
   "reason": "RED LINE — CREDENTIAL EXPOSURE BLOCKED: Reading '${BASENAME}' would dump secrets (API keys, tokens) into the conversation. This file is a credential store.\n\nSafe alternatives:\n  grep -c '\"server_name\"' ${FILE_PATH}   # check if a key exists\n  grep '\"twitter\"' ${FILE_PATH}            # check specific non-secret structure\n\nThis rule is constitutional. There is no override."
+}
+HOOKJSON
+        exit 0
+    fi
+
+    # Block reading gitmem's own config.json (holds the license, Supabase and
+    # OpenRouter keys after `activate`). Matches the default ".gitmem" folder name
+    # with either separator; other config.json files (tsconfig.json etc.) pass.
+    if echo "$FILE_PATH" | grep -qEi '(^|[/\\])\.gitmem[/\\]config\.json$'; then
+        # GIT-116: escape for the JSON below, or a quote in the path becomes an allow.
+        FILE_PATH=$(printf '%s' "$FILE_PATH" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+        cat <<HOOKJSON
+{
+  "decision": "block",
+  "reason": "RED LINE — CREDENTIAL EXPOSURE BLOCKED: Reading '${FILE_PATH}' would dump your license, Supabase and OpenRouter keys into the conversation.\n\nSafe alternative:\n  grep -c '\"api_key\"' ${FILE_PATH}   # check if a key exists\n\nThis rule is constitutional. There is no override."
 }
 HOOKJSON
         exit 0

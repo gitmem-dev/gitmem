@@ -20,6 +20,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getGitmemDir, getInstallId } from "./gitmem-dir.js";
+import { writePrivateFileSync } from "./private-file.js";
 
 // Hardcoded validation endpoint — calls RPC directly on our Supabase via PostgREST.
 // Users never see or configure this URL.
@@ -129,7 +130,7 @@ function writeLicenseCache(result: LicenseCache): void {
       fs.mkdirSync(gitmemDir, { recursive: true });
     }
     const cachePath = path.join(gitmemDir, "license-cache.json");
-    fs.writeFileSync(cachePath, JSON.stringify(result, null, 2));
+    writePrivateFileSync(cachePath, JSON.stringify(result, null, 2));
   } catch (err) {
     console.error("[gitmem:license] Failed to write cache:", err);
   }

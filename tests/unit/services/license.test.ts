@@ -26,6 +26,7 @@ import {
   getProConfig,
   getCachedLicenseTier,
   clearLicenseCache,
+  validateLicense,
 } from "../../../src/services/license.js";
 
 describe("license service", () => {
@@ -245,6 +246,25 @@ describe("license service", () => {
       const result = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       expect(result.supabase_url).toBe("https://same.supabase.co");
       expect(result.api_key).toBe("gitmem_pro_key2");
+    });
+  });
+
+  describe("license-cache.json", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it.skipIf(process.platform === "win32")("is written owner-only (AC-17.1)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(JSON.stringify([{ valid: true, tier: "pro", message: "ok" }]), { status: 200 })),
+      );
+
+      const result = await validateLicense("gitmem_dev_test", "install-1");
+
+      expect(result.valid).toBe(true);
+      const cachePath = path.join(TEST_DIR, "license-cache.json");
+      expect(fs.statSync(cachePath).mode & 0o777).toBe(0o600);
     });
   });
 });

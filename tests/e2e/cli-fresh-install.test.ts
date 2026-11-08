@@ -22,6 +22,8 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  chmodSync,
+  statSync,
 } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -200,6 +202,49 @@ describe("Fresh Install: Free Tier CLI", () => {
     expect(stdout).toContain("install-hooks");
     expect(stdout).toContain("uninstall-hooks");
     expect(stdout).toContain("server");
+  });
+});
+
+// ─── Free Tier: the store's config.json is owner-only (FR-16) ───────
+// `activate` keeps Pro credentials in the store's config.json, so init's feedback
+// opt-in must not leave it, or recreate it, readable by other accounts.
+
+describe.skipIf(process.platform === "win32")("Fresh Install: init keeps config.json owner-only", () => {
+  let home: string;
+  let cwd: string;
+  let configPath: string;
+
+  beforeAll(() => {
+    home = mkdtempSync(join(tmpdir(), "gitmem-cli-mode-home-"));
+    cwd = mkdtempSync(join(tmpdir(), "gitmem-cli-mode-cwd-"));
+    configPath = join(home, ".gitmem", "config.json");
+  });
+
+  afterAll(() => {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("tightens an existing 0644 store config.json and enables feedback (AC-16.1)", async () => {
+    mkdirSync(join(home, ".gitmem"), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({ feedback_enabled: false }));
+    chmodSync(configPath, 0o644);
+
+    const { exitCode } = await runGitmem(["init", "--yes", "--interactive"], { cwd, env: { HOME: home } });
+
+    expect(exitCode).toBe(0);
+    expect(statSync(configPath).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(readFileSync(configPath, "utf-8")).feedback_enabled).toBe(true);
+  });
+
+  it("creates a missing store config.json at 0600 (AC-16.2)", async () => {
+    rmSync(configPath, { force: true });
+
+    const { exitCode } = await runGitmem(["init", "--yes", "--interactive"], { cwd, env: { HOME: home } });
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(configPath)).toBe(true);
+    expect(statSync(configPath).mode & 0o777).toBe(0o600);
   });
 });
 

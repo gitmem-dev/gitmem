@@ -833,6 +833,49 @@ echo "$OUT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{p
     && pass "credential-guard block is valid JSON for a path with quotes" \
     || fail "credential-guard JSON" "valid JSON, decision block" "$OUT"
 
+# credential-guard: gitmem's own config.json holds the license, Supabase and
+# OpenRouter keys after `activate`. Best effort: the default ".gitmem" folder name.
+guard_read() { printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$1" | bash "$SCRIPT_DIR/scripts/credential-guard.sh" 2>/dev/null || true; }
+guard_bash() {
+    node -e 'process.stdout.write(JSON.stringify({tool_name:"Bash",tool_input:{command:process.argv[1]}}))' "$1" \
+        | bash "$SCRIPT_DIR/scripts/credential-guard.sh" 2>/dev/null || true
+}
+is_block() { echo "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{process.exit(JSON.parse(d).decision==="block"?0:1)})' 2>/dev/null; }
+
+OUT=$(guard_read '/home/u/.gitmem/config.json')
+is_block "$OUT" && pass "credential-guard blocks Read of .gitmem/config.json" \
+    || fail "Read .gitmem/config.json" "decision block" "$OUT"
+
+OUT=$(guard_read 'C:\\Users\\u\\.gitmem\\config.json')
+is_block "$OUT" && pass "credential-guard blocks Read of a Windows .gitmem\\config.json path" \
+    || fail "Read Windows .gitmem\\config.json" "decision block" "$OUT"
+
+OUT=$(guard_read '/x/we\"ird/.gitmem/config.json')
+is_block "$OUT" && pass "credential-guard block for .gitmem/config.json is valid JSON for a path with a quote" \
+    || fail "Read .gitmem/config.json with a quote" "valid JSON, decision block" "$OUT"
+
+for P in /repo/config.json /repo/tsconfig.json; do
+    OUT=$(guard_read "$P")
+    [ -z "$OUT" ] && pass "credential-guard allows Read of $P" \
+        || fail "Read $P" "no output" "$OUT"
+done
+
+OUT=$(guard_bash 'cat ~/.gitmem/config.json')
+is_block "$OUT" && pass "credential-guard blocks cat of .gitmem/config.json" \
+    || fail "cat .gitmem/config.json" "decision block" "$OUT"
+
+OUT=$(guard_bash 'head -c 400 ~/.gitmem/config.json')
+is_block "$OUT" && pass "credential-guard blocks head -c of .gitmem/config.json" \
+    || fail "head .gitmem/config.json" "decision block" "$OUT"
+
+for CMD in "grep -c '\"api_key\"' ~/.gitmem/config.json" \
+           "jq .project .gitmem/config.json | head -3" \
+           "grep -c detail ~/.gitmem/config.json"; do
+    OUT=$(guard_bash "$CMD")
+    [ -z "$OUT" ] && pass "credential-guard allows: $CMD" \
+        || fail "allowed: $CMD" "no output" "$OUT"
+done
+
 # ============================================================================
 # TEST GROUP: one machine, two clients (GIT-128)
 # ============================================================================

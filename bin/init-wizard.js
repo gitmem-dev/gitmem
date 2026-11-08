@@ -958,7 +958,23 @@ async function stepFeedbackOptIn() {
 
   config.feedback_enabled = true;
   mkdirSync(storeDir, { recursive: true });
-  writeJson(configPath, config);
+  // The store's config.json can hold Pro credentials (written by `activate`), so it
+  // stays owner-only on POSIX: tighten an existing file before the write, and create
+  // a new one at 0600. Windows has no mode bits; the write is unchanged there.
+  // (Inlined, like the other bin helpers, rather than importing dist/.)
+  const posix = process.platform !== "win32";
+  if (posix && existsSync(configPath)) {
+    try {
+      chmodSync(configPath, 0o600);
+    } catch {
+      // Not ours to change; the write below still happens.
+    }
+  }
+  writeFileSync(
+    configPath,
+    JSON.stringify(config, null, 2) + "\n",
+    posix ? { mode: 0o600 } : undefined
+  );
 
   log(CHECK,
     "Anonymous feedback sharing enabled",

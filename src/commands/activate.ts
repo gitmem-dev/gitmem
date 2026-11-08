@@ -23,6 +23,7 @@ import * as readline from "readline";
 import { fileURLToPath } from "url";
 import { getGitmemDir, getInstallId } from "../services/gitmem-dir.js";
 import { validateLicense, clearLicenseCache } from "../services/license.js";
+import { writePrivateFileSync, wasReadableByOthers } from "../services/private-file.js";
 import { hasLocalData, hasPreMigrationData, migrateLocalToSupabase, reimportFromBackups, archiveLocalData } from "./migrate-local.js";
 
 function createReadline(): readline.Interface {
@@ -531,7 +532,14 @@ export async function main(args: string[]): Promise<void> {
   if (!fs.existsSync(gitmemDir)) {
     fs.mkdirSync(gitmemDir, { recursive: true });
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // Owner-only (mode 0600) on POSIX; an older, more open file is tightened first.
+  const writeResult = writePrivateFileSync(configPath, JSON.stringify(config, null, 2));
+  if (writeResult.tightenError) {
+    console.log(`  ⚠ Could not restrict ${configPath} to your user account (${writeResult.tightenError}). Run: chmod 600 ${configPath}`);
+  } else if (wasReadableByOthers(writeResult)) {
+    const was = (writeResult.previousMode as number).toString(8).padStart(4, "0");
+    console.log(`  ✓ Restricted ${configPath} to your user account (was ${was})`);
+  }
 
   // Clear any stale license cache
   clearLicenseCache();

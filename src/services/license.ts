@@ -20,6 +20,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getGitmemDir, getInstallId } from "./gitmem-dir.js";
+import { writePrivateFileSync } from "./private-file.js";
 
 // Hardcoded validation endpoint — calls RPC directly on our Supabase via PostgREST.
 // Users never see or configure this URL.
@@ -95,6 +96,80 @@ export function getProConfig(): {
   return { supabaseUrl, supabaseKey, openrouterKey };
 }
 
+/** OpenRouter's own base URL; `/embeddings`, `/chat/completions` and `/models` are added to it. */
+export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+// One warning per process and per condition.
+const warnedBaseUrl = new Set<string>();
+
+function warnBaseUrlOnce(condition: string, message: string): void {
+  if (warnedBaseUrl.has(condition)) return;
+  warnedBaseUrl.add(condition);
+  console.error(`[gitmem:license] ${message}`);
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+/**
+ * Resolve the OpenRouter base URL from the OPENROUTER_BASE_URL environment variable.
+ *
+ * Environment only — never read from config.json or saved by `activate`, like
+ * GITMEM_TABLE_PREFIX. Unset, empty or whitespace-only → the default.
+ *
+ * Returns null (after one warning that never prints the value) when the value is
+ * not an absolute http(s) URL or contains a username, password, query or fragment.
+ * Callers must then make no OpenRouter request: never fall back to openrouter.ai.
+ */
+export function getOpenRouterBaseUrl(): string | null {
+  const trimmed = (process.env.OPENROUTER_BASE_URL ?? "").trim();
+  if (!trimmed) return DEFAULT_OPENROUTER_BASE_URL;
+
+  const unusable = (reason: string): null => {
+    warnBaseUrlOnce(
+      `unusable:${reason}`,
+      `OPENROUTER_BASE_URL is not usable (${reason}); OpenRouter calls are off until it is fixed.`,
+    );
+    return null;
+  };
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return unusable("not a URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return unusable("scheme must be http or https");
+  }
+  if (parsed.username || parsed.password) {
+    return unusable("must not contain a username or password");
+  }
+  // The parser reports a lone trailing "?" or "#" as an empty query or fragment,
+  // so the raw string is checked as well.
+  if (parsed.search || parsed.hash || trimmed.includes("?") || trimmed.includes("#")) {
+    return unusable("must not contain a query or fragment");
+  }
+
+  if (parsed.protocol === "http:" && !isLoopbackHost(parsed.hostname)) {
+    warnBaseUrlOnce(
+      "cleartext",
+      "OPENROUTER_BASE_URL uses http to a non-local host; the OpenRouter key is sent unencrypted.",
+    );
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+/**
+ * Full URL for an OpenRouter endpoint, or null when the base URL is unusable.
+ */
+export function getOpenRouterUrl(endpoint: "embeddings" | "chat/completions" | "models"): string | null {
+  const base = getOpenRouterBaseUrl();
+  return base === null ? null : `${base}/${endpoint}`;
+}
+
 /**
  * Read cached license validation result
  */
@@ -129,7 +204,7 @@ function writeLicenseCache(result: LicenseCache): void {
       fs.mkdirSync(gitmemDir, { recursive: true });
     }
     const cachePath = path.join(gitmemDir, "license-cache.json");
-    fs.writeFileSync(cachePath, JSON.stringify(result, null, 2));
+    writePrivateFileSync(cachePath, JSON.stringify(result, null, 2));
   } catch (err) {
     console.error("[gitmem:license] Failed to write cache:", err);
   }

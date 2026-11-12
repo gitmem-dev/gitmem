@@ -7,7 +7,9 @@
  * Provider detection (in priority order):
  *   GITMEM_EMBEDDING_PROVIDER=openai|openrouter|ollama — force provider
  *   OPENAI_API_KEY → OpenAI direct (text-embedding-3-small)
- *   OPENROUTER_API_KEY → OpenRouter (text-embedding-3-small via openrouter.ai)
+ *   OPENROUTER_API_KEY → OpenRouter (text-embedding-3-small via openrouter.ai, or the
+ *     base URL in OPENROUTER_BASE_URL; an unusable value turns the provider off, it
+ *     does not fall through to Ollama)
  *   OLLAMA_URL → Ollama local (nomic-embed-text, 768-dim — requires pgvector dimension match)
  *
  * If no provider is configured, embed() returns null (graceful degradation).
@@ -15,7 +17,12 @@
  * but won't appear in semantic search results.
  */
 
-import { getProConfig } from "./license.js";
+import {
+  getProConfig,
+  getOpenRouterBaseUrl,
+  getOpenRouterUrl,
+  DEFAULT_OPENROUTER_BASE_URL,
+} from "./license.js";
 
 // Default embedding dimensions per provider
 const OPENAI_EMBEDDING_DIM = 1536;
@@ -28,7 +35,7 @@ const OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 // API URLs
 const OPENAI_API_URL = "https://api.openai.com/v1/embeddings";
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings";
+// The OpenRouter URL comes from getOpenRouterUrl() (OPENROUTER_BASE_URL, license.ts).
 
 export type EmbeddingProvider = "openai" | "openrouter" | "ollama" | "none";
 
@@ -98,9 +105,14 @@ export function detectProvider(): EmbeddingConfig {
           console.warn("[embedding] GITMEM_EMBEDDING_PROVIDER=openrouter but no OpenRouter key found (env or config.json)");
           return { provider: "none", apiUrl: "", apiKey: "", model: "", expectedDim: 0 };
         }
+        const apiUrl = getOpenRouterUrl("embeddings");
+        if (!apiUrl) {
+          // OPENROUTER_BASE_URL is unusable (already warned): no OpenRouter calls.
+          return { provider: "none", apiUrl: "", apiKey: "", model: "", expectedDim: 0 };
+        }
         return {
           provider: "openrouter",
-          apiUrl: OPENROUTER_API_URL,
+          apiUrl,
           apiKey: key,
           model: OPENROUTER_EMBEDDING_MODEL,
           expectedDim: OPENAI_EMBEDDING_DIM,
@@ -136,9 +148,15 @@ export function detectProvider(): EmbeddingConfig {
   // Check env var AND config.json for OpenRouter key
   const openrouterKey = resolveOpenRouterKey();
   if (openrouterKey) {
+    const apiUrl = getOpenRouterUrl("embeddings");
+    if (!apiUrl) {
+      // OPENROUTER_BASE_URL is unusable (already warned). Do not fall through to
+      // Ollama: its 768-dim vectors would mix with 1536-dim ones in the same store.
+      return { provider: "none", apiUrl: "", apiKey: "", model: "", expectedDim: 0 };
+    }
     return {
       provider: "openrouter",
-      apiUrl: OPENROUTER_API_URL,
+      apiUrl,
       apiKey: openrouterKey,
       model: OPENROUTER_EMBEDDING_MODEL,
       expectedDim: OPENAI_EMBEDDING_DIM,
@@ -169,7 +187,15 @@ export function getEmbeddingConfig(): EmbeddingConfig {
   if (!_config) {
     _config = detectProvider();
     if (_config.provider !== "none") {
-      console.error(`[embedding] Provider: ${_config.provider} (model: ${_config.model}, dim: ${_config.expectedDim})`);
+      // Show where OpenRouter traffic goes when it is not the default (origin only).
+      let baseNote = "";
+      if (_config.provider === "openrouter") {
+        const base = getOpenRouterBaseUrl();
+        if (base && base !== DEFAULT_OPENROUTER_BASE_URL) {
+          baseNote = `, base: ${new URL(base).origin}`;
+        }
+      }
+      console.error(`[embedding] Provider: ${_config.provider} (model: ${_config.model}, dim: ${_config.expectedDim}${baseNote})`);
     } else {
       console.error("[embedding] No embedding provider configured — scars will be stored without embeddings");
     }

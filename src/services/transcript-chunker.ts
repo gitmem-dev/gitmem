@@ -9,11 +9,11 @@
 
 import * as supabase from "./supabase-client.js";
 import { getTableName } from "./tier.js";
-import { getProConfig } from "./license.js";
+import { getProConfig, getOpenRouterUrl } from "./license.js";
 import type { Project } from "../types/index.js";
 
-// OpenRouter API configuration (same as local-vector-search)
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings";
+// OpenRouter API configuration (same as local-vector-search); the URL comes from
+// getOpenRouterUrl() so OPENROUTER_BASE_URL applies.
 const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDING_DIM = 1536;
 
@@ -62,13 +62,19 @@ function normalize(vec: number[]): number[] {
 /**
  * Generate embedding using OpenRouter API
  */
-async function generateEmbedding(text: string): Promise<number[]> {
+/** @internal exported for tests */
+export async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.OPENROUTER_API_KEY || getProConfig().openrouterKey;
   if (!apiKey) {
     throw new Error("No OpenRouter key configured (set OPENROUTER_API_KEY env var or run: npx gitmem-mcp activate)");
   }
 
-  const response = await fetch(OPENROUTER_API_URL, {
+  const apiUrl = getOpenRouterUrl("embeddings");
+  if (!apiUrl) {
+    throw new Error("OPENROUTER_BASE_URL is not usable (see the warning above); no OpenRouter request was sent");
+  }
+
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,

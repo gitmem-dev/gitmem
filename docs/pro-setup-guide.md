@@ -75,6 +75,55 @@ You don't have to paste secrets into a terminal. The activate command resolves c
 2. **Config file** — edit `.gitmem/config.json` directly with `supabase_url`, `supabase_key`, `openrouter_key` fields
 3. **Interactive prompt** — if running in a terminal, activate will prompt for any missing values
 
+### Where they are kept
+
+`activate` saves what it resolved to `config.json` in your gitmem directory: `~/.gitmem/config.json`, or the one under
+`GITMEM_DIR` or `GITMEM_HOME` if you set either. That file holds your license key, the service role key, the
+OpenRouter key and, if `activate` applied the schema over `DATABASE_URL`, that connection string.
+
+- **macOS and Linux:** the file is readable only by your user account (mode `0600`). A file from an older version is
+  tightened the next time `activate` or `deactivate` writes it, and the command says so. To do it now:
+  `chmod 600 ~/.gitmem/config.json`.
+- **Windows:** file modes don't apply. By default the file is inside your user profile, which other standard accounts
+  can't open (SYSTEM and administrators still can). If your gitmem directory is outside your profile, restrict the
+  file. From a Command Prompt: `icacls "<path>\config.json" /inheritance:r /grant:r "%USERNAME%:F"`. From PowerShell:
+  `icacls "<path>\config.json" /inheritance:r /grant:r "${env:USERNAME}:F"`. This leaves your account as the only one
+  on the file, so it also removes SYSTEM and Administrators; backup or management tools that run as them can no longer
+  read it.
+- If another account or a container user has to read the file, give that process the values as environment variables
+  instead. gitmem reads environment variables first.
+- To keep the credentials out of the file altogether, for example because a secret manager injects them, run
+  `npx gitmem-mcp activate --no-save-keys`. `activate` then saves none of the five values; gitmem reads
+  `GITMEM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `OPENROUTER_API_KEY` from the environment each time
+  it starts, so they have to be set for every process that runs gitmem (`DATABASE_URL` is only used by `activate`
+  itself). The client has to start the server with those variables in its launch environment, for example through a
+  wrapper that injects them (a secret manager's run command). Writing them into an `env` block of an MCP client
+  configuration file (`.mcp.json`, `claude_desktop_config.json`) puts the keys back into a plaintext file.
+- `--no-save-keys` only stops new writes. Values that an earlier `activate` already saved stay in `config.json` until
+  you remove them by hand. `deactivate` removes them too, but it also deactivates this machine's license.
+
+## Routing OpenRouter calls through a proxy or gateway
+
+Set `OPENROUTER_BASE_URL` to send every OpenRouter request (embeddings, transcript embeddings, variant generation and
+`gitmem check`) to another address, such as a proxy, an API gateway or an OpenRouter-compatible endpoint:
+
+    export OPENROUTER_BASE_URL="https://llm-gateway.example.com/openrouter/api/v1"
+
+- It is the URL that `/embeddings`, `/chat/completions` and `/models` are added to. The default is
+  `https://openrouter.ai/api/v1`, OpenRouter's own base URL.
+- It is read from the environment only, like `GITMEM_TABLE_PREFIX`. It is not read from `config.json` and `activate`
+  does not save it, so it stops applying as soon as the variable is unset. Set it wherever you set
+  `OPENROUTER_API_KEY`.
+- The endpoint receives your OpenRouter key as a bearer token. Set the variable only in environments you trust, and
+  use `https` unless the endpoint runs on your machine or on a network you control. A plain `http` base on a host that
+  is not `localhost`, `127.0.0.0/8` or `::1` works, with one warning in the server log.
+- Other tools use the same variable name. If you already set `OPENROUTER_BASE_URL` for one of them, gitmem uses it
+  too; the `[embedding] Provider:` line in the server log shows the base whenever it isn't the default.
+- A value that isn't an `http` or `https` URL, or that contains a username, password, query string or fragment, is
+  refused with a warning, and gitmem makes no OpenRouter calls until it is fixed. It never falls back to openrouter.ai.
+- gitmem reads it once when it starts; restart your editor after changing it.
+- The model name is unchanged (`openai/text-embedding-3-small`), so the endpoint has to accept it.
+
 ## What gets created
 
 The activate command creates these in your Supabase project (table and view names are prefixed by `GITMEM_TABLE_PREFIX`, default `gitmem_`):

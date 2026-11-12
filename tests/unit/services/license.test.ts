@@ -26,6 +26,7 @@ import {
   getProConfig,
   getCachedLicenseTier,
   clearLicenseCache,
+  validateLicense,
 } from "../../../src/services/license.js";
 
 describe("license service", () => {
@@ -245,6 +246,170 @@ describe("license service", () => {
       const result = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       expect(result.supabase_url).toBe("https://same.supabase.co");
       expect(result.api_key).toBe("gitmem_pro_key2");
+    });
+  });
+
+  describe("credentials supplied only by the environment (activate --no-save-keys)", () => {
+    it("reads all four credentials from the environment when config.json holds none (AC-30.5)", () => {
+      fs.writeFileSync(path.join(TEST_DIR, "config.json"), JSON.stringify({ project: "p", install_id: "i" }));
+      process.env.GITMEM_API_KEY = "gitmem_dev_fromenv";
+      process.env.SUPABASE_URL = "https://env.supabase.co";
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "eyJenv";
+      process.env.OPENROUTER_API_KEY = "sk-or-env";
+
+      expect(getLicenseKey()).toBe("gitmem_dev_fromenv");
+      expect(getProConfig()).toEqual({
+        supabaseUrl: "https://env.supabase.co",
+        supabaseKey: "eyJenv",
+        openrouterKey: "sk-or-env",
+      });
+    });
+  });
+
+  describe("license-cache.json", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it.skipIf(process.platform === "win32")("is written owner-only (AC-17.1)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(JSON.stringify([{ valid: true, tier: "pro", message: "ok" }]), { status: 200 })),
+      );
+
+      const result = await validateLicense("gitmem_dev_test", "install-1");
+
+      expect(result.valid).toBe(true);
+      const cachePath = path.join(TEST_DIR, "license-cache.json");
+      expect(fs.statSync(cachePath).mode & 0o777).toBe(0o600);
+    });
+  });
+
+  describe("OPENROUTER_BASE_URL", () => {
+    // The warnings are once per process, so each case loads a fresh copy of the module.
+    type LicenseModule = typeof import("../../../src/services/license.js");
+    let mod: LicenseModule;
+    let stderr: ReturnType<typeof vi.spyOn>;
+
+    const warnings = (): string[] =>
+      stderr.mock.calls.map((c) => c.map(String).join(" ")).filter((l) => l.includes("OPENROUTER_BASE_URL"));
+
+    beforeEach(async () => {
+      delete process.env.OPENROUTER_BASE_URL;
+      vi.resetModules();
+      stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+      mod = await import("../../../src/services/license.js");
+    });
+
+    afterEach(() => {
+      delete process.env.OPENROUTER_BASE_URL;
+      stderr.mockRestore();
+    });
+
+    it("returns the default when unset (AC-1.1)", () => {
+      expect(mod.getOpenRouterBaseUrl()).toBe("https://openrouter.ai/api/v1");
+    });
+
+    it("trims whitespace and trailing slashes (AC-1.2)", () => {
+      process.env.OPENROUTER_BASE_URL = " https://gw.example/or/v1/ ";
+      expect(mod.getOpenRouterBaseUrl()).toBe("https://gw.example/or/v1");
+    });
+
+    it("accepts a loopback http base without a warning (AC-1.3)", () => {
+      process.env.OPENROUTER_BASE_URL = "http://127.0.0.1:8080/api/v1";
+      expect(mod.getOpenRouterBaseUrl()).toBe("http://127.0.0.1:8080/api/v1");
+      expect(warnings()).toEqual([]);
+    });
+
+    it("treats empty and blank values as unset, with no warning (AC-1.4, AC-2.5)", () => {
+      for (const value of ["", " ", "   "]) {
+        process.env.OPENROUTER_BASE_URL = value;
+        expect(mod.getOpenRouterBaseUrl()).toBe("https://openrouter.ai/api/v1");
+      }
+      expect(warnings()).toEqual([]);
+    });
+
+    it("does not read the base URL from config.json (AC-1.4)", () => {
+      fs.writeFileSync(
+        path.join(TEST_DIR, "config.json"),
+        JSON.stringify({ openrouter_base_url: "https://gw.example/v1" }),
+      );
+      expect(mod.getOpenRouterBaseUrl()).toBe("https://openrouter.ai/api/v1");
+    });
+
+    it("builds the three endpoint URLs the code used before (AC-1.5)", () => {
+      expect(mod.getOpenRouterUrl("embeddings")).toBe("https://openrouter.ai/api/v1/embeddings");
+      expect(mod.getOpenRouterUrl("chat/completions")).toBe("https://openrouter.ai/api/v1/chat/completions");
+      expect(mod.getOpenRouterUrl("models")).toBe("https://openrouter.ai/api/v1/models");
+    });
+
+    it("returns null for an unusable base, and no endpoint URL", () => {
+      process.env.OPENROUTER_BASE_URL = "ftp://gw.example/v1";
+      expect(mod.getOpenRouterUrl("embeddings")).toBeNull();
+    });
+
+    it("refuses a wrong scheme with one warning that never prints the value (AC-2.1)", () => {
+      process.env.OPENROUTER_BASE_URL = "ftp://gw.example/v1";
+      expect(mod.getOpenRouterBaseUrl()).toBeNull();
+      expect(mod.getOpenRouterBaseUrl()).toBeNull();
+
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain("http or https");
+      expect(w[0]).not.toContain("gw.example");
+    });
+
+    it("refuses a username or password without printing it (AC-2.2)", () => {
+      process.env.OPENROUTER_BASE_URL = "https://user:s3cret@gw.example/v1";
+      expect(mod.getOpenRouterBaseUrl()).toBeNull();
+
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain("username or password");
+      expect(w[0]).not.toContain("s3cret");
+    });
+
+    it("refuses a value that is not a URL (AC-2.3)", () => {
+      process.env.OPENROUTER_BASE_URL = "not a url";
+      expect(mod.getOpenRouterBaseUrl()).toBeNull();
+      expect(warnings()[0]).toContain("not a URL");
+    });
+
+    it.each([
+      "https://gw.example/v1?key=abc123",
+      "https://gw.example/v1#x",
+      "https://gw.example/v1?",
+      "https://gw.example/v1#",
+    ])("refuses a query or fragment, a lone ? or # included: %s (AC-2.4)", (value) => {
+      process.env.OPENROUTER_BASE_URL = value;
+      expect(mod.getOpenRouterBaseUrl()).toBeNull();
+
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain("query or fragment");
+      expect(w[0]).not.toContain("abc123");
+    });
+
+    it("accepts a plain-http base on a non-local host with one cleartext warning (AC-2.6)", () => {
+      process.env.OPENROUTER_BASE_URL = "http://gw.internal:8080/v1";
+      expect(mod.getOpenRouterBaseUrl()).toBe("http://gw.internal:8080/v1");
+      expect(mod.getOpenRouterBaseUrl()).toBe("http://gw.internal:8080/v1");
+
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain("unencrypted");
+      expect(w[0]).not.toContain("gw.internal");
+    });
+
+    it.each([
+      "http://localhost:8080/v1",
+      "http://127.0.0.2/v1",
+      "http://[::1]:8080/v1",
+      "https://gw.internal/v1",
+    ])("does not warn for %s (AC-2.6)", (value) => {
+      process.env.OPENROUTER_BASE_URL = value;
+      expect(mod.getOpenRouterBaseUrl()).toBe(value);
+      expect(warnings()).toEqual([]);
     });
   });
 });

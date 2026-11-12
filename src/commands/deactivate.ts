@@ -2,7 +2,7 @@
  * GitMem Pro Deactivation
  *
  * 1. Calls gitmem_deactivate_device RPC to remove this device server-side
- * 2. Removes api_key, supabase_url, supabase_key, openrouter_key from config.json
+ * 2. Removes api_key, supabase_url, supabase_key, openrouter_key, database_url from config.json
  * 3. Deletes license-cache.json
  * Does NOT remove .gitmem/ directory or local data.
  */
@@ -15,6 +15,7 @@ import {
   getLicenseKey,
   getValidationUrl,
 } from "../services/license.js";
+import { writePrivateFileSync, wasReadableByOthers } from "../services/private-file.js";
 
 // Same infra endpoint as validation — just different RPC
 const DEACTIVATION_URL =
@@ -93,9 +94,17 @@ export async function main(_args: string[]): Promise<void> {
   delete config.supabase_url;
   delete config.supabase_key;
   delete config.openrouter_key;
+  delete config.database_url;
 
-  // Write back config (preserving project, install_id, feedback_enabled)
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  // Write back config (preserving project, install_id, feedback_enabled).
+  // Owner-only (mode 0600) on POSIX; an older, more open file is tightened first.
+  const writeResult = writePrivateFileSync(configPath, JSON.stringify(config, null, 2));
+  if (writeResult.tightenError) {
+    console.log(`  ⚠ Could not restrict ${configPath} to your user account (${writeResult.tightenError}). Run: chmod 600 ${configPath}`);
+  } else if (wasReadableByOthers(writeResult)) {
+    const was = (writeResult.previousMode as number).toString(8).padStart(4, "0");
+    console.log(`  ✓ Restricted ${configPath} to your user account (was ${was})`);
+  }
 
   // Step 3: Clear license cache
   clearLicenseCache();

@@ -20,6 +20,10 @@ vi.mock("../../../src/services/tier.js", () => ({
 }));
 vi.mock("../../../src/services/license.js", () => ({
   getProConfig: () => ({}),
+  // null = no usable OpenRouter URL, so generateWithLLM falls back to deterministic
+  // variants with no network call, whether or not the developer has
+  // OPENROUTER_API_KEY set (CI does not; a dev machine may).
+  getOpenRouterUrl: () => null,
 }));
 
 const { writeTriples } = await import("../../../src/services/triple-writer.js");

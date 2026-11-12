@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.4] - 2026-11-12
+
+Contributed by Tyler (TenTides) in pull request #76, gitmem's first outside contribution.
+
 ### Security
 
 - **`config.json` is now readable only by your user account** (mode `0600`) on macOS and Linux. `activate` keeps

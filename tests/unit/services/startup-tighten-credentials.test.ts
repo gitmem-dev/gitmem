@@ -97,3 +97,25 @@ describe("tightenCredentialFiles", () => {
     expect(errors).toBe("");
   });
 });
+
+// runServer opens a stdio transport and starts background loaders, so it is not
+// run here. Read the source instead, as no-console-log.test.ts does: deleting
+// the call must fail a test.
+describe("runServer calls tightenCredentialFiles", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../../../src/server.ts"), "utf-8");
+
+  it("imports it from the startup module", () => {
+    expect(source).toMatch(/import \{[^}]*\btightenCredentialFiles\b[^}]*\} from "\.\/services\/startup\.js"/);
+  });
+
+  it("calls it in runServer, before the transport is connected", () => {
+    const start = source.indexOf("export async function runServer");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start);
+    const call = body.search(/^\s*tightenCredentialFiles\(\);/m);
+    const connect = body.indexOf("server.connect(");
+    expect(call).toBeGreaterThan(-1);
+    expect(connect).toBeGreaterThan(-1);
+    expect(call).toBeLessThan(connect);
+  });
+});

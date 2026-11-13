@@ -74,6 +74,41 @@ export function writePrivateFileSync(filePath: string, data: string): PrivateWri
   return { previousMode, tightenError };
 }
 
+/**
+ * Set an existing file to 0600 without writing to it (POSIX). A missing file is
+ * left alone. Like writePrivateFileSync, a chmod failure does not throw: the code
+ * comes back in `tightenError`, and a symlink has its target tightened.
+ */
+export function tightenPrivateFileSync(filePath: string): PrivateWriteResult {
+  if (process.platform === "win32") {
+    return { previousMode: null, tightenError: null };
+  }
+
+  let previousMode: number;
+  try {
+    previousMode = fs.statSync(filePath).mode & 0o777;
+  } catch {
+    return { previousMode: null, tightenError: null }; // nothing to tighten
+  }
+  if ((previousMode & 0o077) === 0) return { previousMode, tightenError: null };
+
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch (err) {
+    return { previousMode, tightenError: (err as NodeJS.ErrnoException).code || "chmod-failed" };
+  }
+
+  // Same check as the writer: some mounts accept chmod and change nothing.
+  try {
+    if ((fs.statSync(filePath).mode & 0o077) !== 0) {
+      return { previousMode, tightenError: "mode-unchanged" };
+    }
+  } catch {
+    // Cannot stat: leave as is.
+  }
+  return { previousMode, tightenError: null };
+}
+
 /** True when the file was readable by group or other before the write. */
 export function wasReadableByOthers(r: PrivateWriteResult): boolean {
   return r.previousMode !== null && (r.previousMode & 0o077) !== 0;

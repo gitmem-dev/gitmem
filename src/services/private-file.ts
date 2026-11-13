@@ -31,7 +31,7 @@ export interface PrivateWriteResult {
  * secrets are never written into a readable file. A new file is created at 0600.
  * A chmod failure does not throw: the write still happens and the code is returned.
  */
-export function writePrivateFileSync(filePath: string, data: string): PrivateWriteResult {
+export function writePrivateFileSync(filePath: string, data: string | Buffer): PrivateWriteResult {
   if (process.platform === "win32") {
     fs.writeFileSync(filePath, data);
     return { previousMode: null, tightenError: null };

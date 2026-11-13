@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.4] - 2026-11-12
+
+Contributed by Tyler (TenTides) in pull request #76, gitmem's first outside contribution.
+
+### Security
+
+- **`config.json` is now readable only by your user account** (mode `0600`) on macOS and Linux. `activate` keeps
+  your license key, Supabase service-role key and OpenRouter key there, and your `DATABASE_URL` if it applied the
+  schema with one. The file used to get your system's default mode, usually `0644`, so other accounts on the machine
+  could read it. An existing file is tightened the next time `activate` or `deactivate` writes it, and the command tells
+  you. To do it now: `chmod 600 ~/.gitmem/config.json`. If another account or a container user has to read it, give
+  that process the values as environment variables instead. Nothing changes on Windows, where the default location is
+  inside your user profile. `license-cache.json` is owner-only too. (#76)
+- **`deactivate` removes `database_url`**, which holds your database password, along with the keys it already removed.
+  (#76)
+- **The credential guard hook blocks reading `.gitmem/config.json`**, the same way it blocks `.env` and
+  `mcp-config.json`. `grep -c` structure checks still work. It is best effort: it matches the default `.gitmem` folder
+  name, so a store under a custom `GITMEM_DIR` is not covered. (#76)
+
+### Added
+
+- **`OPENROUTER_BASE_URL` sends OpenRouter calls somewhere else**, such as a proxy, a gateway or an
+  OpenRouter-compatible endpoint. Embeddings, transcript embeddings, variant generation and `gitmem check` all use it.
+  It is read from the environment only; `activate` does not save it. Unset, nothing changes: calls go to
+  `https://openrouter.ai/api/v1`. A value that isn't an http(s) URL, or has a username, password, query or fragment in
+  it, is refused with a warning, and gitmem makes no OpenRouter calls until it's fixed. It never falls back to
+  openrouter.ai. A plain `http` base on a non-local host works but warns once that the key is sent unencrypted. If you
+  already set `OPENROUTER_BASE_URL` for another tool, gitmem uses it too. (#76)
+- **`activate --no-save-keys`** keeps your license key, Supabase URL and service-role key, OpenRouter key and
+  `DATABASE_URL` out of `config.json`, for people who supply them from a secret manager. gitmem already reads
+  `GITMEM_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `OPENROUTER_API_KEY` from the environment first.
+  Without the option, `activate` saves what it resolved, as before. The option does not remove values an earlier
+  `activate` saved; delete them from `config.json` by hand. (#76)
+
 ## [1.11.3] - 2026-10-24
 
 **Two agents on one machine no longer share a session.** If you ran Claude Code next to Claude

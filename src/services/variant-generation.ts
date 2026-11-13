@@ -18,14 +18,13 @@
  */
 
 import * as supabase from "./supabase-client.js";
-import { getProConfig } from "./license.js";
+import { getProConfig, getOpenRouterUrl } from "./license.js";
 
 // --- Pipeline versioning ---
 // Bump PIPELINE_VERSION when changing the prompt, model, or generation logic.
 // Format: "gen-{major}.{minor}" — major for prompt rewrites, minor for tweaks.
 const PIPELINE_VERSION = "gen-1.0";
 const LLM_MODEL = "anthropic/claude-3-5-haiku-20241022";
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export interface ScarData {
   id: string;
@@ -128,15 +127,22 @@ function buildUserPrompt(scar: ScarData): string {
  * Call LLM via OpenRouter to generate variant configs.
  * Returns parsed output or null on failure.
  */
-async function generateWithLLM(scar: ScarData): Promise<LLMVariantOutput | null> {
+/** @internal exported for tests */
+export async function generateWithLLM(scar: ScarData): Promise<LLMVariantOutput | null> {
   const apiKey = process.env.OPENROUTER_API_KEY || getProConfig().openrouterKey;
   if (!apiKey) {
     console.error("[variant-generation] No OpenRouter key (env or config.json) — falling back to deterministic");
     return null;
   }
 
+  const apiUrl = getOpenRouterUrl("chat/completions");
+  if (!apiUrl) {
+    console.error("[variant-generation] OPENROUTER_BASE_URL is not usable — falling back to deterministic");
+    return null;
+  }
+
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

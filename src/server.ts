@@ -63,6 +63,7 @@ import {
   checkCacheHealth,
   flushCache,
   startBackgroundInit,
+  tightenCredentialFiles,
 } from "./services/startup.js";
 import { checkWritePathWithTimeout, getLastWritePathVerdict, formatWritePathLine } from "./services/write-health.js";
 import { getEffectTracker } from "./services/effect-tracker.js";
@@ -485,6 +486,7 @@ export function createServer(): Server {
  * First few queries may use Supabase fallback until cache is ready.
  */
 export async function runServer(): Promise<void> {
+  tightenCredentialFiles();
   const tier = getTier();
 
   // Start server immediately (don't block on cache loading or license validation)

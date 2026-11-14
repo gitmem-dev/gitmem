@@ -41,6 +41,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { findStrandedProjectRoots, getHomeGitmemDir, sameDirectory } from "../services/gitmem-dir.js";
+import { writePrivateFileSync } from "../services/private-file.js";
 
 /** Memory files merged by record id instead of skipped (GIT-100). */
 export const MERGED_FILES = ["learnings.json", "threads.json", "decisions.json", "sessions.json"] as const;
@@ -209,7 +210,20 @@ function walk(
       }
       continue;
     }
-    if (!dryRun) fs.copyFileSync(src, dst);
+    if (!dryRun) {
+      if (relative === "" && entry.name === "config.json") {
+        // copyFileSync gives the copy the source's mode, usually 0644, and config.json
+        // holds credentials: create it owner-only instead. The bytes are copied as a
+        // Buffer, so the copy is identical. (license-cache.json is per-install and
+        // never copied, see above.)
+        const { tightenError } = writePrivateFileSync(dst, fs.readFileSync(src));
+        if (tightenError) {
+          console.error(`Could not restrict ${dst} to your user account (${tightenError}). Run: chmod 600 ${dst}`);
+        }
+      } else {
+        fs.copyFileSync(src, dst);
+      }
+    }
     plan.copied.push(rel);
   }
 }

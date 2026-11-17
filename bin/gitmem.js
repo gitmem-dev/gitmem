@@ -50,6 +50,14 @@ Pro Tier Activation:
   npx gitmem-mcp activate           Activate Pro tier (license key + credentials wizard)
   npx gitmem-mcp deactivate         Remove Pro credentials from config
 
+Remote (Pro):
+  npx gitmem-mcp --http            Serve over Streamable HTTP for claude.ai / mobile / cloud clients
+                                   Port: GITMEM_HTTP_PORT (3737)  Host: GITMEM_HTTP_HOST (127.0.0.1)
+    Bearer mode (dev / Claude Code --header):  GITMEM_HTTP_TOKEN=<secret>
+    OAuth mode (claude.ai connector):          GITMEM_OAUTH_ISSUER=https://<ref>.supabase.co/auth/v1
+                                               GITMEM_PUBLIC_URL=https://<your-host>
+                                               [GITMEM_OAUTH_AUDIENCE=authenticated] [GITMEM_OAUTH_JWT_SECRET=<legacy HS256>]
+
 Other commands:
   npx gitmem-mcp setup             Output SQL for Supabase schema setup (pro/dev tier)
   npx gitmem-mcp configure         Generate .mcp.json config for Claude Code / Cursor
@@ -909,6 +917,10 @@ switch (command) {
     break;
   case "server":
   case "--stdio":
+    import("../dist/index.js");
+    break;
+  case "--http":
+    // GIT-130: Streamable HTTP transport. dist/index.js reads --http from argv.
     import("../dist/index.js");
     break;
   case "help":

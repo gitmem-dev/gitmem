@@ -12,8 +12,9 @@
 
 import { runServer } from "./server.js";
 
-// Run the server
-runServer().catch((error) => {
+// Run the server. `--http` (or GITMEM_TRANSPORT=http) selects Streamable HTTP.
+const transport = process.argv.includes("--http") ? "http" : undefined;
+runServer({ transport }).catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });

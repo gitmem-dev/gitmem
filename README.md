@@ -184,7 +184,7 @@ Your AI agent likely has its own memory file (MEMORY.md, .cursorrules, etc.). He
 ```bash
 git clone https://github.com/gitmem-dev/gitmem.git
 cd gitmem
-npm install
+npm install --legacy-peer-deps
 npm run build
 npm test
 ```

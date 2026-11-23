@@ -8,14 +8,15 @@
  * - SUPABASE_KEY alone is used, as getProConfig() accepts it
  * - the environment wins over config.json, and SUPABASE_SERVICE_ROLE_KEY over SUPABASE_KEY
  * - with neither set, the answer is the one each site gave before
+ * and that no other src/ file reads the key or URL directly (guard).
  *
  * Nothing here touches the network or the developer's store: fetch is stubbed,
  * the store is a temp folder and the cache is a stand-in.
  */
 
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
-import { writeFileSync, readFileSync, rmSync, mkdtempSync } from "fs";
-import { join } from "path";
+import { writeFileSync, readFileSync, readdirSync, statSync, rmSync, mkdtempSync } from "fs";
+import { join, relative } from "path";
 import { tmpdir } from "os";
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), "gitmem-supabase-config-test-"));
@@ -75,6 +76,61 @@ const EMBEDDING_BODY = { data: [{ embedding: new Array(1536).fill(0.1) }] };
 function okJson(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200 });
 }
+
+const SRC = join(__dirname, "../../../src");
+
+function collectTsFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...collectTsFiles(full));
+    else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts") && !entry.endsWith(".d.ts")) out.push(full);
+  }
+  return out;
+}
+
+/**
+ * Direct reads: `key` is SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY from the
+ * environment, `url` is SUPABASE_URL from the environment, `file` is
+ * config.json's supabase_url or supabase_key.
+ */
+const DIRECT_READS = {
+  key: /process\.env(?:\.|\[\s*["'`])(?:SUPABASE_SERVICE_ROLE_KEY|SUPABASE_KEY)\b/,
+  url: /process\.env(?:\.|\[\s*["'`])SUPABASE_URL\b/,
+  file: /\.supabase_(?:url|key)\b|\[\s*["'`]supabase_(?:url|key)["'`]\s*\]/,
+};
+type DirectRead = keyof typeof DIRECT_READS;
+
+/**
+ * The files that still read the Supabase key or URL directly, and why. Every
+ * other file calls getProConfig(). The list should only shrink.
+ */
+const ALLOWED_DIRECT_READS: Record<string, { reads: DirectRead[]; why: string }> = {
+  "services/license.ts": { reads: ["key", "url", "file"], why: "getProConfig() itself" },
+  "services/tier.ts": { reads: ["url"], why: "detectTier(), left as it is until Pro without a license key is settled" },
+  "services/config.ts": { reads: ["url"], why: "search-mode detection from the URL's shape; no key" },
+  "lib/telemetry.ts": { reads: ["url"], why: "the free/pro label on telemetry events; no key" },
+  "commands/activate.ts": { reads: ["file"], why: "saves what it resolved and offers to keep the saved values" },
+  "commands/deactivate.ts": { reads: ["file"], why: "removes the saved values" },
+};
+
+describe("only getProConfig() reads the Supabase key (guard)", () => {
+  it("no src/ file outside the list reads the key or URL directly", () => {
+    const found: Record<string, DirectRead[]> = {};
+    for (const full of collectTsFiles(SRC)) {
+      // Comment lines name these freely; only code counts.
+      const code = readFileSync(full, "utf-8")
+        .split("\n")
+        .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+        .join("\n");
+      const reads = (Object.keys(DIRECT_READS) as DirectRead[]).filter((kind) => DIRECT_READS[kind].test(code));
+      if (reads.length > 0) found[relative(SRC, full).split("\\").join("/")] = reads;
+    }
+
+    const allowed = Object.fromEntries(Object.entries(ALLOWED_DIRECT_READS).map(([file, { reads }]) => [file, reads]));
+    expect(found, "read them through getProConfig() (src/services/license.ts)").toEqual(allowed);
+  });
+});
 
 interface Site {
   name: string;

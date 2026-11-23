@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `supabase_url`, `supabase_key`, `openrouter_key` and `database_url` are still there (never their values) and points
   to `deactivate`, which removes them. It used to print only "Credentials not saved".
 
+### Fixed
+
+- **Transcript search, transcript indexing at `session_close`, the decay refresh at `session_start` and `gitmem check`
+  find the Supabase URL and key where the rest of gitmem does.** They read the environment only, and all but the decay
+  refresh read only `SUPABASE_SERVICE_ROLE_KEY`. So with the values in `config.json` (where `activate` saves them),
+  recall worked while these failed, and recall's "dismissed N/M times" note, which shares the decay refresh's settings,
+  never appeared; with the key in `SUPABASE_KEY`, transcript search, transcript indexing and `gitmem check` failed.
+  They now read the environment first (`SUPABASE_SERVICE_ROLE_KEY`, then `SUPABASE_KEY`) and then `config.json`, like
+  the rest of gitmem. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set, nothing changes.
+
 ## [1.11.4] - 2026-11-12
 
 Contributed by Tyler (TenTides) in pull request #76, gitmem's first outside contribution.

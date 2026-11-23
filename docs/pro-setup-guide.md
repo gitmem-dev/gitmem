@@ -101,8 +101,9 @@ OpenRouter key and, if `activate` applied the schema over `DATABASE_URL`, that c
   wrapper that injects them (a secret manager's run command). Writing them into an `env` block of an MCP client
   configuration file (`.mcp.json`, `claude_desktop_config.json`) puts the keys back into a plaintext file.
 - `--no-save-keys` only stops new writes. Values that an earlier `activate` already saved stay in `config.json` until
-  you remove them by hand. `activate --no-save-keys` lists the ones still there and points to `deactivate`, which
-  removes them too, but it also deactivates this machine's license.
+  you remove them. `activate --no-save-keys` lists the ones still there and points to
+  `npx gitmem-mcp deactivate --keys-only`, which removes them and keeps this machine registered with the license
+  server (see [Deactivation](#deactivation)).
 
 ## Routing OpenRouter calls through a proxy or gateway
 
@@ -251,6 +252,27 @@ npx gitmem-mcp deactivate
 ```
 
 This removes the device from the license server (freeing a device slot), clears credentials from config, and deletes the license cache. Your Supabase data is preserved — you can re-activate on the same or different device.
+
+### Remove the saved keys and keep the device
+
+```bash
+npx gitmem-mcp deactivate --keys-only
+```
+
+For when the keys move to the environment or a secret manager. This removes `api_key`, `supabase_url`, `supabase_key`,
+`openrouter_key` and `database_url` from `config.json` (the same five `deactivate` removes) and deletes
+`license-cache.json`, which holds the first 16 characters of the license key. It does not contact the license server, so
+this machine keeps its device slot and a later `activate` with the key carries on where it was.
+
+- Every other field in `config.json` (`install_id`, `project`, `feedback_enabled` and any other) stays as it was, and
+  the file is written owner-only, as `activate` writes it. A file with none of the five keys is left untouched.
+  Telemetry settings are in `telemetry.json`, which is not touched.
+- It prints the names of the keys it removed, never their values, and exits 0 whether or not there were any.
+- Afterwards gitmem reads the license key and credentials from the environment only: `GITMEM_API_KEY`, `SUPABASE_URL`,
+  `SUPABASE_SERVICE_ROLE_KEY` and `OPENROUTER_API_KEY`. Set them for every process that runs gitmem, then restart your
+  editor. With the license cache gone, the next start checks the license with the license server again.
+- `deactivate` takes no other option. Anything else (a misspelt `--keys-only` included) stops it with exit 1 before it
+  changes or sends anything.
 
 ## Troubleshooting
 

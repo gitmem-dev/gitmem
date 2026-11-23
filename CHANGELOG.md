@@ -22,7 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`activate --no-save-keys` says when earlier keys are still in `config.json`.** It names which of `api_key`,
   `supabase_url`, `supabase_key`, `openrouter_key` and `database_url` are still there (never their values) and points
-  to `deactivate`, which removes them. It used to print only "Credentials not saved".
+  to `deactivate --keys-only`, which removes them and keeps the device registered. It used to print only "Credentials
+  not saved".
+- **`deactivate` refuses an option it does not know**, with exit 1, before it changes or sends anything. It used to
+  ignore its arguments, so a misspelt `--keys-only` would have released the device.
+
+### Added
+
+- **`deactivate --keys-only` removes the saved keys without releasing the device.** It removes `api_key`,
+  `supabase_url`, `supabase_key`, `openrouter_key` and `database_url` from `config.json`, as `deactivate` does, keeps
+  every other field, and deletes `license-cache.json` (it holds the first 16 characters of the license key), but makes
+  no request to the license server, so the device stays registered and a later `activate` carries on where it was.
+  gitmem then reads the license key and credentials from the environment only. It prints key names, never values, and
+  leaves a `config.json` with none of the keys untouched. Use it when the keys move to a secret manager.
 
 ## [1.11.4] - 2026-11-12
 

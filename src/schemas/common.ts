@@ -91,3 +91,12 @@ export const PositiveIntSchema = z.number().int().positive();
  * Non-negative integer
  */
 export const NonNegativeIntSchema = z.number().int().nonnegative();
+
+/**
+ * Session ID: UUID or 8-char hex short-ID (no path traversal).
+ * Shared by session_close, recall and confirm_scars (GIT-143).
+ */
+export const SessionIdSchema = z.string().min(1, "session_id is required").refine(
+  (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) || /^[0-9a-f]{8}$/i.test(val),
+  { message: "session_id must be a UUID or 8-char hex short-ID" }
+);

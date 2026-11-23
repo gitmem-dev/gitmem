@@ -30,6 +30,8 @@ vi.mock("../../../src/services/session-state.js", () => {
       }
     },
     getConfirmations: () => _confirmations,
+    getConfirmationLog: () => _confirmations,
+    isKnownSessionId: () => true,
     // Test helpers
     __setSession: (s: any) => { _session = s; },
     __setSurfacedScars: (scars: any[]) => { _surfacedScars = scars; },

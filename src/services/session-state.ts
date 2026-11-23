@@ -19,6 +19,7 @@ import { getSessionPath, getGitmemDir, sanitizePathComponent } from "./gitmem-di
 import { findResumableSessionOnDisk, listActiveSessions, getRegistryFingerprint } from "./active-sessions.js";
 import { withLockSync } from "./file-lock.js";
 import { getWriterIdentity } from "./process-identity.js";
+import { ownerOf, sameSessionId } from "./scar-ownership.js";
 
 interface SessionContext {
   sessionId: string;
@@ -89,7 +90,7 @@ export function setCurrentSession(context: Omit<SessionContext, 'recallCalled' |
   currentSession = {
     ...context,
     recallCalled: false,
-    surfacedScars: mergeSurfaced(onDisk?.surfaced_scars, context.surfacedScars),
+    surfacedScars: mergeSurfaced(onDisk?.surfaced_scars, context.surfacedScars, context.sessionId),
     confirmations: mergeConfirmations(onDisk?.confirmations, context.confirmations),
     reflections: [],
     observations: context.observations || [],
@@ -125,16 +126,31 @@ function readOwnSessionFile(sessionId: string): { surfaced_scars?: unknown; conf
   }
 }
 
-/** Existing entries first and untouched; new scar ids appended. */
-function mergeSurfaced(existing: unknown, added: SurfacedScar[] | undefined): SurfacedScar[] {
+/**
+ * Existing entries first and untouched; new ones appended.
+ *
+ * GIT-143: an entry is one scar recalled by one session, so the same scar
+ * recalled by two sessions sharing this process is kept twice. Deduplicating
+ * on scar_id alone let the second session's recall vanish into the first's
+ * entry, and the second session was never asked to confirm it.
+ */
+function mergeSurfaced(existing: unknown, added: SurfacedScar[] | undefined, holderSessionId: string): SurfacedScar[] {
   const out: SurfacedScar[] = Array.isArray(existing) ? [...existing] : [];
+  const key = (s: SurfacedScar) => `${s.scar_id}|${ownerOf(s, holderSessionId).toLowerCase()}`;
+  const seen = new Set(out.map(key));
   for (const scar of added || []) {
-    if (!out.some((s) => s.scar_id === scar.scar_id)) out.push(scar);
+    if (!seen.has(key(scar))) {
+      out.push(scar);
+      seen.add(key(scar));
+    }
   }
   return out;
 }
 
-const confirmationKey = (c: ScarConfirmation) => `${c.scar_id}|${c.confirmed_at}|${c.writer?.server_pid ?? ""}`;
+// GIT-143: the session is part of the key. One confirm_scars call can confirm
+// the same scar for two sessions in the same millisecond from the same process.
+const confirmationKey = (c: ScarConfirmation) =>
+  `${c.scar_id}|${c.confirmed_at}|${c.writer?.server_pid ?? ""}|${(c.session_id ?? "").toLowerCase()}`;
 
 /** Union of two confirmation logs. Nothing is replaced; a re-confirmation is a new entry. */
 function mergeConfirmations(existing: unknown, added: ScarConfirmation[] | undefined): ScarConfirmation[] {
@@ -472,7 +488,7 @@ export function isRecallCalled(): boolean {
  * after an MCP restart still tracks), and the outcome is returned so callers
  * can fail as loudly as confirm_scars does instead of proceeding as if tracked.
  */
-export function addSurfacedScars(scars: SurfacedScar[]): boolean {
+export function addSurfacedScars(scars: SurfacedScar[], recalledUnderSessionId?: string): boolean {
   const session = resolveCurrentSession();
   if (!session) {
     console.warn("[session-state] Cannot add surfaced scars: no active session");
@@ -482,15 +498,22 @@ export function addSurfacedScars(scars: SurfacedScar[]): boolean {
   // GIT-128: refuse before tracking anything if another live server owns the
   // session — tracking in memory alone would show this agent scars its gate
   // never sees.
+  // GIT-143: stamp each scar with the session it was recalled under. That is
+  // the caller's own id when it passed one, else this process's current session.
   const writer = getWriterIdentity((session.agent as AgentIdentity) || "Unknown");
-  const stamped = scars.map((s) => (s.writer ? s : { ...s, writer }));
+  const owner = recalledUnderSessionId || session.sessionId;
+  const stamped = scars.map((s) => ({
+    ...s,
+    writer: s.writer ?? writer,
+    session_id: s.session_id ?? owner,
+  }));
   const persisted = persistSurfacedScars(session, stamped);
   if (!persisted.ok) {
     console.warn(`[session-state] Surfaced scars not tracked: ${persisted.reason}`);
     return false;
   }
 
-  session.surfacedScars = mergeSurfaced(session.surfacedScars, stamped);
+  session.surfacedScars = mergeSurfaced(session.surfacedScars, stamped, session.sessionId);
   console.error(`[session-state] Surfaced scars tracked: ${session.surfacedScars.length} total`);
   return true;
 }
@@ -508,7 +531,11 @@ export function addSurfacedScars(scars: SurfacedScar[]): boolean {
  */
 function persistSurfacedScars(session: SessionContext, added: SurfacedScar[]): { ok: true } | { ok: false; reason: string } {
   return updateOwnSessionFile(session.sessionId, (data) => {
-    data.surfaced_scars = mergeSurfaced(data.surfaced_scars, mergeSurfaced(session.surfacedScars, added));
+    data.surfaced_scars = mergeSurfaced(
+      data.surfaced_scars,
+      mergeSurfaced(session.surfacedScars, added, session.sessionId),
+      session.sessionId,
+    );
   });
 }
 
@@ -572,7 +599,7 @@ export function addConfirmations(confirmations: ScarConfirmation[]): string | nu
   const stamped = confirmations.map((c) => (c.writer ? c : { ...c, writer }));
   const persisted = updateOwnSessionFile(session.sessionId, (data) => {
     data.confirmations = mergeConfirmations(data.confirmations, stamped);
-    data.surfaced_scars = mergeSurfaced(data.surfaced_scars, session.surfacedScars);
+    data.surfaced_scars = mergeSurfaced(data.surfaced_scars, session.surfacedScars, session.sessionId);
   });
   if (!persisted.ok) {
     console.warn(`[session-state] Confirmations not recorded: ${persisted.reason}`);
@@ -594,6 +621,24 @@ export function getConfirmations(): ScarConfirmation[] {
     latest.set(conf.scar_id, conf);
   }
   return [...latest.values()];
+}
+
+/**
+ * GIT-143: whether a caller-supplied session id names a session this process
+ * knows: its current session, a session some recorded scar was recalled under,
+ * or a session in the active-sessions registry. An id that names none of them
+ * is refused rather than treated as a session with nothing pending, which
+ * would let any made-up id read "proceed".
+ */
+export function isKnownSessionId(id: string): boolean {
+  const session = resolveCurrentSession();
+  if (session && sameSessionId(id, session.sessionId)) return true;
+  if (session?.surfacedScars.some((s) => s.session_id && sameSessionId(id, s.session_id))) return true;
+  try {
+    return listActiveSessions().some((e) => sameSessionId(id, e.session_id));
+  } catch {
+    return false;
+  }
 }
 
 /** GIT-128: every confirmation recorded in this session, oldest first. */
@@ -641,8 +686,13 @@ export function hasUnconfirmedScars(): boolean {
   const recallScars = currentSession.surfacedScars.filter(s => s.source === "recall");
   if (recallScars.length === 0) return false;
 
-  const confirmedIds = new Set(currentSession.confirmations.map(c => c.scar_id));
-  return recallScars.some(s => !confirmedIds.has(s.scar_id));
+  // GIT-143: a confirmation covers the scar entry of the session it was made
+  // for, so one session confirming a scar does not clear another session's
+  // entry for the same scar. Unstamped entries belong to this session.
+  const holder = currentSession.sessionId;
+  const key = (scarId: string, owner: string) => `${scarId}|${owner.toLowerCase()}`;
+  const confirmed = new Set(currentSession.confirmations.map(c => key(c.scar_id, ownerOf(c, holder))));
+  return recallScars.some(s => !confirmed.has(key(s.scar_id, ownerOf(s, holder))));
 }
 
 // Security: cap unbounded arrays to prevent memory exhaustion in long sessions

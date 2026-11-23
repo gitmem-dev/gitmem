@@ -33,6 +33,7 @@ import {
   type ScarWithVariant,
 } from "../services/variant-assignment.js";
 import { addSurfacedScars, getCurrentSession, setRecallCalled, setRecallFailure, clearRecallFailure } from "../services/session-state.js";
+import { resolveCallerSessionId } from "../services/scar-ownership.js";
 import { getAgentIdentity } from "../services/agent-detection.js";
 import { v4 as uuidv4 } from "uuid";
 import { wrapDisplay, productLine, SEV, boldText, dimText, ANSI, CITATION_LINE } from "../services/display-protocol.js";
@@ -82,6 +83,10 @@ export interface RecallParams {
   match_count?: number;
   issue_id?: string; // Required for variant assignment
   similarity_threshold?: number; // Minimum similarity to include results
+  /** GIT-143: the caller's session; its scars are recorded as recalled by it. */
+  session_id?: string;
+  /** GIT-143: alias of session_id for proxies that strip a parameter named session_id. */
+  gitmem_session_id?: string;
 }
 
 /**
@@ -426,6 +431,27 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
   const matchCount = params.match_count || 3;
   const issueId = params.issue_id; // For variant assignment
 
+  // GIT-143: the session these scars are recalled for. When the caller names
+  // it, the scars are stamped with it rather than with whichever session this
+  // process last started, so confirm_scars can hold each chat to its own.
+  const caller = resolveCallerSessionId(params, getCurrentSession()?.sessionId);
+  if (!caller.ok) {
+    const latencyMs = timer.stop();
+    const msg = `⚠️ ${caller.error} Nothing was recalled.`;
+    return {
+      activated: false,
+      plan,
+      project,
+      match_count: matchCount,
+      scars: [],
+      performance_ms: latencyMs,
+      formatted_response: msg,
+      display: wrapDisplay(msg),
+      performance: buildPerformanceData("recall", latencyMs, 0),
+    };
+  }
+  const callerSessionId = caller.id;
+
   // Mark recall as called BEFORE any search — prevents enforcement false positives
   // when recall returns 0 matching scars
   setRecallCalled();
@@ -477,7 +503,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
         surfaced_at: recallSurfacedAt,
         source: "recall" as const,
       }));
-      const tracked = addSurfacedScars(recallSurfacedScars);
+      const tracked = addSurfacedScars(recallSurfacedScars, callerSessionId);
 
       const freeFormatted =
         formatResponse(scars, plan) + untrackedSurfacingNotice(tracked, scars.length);
@@ -685,7 +711,7 @@ export async function recall(params: RecallParams): Promise<RecallResult> {
     // so surfacing survives an MCP restart between recall and confirm_scars.
     // The inline write that used to live here duplicated that and ran only on
     // this path, leaving the free-tier path's surfacing memory-only.
-    const surfacingTracked = addSurfacedScars(recallSurfacedScars);
+    const surfacingTracked = addSurfacedScars(recallSurfacedScars, callerSessionId);
 
     const latencyMs = timer.stop();
     const memoriesSurfaced = scars.map((s) => s.id);

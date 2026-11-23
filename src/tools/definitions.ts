@@ -45,6 +45,14 @@ export const TOOLS = [
           type: "number",
           description: "Minimum similarity score (0-1) to include results. Weak matches below threshold are suppressed. Default: 0.4 (free tier BM25), 0.35 (pro tier embeddings).",
         },
+        session_id: {
+          type: "string",
+          description: "Your session id from session_start. Scars are recorded as recalled by this session, so confirm_scars asks you only for your own when other chats share this gitmem server.",
+        },
+        gitmem_session_id: {
+          type: "string",
+          description: "Same as session_id — prefer this one. Some MCP clients and proxies strip a parameter named session_id. If both are given and differ, the call is refused.",
+        },
       },
       required: ["plan"],
     },
@@ -82,6 +90,14 @@ export const TOOLS = [
             required: ["scar_id", "decision", "evidence"],
           },
           description: "One confirmation per recalled scar. All recalled scars must be addressed.",
+        },
+        session_id: {
+          type: "string",
+          description: "Your session id from session_start. When given, you confirm only the scars your session recalled; scars other chats on this gitmem server recalled are not required and cannot be confirmed by you.",
+        },
+        gitmem_session_id: {
+          type: "string",
+          description: "Same as session_id — prefer this one. Some MCP clients and proxies strip a parameter named session_id. If both are given and differ, the call is refused.",
         },
       },
       required: ["confirmations"],
@@ -834,6 +850,14 @@ export const TOOLS = [
           type: "number",
           description: "Number of scars to return (default: 3)",
         },
+        session_id: {
+          type: "string",
+          description: "Your session id from session_start. Scars are recorded as recalled by this session, so confirm_scars asks you only for your own when other chats share this gitmem server.",
+        },
+        gitmem_session_id: {
+          type: "string",
+          description: "Same as session_id — prefer this one. Some MCP clients and proxies strip a parameter named session_id. If both are given and differ, the call is refused.",
+        },
       },
       required: ["plan"],
     },
@@ -856,6 +880,14 @@ export const TOOLS = [
             required: ["scar_id", "decision", "evidence"],
           },
           description: "One confirmation per recalled scar",
+        },
+        session_id: {
+          type: "string",
+          description: "Your session id from session_start. When given, you confirm only the scars your session recalled; scars other chats on this gitmem server recalled are not required and cannot be confirmed by you.",
+        },
+        gitmem_session_id: {
+          type: "string",
+          description: "Same as session_id — prefer this one. Some MCP clients and proxies strip a parameter named session_id. If both are given and differ, the call is refused.",
         },
       },
       required: ["confirmations"],
@@ -1585,6 +1617,14 @@ export const TOOLS = [
             required: ["scar_id", "decision", "evidence"],
           },
           description: "One confirmation per recalled scar",
+        },
+        session_id: {
+          type: "string",
+          description: "Your session id from session_start. When given, you confirm only the scars your session recalled; scars other chats on this gitmem server recalled are not required and cannot be confirmed by you.",
+        },
+        gitmem_session_id: {
+          type: "string",
+          description: "Same as session_id — prefer this one. Some MCP clients and proxies strip a parameter named session_id. If both are given and differ, the call is refused.",
         },
       },
       required: ["confirmations"],

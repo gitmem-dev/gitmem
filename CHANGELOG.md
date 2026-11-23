@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `supabase_url`, `supabase_key`, `openrouter_key` and `database_url` are still there (never their values) and points
   to `deactivate`, which removes them. It used to print only "Credentials not saved".
 
+### Fixed
+
+- **`confirm_scars` no longer holds one chat to scars another chat recalled** when both share a gitmem server, as
+  all chats in the Claude desktop app do. Each recalled scar now records the session it was recalled under. Pass your
+  session id to `recall` and `confirm_scars` (`gitmem_session_id`, or `session_id` where your client keeps it) and
+  you are asked only for your own scars; you cannot confirm another session's, and one session confirming a scar no
+  longer clears another session's pending copy of it. Without an id nothing changes, except that the rejection now
+  names the session each unaddressed scar belongs to. A session id the server does not know is refused.
+
 ## [1.11.4] - 2026-11-12
 
 Contributed by Tyler (TenTides) in pull request #76, gitmem's first outside contribution.

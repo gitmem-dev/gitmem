@@ -394,6 +394,13 @@ export interface SurfacedScar {
   source: "session_start" | "recall";
   variant_id?: string; // UUID of assigned variant from scar_enforcement_variants
   writer?: WriterIdentity; // GIT-128: which process recorded the surfacing
+  /**
+   * GIT-143: the session this scar was recalled under. One gitmem server can
+   * serve several chats at once (the desktop app runs one for all of them), so
+   * the session file a scar lands in is not proof of whose scar it is.
+   * Absent on entries written before GIT-143: treat those as the file's own.
+   */
+  session_id?: string;
 }
 
 /**
@@ -425,6 +432,7 @@ export interface ScarConfirmation {
   confirmed_at: string; // ISO timestamp
   relevance?: ScarRelevance; // Optional relevance rating
   writer?: WriterIdentity; // GIT-128: which process recorded the confirmation
+  session_id?: string; // GIT-143: the session that confirmed it (see SurfacedScar.session_id)
 }
 
 export interface ConfirmScarsParams {
@@ -434,6 +442,10 @@ export interface ConfirmScarsParams {
     evidence: string;
     relevance?: ScarRelevance; // Optional relevance rating
   }>;
+  /** GIT-143: confirm only the scars this session recalled. */
+  session_id?: string;
+  /** GIT-143: alias of session_id for proxies that strip a parameter named session_id. */
+  gitmem_session_id?: string;
 }
 
 export interface ConfirmScarsResult {

@@ -20,9 +20,11 @@ import {
   getCurrentSession,
   getSurfacedScars,
   addConfirmations,
-  getConfirmations,
+  getConfirmationLog,
   getRecallFailure,
+  isKnownSessionId,
 } from "../services/session-state.js";
+import { ownerOf, resolveCallerSessionId, sameSessionId, shortSessionId } from "../services/scar-ownership.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { wrapDisplay, productLine, STATUS, ANSI } from "../services/display-protocol.js";
 import type {
@@ -88,18 +90,28 @@ function validateConfirmation(
 /**
  * Format the confirmation result as markdown for agent context.
  */
+interface MissingScar {
+  title: string;
+  owner: string; // session the scar was recalled under
+}
+
 function formatResponse(
   valid: boolean,
   confirmations: ScarConfirmation[],
   errors: string[],
-  missingScars: string[],
+  missingScars: MissingScar[],
+  ownSessionId: string,
+  callerNamedSession: boolean,
 ): string {
   const lines: string[] = [];
 
   if (valid) {
     lines.push(`${STATUS.ok} SCAR CONFIRMATIONS ACCEPTED`);
     lines.push("");
+    const shown = new Set<string>();
     for (const conf of confirmations) {
+      if (shown.has(conf.scar_id)) continue; // one line per scar, however many sessions it covered
+      shown.add(conf.scar_id);
       const indicator = conf.decision === "APPLYING" ? STATUS.pass : conf.decision === "N_A" ? `${ANSI.dim}-${ANSI.reset}` : `${ANSI.yellow}!${ANSI.reset}`;
       lines.push(`${indicator} **${conf.scar_title}** → ${conf.decision}`);
     }
@@ -118,17 +130,42 @@ function formatResponse(
     }
 
     if (missingScars.length > 0) {
+      // GIT-143: name the session each scar was recalled under, so an agent can
+      // see when a scar is not its own.
       lines.push("**Unaddressed scars (must confirm all recalled scars):**");
-      for (const title of missingScars) {
-        lines.push(`- ${title}`);
+      for (const m of missingScars) {
+        const own = sameSessionId(m.owner, ownSessionId);
+        lines.push(`- ${m.title} (recalled by session ${shortSessionId(m.owner)}${own ? ", this session" : ""})`);
       }
       lines.push("");
+      if (!callerNamedSession && missingScars.some((m) => !sameSessionId(m.owner, ownSessionId))) {
+        lines.push(
+          "Some of these were recalled by another session that shares this gitmem server. " +
+          "If they are not yours, pass your session id as gitmem_session_id to recall() and " +
+          "confirm_scars(); you will then be asked only for the scars you recalled.",
+        );
+        lines.push("");
+      }
     }
 
     lines.push("Fix the errors above and call confirm_scars again.");
   }
 
   return lines.join("\n");
+}
+
+/** A refusal before any scar is looked at. Nothing is recorded. */
+function rejectEarly(error: string, timer: Timer): ConfirmScarsResult {
+  const msg = `${STATUS.rejected} ${error}`;
+  return {
+    valid: false,
+    errors: [error],
+    confirmations: [],
+    missing_scars: [],
+    formatted_response: msg,
+    display: wrapDisplay(msg),
+    performance: buildPerformanceData("confirm_scars", timer.elapsed(), 0),
+  };
 }
 
 /**
@@ -153,9 +190,27 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
     };
   }
 
+  // GIT-143: whose scars this call answers for. With an id, only the scars
+  // recalled under that session; without one, every scar in this process's
+  // current session, as before. Entries without a stamp belong to that session.
+  const holder = session.sessionId;
+  const caller = resolveCallerSessionId(params, holder);
+  if (!caller.ok) {
+    return rejectEarly(`${caller.error} Nothing was recorded.`, timer);
+  }
+  if (caller.id && !isKnownSessionId(caller.id)) {
+    return rejectEarly(
+      `Session ${caller.id} is not known to this gitmem server. Pass the session id from session_start. Nothing was recorded.`,
+      timer,
+    );
+  }
+  const ownSessionId = caller.id ?? holder;
+  const isMine = (owner: string) => !caller.id || sameSessionId(owner, caller.id);
+
   // Get recall-surfaced scars (only source: "recall", not "session_start")
-  const allSurfacedScars = getSurfacedScars();
-  const recallScars = allSurfacedScars.filter(s => s.source === "recall");
+  const allRecallScars = getSurfacedScars().filter(s => s.source === "recall");
+  const recallScars = allRecallScars.filter(s => isMine(ownerOf(s, holder)));
+  const otherSessionsScars = allRecallScars.filter(s => !isMine(ownerOf(s, holder)));
 
   if (recallScars.length === 0) {
     const performance = buildPerformanceData("confirm_scars", timer.elapsed(), 0);
@@ -192,7 +247,20 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
       };
     }
 
-    const noScarsMsg = `${STATUS.ok} No recall-surfaced scars to confirm. Proceed freely.`;
+    const noScarsLines = [`${STATUS.ok} No recall-surfaced scars to confirm. Proceed freely.`];
+    if (otherSessionsScars.length > 0) {
+      // GIT-143: say so when the only scars here belong to other sessions. If
+      // this session called recall() without its id, its scars were recorded
+      // under the server's current session and are among these.
+      const owners = [...new Set(otherSessionsScars.map(s => shortSessionId(ownerOf(s, holder))))];
+      noScarsLines.push(
+        "",
+        `None were recalled by session ${shortSessionId(ownSessionId)}. ${otherSessionsScars.length} scar(s) on this server ` +
+          `belong to other sessions (${owners.join(", ")}) and were not required. If you called recall() without ` +
+          "gitmem_session_id, call it again with the same id you passed here.",
+      );
+    }
+    const noScarsMsg = noScarsLines.join("\n");
     return {
       valid: true,
       errors: [],
@@ -204,46 +272,63 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
     };
   }
 
-  // Build scar lookup by ID
-  const scarById = new Map<string, SurfacedScar>();
+  // Build scar lookup by ID. One scar can have an entry per session that
+  // recalled it (GIT-143); a confirmation covers every entry it is answering for.
+  const scarsById = new Map<string, SurfacedScar[]>();
   for (const scar of recallScars) {
-    scarById.set(scar.scar_id, scar);
+    scarsById.set(scar.scar_id, [...(scarsById.get(scar.scar_id) ?? []), scar]);
   }
 
   // Validate each confirmation
   const errors: string[] = [];
   const validConfirmations: ScarConfirmation[] = [];
-  const confirmedIds = new Set<string>();
+  const confirmedKeys = new Set<string>();
+  const entryKey = (scarId: string, owner: string) => `${scarId}|${owner.toLowerCase()}`;
 
   if (!params.confirmations || params.confirmations.length === 0) {
     errors.push("No confirmations provided. Each recalled scar must be addressed.");
   } else {
     for (const conf of params.confirmations) {
       // Check scar exists in recalled set (try exact match first)
-      let scar = scarById.get(conf.scar_id);
+      let entries = scarsById.get(conf.scar_id);
 
       // If not found and looks like 8-char prefix, try prefix match
       // This allows agents to copy IDs from recall display (which shows truncated IDs)
-      if (!scar && /^[0-9a-f]{8}$/i.test(conf.scar_id)) {
+      let ambiguous = false;
+      if (!entries && /^[0-9a-f]{8}$/i.test(conf.scar_id)) {
         let matchedId: string | null = null;
-        for (const [fullId, scarData] of scarById.entries()) {
+        for (const [fullId, scarEntries] of scarsById.entries()) {
           if (fullId.startsWith(conf.scar_id)) {
             if (matchedId) {
               // Ambiguous prefix - multiple matches
               errors.push(`Ambiguous scar_id prefix "${conf.scar_id}" matches multiple scars. Use full UUID.`);
-              scar = undefined;
+              entries = undefined;
+              ambiguous = true;
               break;
             }
             matchedId = fullId;
-            scar = scarData;
+            entries = scarEntries;
           }
         }
       }
+      if (ambiguous) continue;
 
-      if (!scar) {
-        errors.push(`Unknown scar_id "${conf.scar_id}". Only confirm scars returned by recall().`);
+      if (!entries || entries.length === 0) {
+        // GIT-143: a scar another session recalled is not this caller's to clear.
+        const foreign = otherSessionsScars.find(
+          s => s.scar_id === conf.scar_id || (/^[0-9a-f]{8}$/i.test(conf.scar_id) && s.scar_id.startsWith(conf.scar_id)),
+        );
+        if (foreign) {
+          errors.push(
+            `${foreign.scar_title}: recalled by session ${shortSessionId(ownerOf(foreign, holder))}, not by session ` +
+              `${shortSessionId(ownSessionId)}. Only that session can confirm it.`,
+          );
+        } else {
+          errors.push(`Unknown scar_id "${conf.scar_id}". Only confirm scars returned by recall().`);
+        }
         continue;
       }
+      const scar = entries[0];
 
       // Validate the confirmation
       const error = validateConfirmation(conf, scar);
@@ -253,28 +338,35 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
         // Derive default relevance from decision if not provided
         const relevance = conf.relevance ??
           (conf.decision === "APPLYING" ? "high" : conf.decision === "N_A" ? "low" : "low");
-        validConfirmations.push({
-          scar_id: scar.scar_id, // Use full UUID from matched scar, not potentially truncated input
-          scar_title: scar.scar_title,
-          decision: conf.decision,
-          evidence: conf.evidence.trim(),
-          confirmed_at: new Date().toISOString(),
-          relevance,
-        });
-        confirmedIds.add(scar.scar_id); // Track by full UUID
+        const confirmedAt = new Date().toISOString();
+        for (const entry of entries) {
+          const owner = ownerOf(entry, holder);
+          validConfirmations.push({
+            scar_id: scar.scar_id, // Use full UUID from matched scar, not potentially truncated input
+            scar_title: scar.scar_title,
+            decision: conf.decision,
+            evidence: conf.evidence.trim(),
+            confirmed_at: confirmedAt,
+            relevance,
+            session_id: owner,
+          });
+          confirmedKeys.add(entryKey(scar.scar_id, owner));
+        }
       }
     }
   }
 
   // Check for missing scars (all recall scars must be addressed)
-  // Credit scars already confirmed in a previous call this session
-  const previouslyConfirmedIds = new Set(getConfirmations().map(c => c.scar_id));
-  const missingScars: string[] = [];
+  // Credit scars already confirmed in a previous call, by the same session (GIT-143)
+  const previouslyConfirmed = new Set(getConfirmationLog().map(c => entryKey(c.scar_id, ownerOf(c, holder))));
+  const missing: MissingScar[] = [];
   for (const scar of recallScars) {
-    if (!confirmedIds.has(scar.scar_id) && !previouslyConfirmedIds.has(scar.scar_id)) {
-      missingScars.push(scar.scar_title);
+    const key = entryKey(scar.scar_id, ownerOf(scar, holder));
+    if (!confirmedKeys.has(key) && !previouslyConfirmed.has(key)) {
+      missing.push({ title: scar.scar_title, owner: ownerOf(scar, holder) });
     }
   }
+  const missingScars = [...new Set(missing.map(m => m.title))];
 
   // If valid, persist to session state and file. GIT-128: appended, never
   // replacing earlier confirmations, and refused when another process now
@@ -289,7 +381,7 @@ export async function confirmScars(params: ConfirmScarsParams): Promise<ConfirmS
   const valid = errors.length === 0 && missingScars.length === 0;
 
   const performance = buildPerformanceData("confirm_scars", timer.elapsed(), validConfirmations.length);
-  const formatted_response = formatResponse(valid, validConfirmations, errors, missingScars);
+  const formatted_response = formatResponse(valid, validConfirmations, errors, missing, ownSessionId, Boolean(caller.id));
 
   return {
     valid,

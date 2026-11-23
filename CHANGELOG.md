@@ -32,7 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recall worked while these failed, and recall's "dismissed N/M times" note, which shares the decay refresh's settings,
   never appeared; with the key in `SUPABASE_KEY`, transcript search, transcript indexing and `gitmem check` failed.
   They now read the environment first (`SUPABASE_SERVICE_ROLE_KEY`, then `SUPABASE_KEY`) and then `config.json`, like
-  the rest of gitmem. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set, nothing changes.
+  the rest of gitmem. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set, nothing changes. One message changes:
+  on a Pro tier with no Supabase URL anywhere, `gitmem check`'s Supabase check still fails, but its error now reads
+  `Failed to parse URL from /rest/v1/...` where it read `Failed to parse URL from undefined/rest/v1/...`.
 
 ## [1.11.4] - 2026-11-12
 

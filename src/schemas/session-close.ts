@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import { CloseTypeSchema, ProjectSchema, ReferenceTypeSchema, ISOTimestampSchema } from "./common.js";
+import { CloseTypeSchema, ProjectSchema, ReferenceTypeSchema, ISOTimestampSchema, SessionIdSchema } from "./common.js";
 import { ThreadObjectSchema } from "./thread.js";
 
 /**
@@ -73,12 +73,6 @@ export type ScarUsageEntry = z.infer<typeof ScarUsageEntrySchema>;
 /**
  * Session close parameters schema
  */
-// Session ID must be UUID or 8-char hex short-ID (no path traversal)
-const SessionIdSchema = z.string().min(1, "session_id is required").refine(
-  (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val) || /^[0-9a-f]{8}$/i.test(val),
-  { message: "session_id must be a UUID or 8-char hex short-ID" }
-);
-
 // Transcript path must not contain path traversal sequences
 const SafeTranscriptPathSchema = z.string().refine(
   (val) => !val.includes("..") && !val.includes("\0"),

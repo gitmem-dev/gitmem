@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { ProjectSchema, PositiveIntSchema } from "./common.js";
+import { ProjectSchema, PositiveIntSchema, SessionIdSchema } from "./common.js";
 
 /**
  * Recall tool parameters schema
@@ -23,6 +23,9 @@ export const RecallParamsSchema = z.object({
   project: ProjectSchema.optional(),
   match_count: PositiveIntSchema.optional(),
   issue_id: z.string().optional(),
+  // GIT-143: the caller's session (alias for proxies that strip session_id).
+  session_id: SessionIdSchema.optional(),
+  gitmem_session_id: SessionIdSchema.optional(),
 });
 
 export type RecallParams = z.infer<typeof RecallParamsSchema>;

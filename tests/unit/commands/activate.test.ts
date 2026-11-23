@@ -174,6 +174,28 @@ describe("activate command", () => {
       for (const key of CREDENTIAL_KEYS.filter((k) => k !== "api_key")) expect(config).not.toHaveProperty(key);
     });
 
+    it("says which earlier keys are still in the file and that deactivate removes them", async () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ api_key: "gitmem_dev_old", supabase_key: "eyJ-old-service-role" }),
+      );
+
+      await main(["--no-save-keys"]);
+
+      expect(out).toContain("Credentials not saved");
+      expect(out).toContain(`api_key, supabase_key from an earlier activate are still in ${configPath}`);
+      expect(out).toContain("npx gitmem-mcp deactivate");
+      expect(out).not.toContain("gitmem_dev_old");
+      expect(out).not.toContain("eyJ-old-service-role");
+    });
+
+    it("adds no such line when the file holds no credentials", async () => {
+      await main(["--no-save-keys"]);
+
+      expect(out).not.toContain("still in");
+      expect(out).not.toContain("deactivate");
+    });
+
     it("accepts the option before or after the license key (AC-30.3)", async () => {
       vi.stubEnv("GITMEM_API_KEY", undefined);
 

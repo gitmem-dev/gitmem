@@ -555,6 +555,11 @@ export async function main(args: string[]): Promise<void> {
   }
   if (noSaveKeys) {
     console.log("  ✓ Credentials not saved (--no-save-keys). gitmem reads GITMEM_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and OPENROUTER_API_KEY from the environment.");
+    // --no-save-keys writes nothing, but it leaves what an earlier activate saved.
+    const stillSaved = ["api_key", "supabase_url", "supabase_key", "openrouter_key", "database_url"].filter((k) => config[k]);
+    if (stillSaved.length > 0) {
+      console.log(`  ⚠ ${stillSaved.join(", ")} from an earlier activate ${stillSaved.length === 1 ? "is" : "are"} still in ${configPath}. Run: npx gitmem-mcp deactivate to remove ${stillSaved.length === 1 ? "it" : "them"}.`);
+    }
   }
 
   // Clear any stale license cache

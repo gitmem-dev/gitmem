@@ -20,6 +20,7 @@ import { computeStoreKey, readVectorCache, readVectorCacheBase, planDelta, assem
 import type { StoreFingerprint } from "./vector-disk-cache.js";
 import { getTableName } from "./tier.js";
 import { getGitmemDir } from "./gitmem-dir.js";
+import { tightenPrivateFileSync, wasReadableByOthers } from "./private-file.js";
 import {
   initializeLocalSearch,
   reinitializeLocalSearch,
@@ -83,6 +84,33 @@ export function persistScarsForHooks(scars: ScarWithEmbedding[]): void {
   } catch (error) {
     // Non-fatal — hooks will just return nothing
     console.error("[startup] Failed to persist scars for hooks:", error);
+  }
+}
+
+/**
+ * Tighten config.json and license-cache.json to owner-only at server start.
+ *
+ * activate and the license cache write these through writePrivateFileSync, but
+ * an install that never runs activate again keeps the 0644 file an earlier
+ * version wrote. Same lesson as hook-scars.json above (GIT-109): `mode` only
+ * applies on creation, so an existing file needs a chmod. A failure never stops
+ * the server. POSIX only; Windows is a no-op.
+ */
+/** @internal exported for tests */
+export function tightenCredentialFiles(): void {
+  for (const name of ["config.json", "license-cache.json"]) {
+    try {
+      const filePath = path.join(getGitmemDir(), name);
+      const result = tightenPrivateFileSync(filePath);
+      if (result.tightenError) {
+        console.error(`[startup] Could not restrict ${name} to its owner (${result.tightenError}). Run: chmod 600 ${filePath}`);
+      } else if (wasReadableByOthers(result)) {
+        console.error(`[startup] Restricted ${name} to its owner (was ${(result.previousMode as number).toString(8).padStart(4, "0")})`);
+      }
+    } catch (error) {
+      // Non-fatal — the server starts either way
+      console.error(`[startup] Failed to restrict ${name}:`, error);
+    }
   }
 }
 

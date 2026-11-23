@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **An existing `config.json` and `license-cache.json` are tightened to owner-only (`0600`) when the gitmem server
+  starts**, on macOS and Linux. Until now a file written by an earlier version stayed readable by other accounts until
+  you ran `activate` or `deactivate` again, so an install that never re-runs `activate` kept the open file after
+  upgrading. A failure to change the mode is logged with the `chmod` command to run, and the server starts anyway.
+  Nothing changes on Windows.
+- **`migrate-root` creates the `config.json` it copies at `0600`**, whatever the mode of the file in the project
+  store, with the same bytes. It used to keep the source's mode, usually `0644`, and so left the copy readable by
+  other accounts.
+
+### Changed
+
+- **`activate --no-save-keys` says when earlier keys are still in `config.json`.** It names which of `api_key`,
+  `supabase_url`, `supabase_key`, `openrouter_key` and `database_url` are still there (never their values) and points
+  to `deactivate`, which removes them. It used to print only "Credentials not saved".
+
 ## [1.11.4] - 2026-11-12
 
 Contributed by Tyler (TenTides) in pull request #76, gitmem's first outside contribution.

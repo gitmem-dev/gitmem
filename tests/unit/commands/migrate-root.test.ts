@@ -84,6 +84,30 @@ describe("GIT-91: migrate-root", () => {
     expect(plan.skipped.map((s) => s.file)).toContain("config.json");
   });
 
+  it.skipIf(process.platform === "win32")("writes the copied config.json owner-only whatever the source mode", () => {
+    fs.writeFileSync(path.join(source, "config.json"), '{"api_key":"gitmem_dev_fake"}');
+    fs.chmodSync(path.join(source, "config.json"), 0o644);
+
+    const plan = migrateRoot(source, destination, false);
+
+    expect(plan.copied).toContain("config.json");
+    expect(fs.statSync(path.join(destination, "config.json")).mode & 0o777).toBe(0o600);
+    expect(read(path.join(destination, "config.json"))).toBe('{"api_key":"gitmem_dev_fake"}');
+    // The source is left as it was.
+    expect(fs.statSync(path.join(source, "config.json")).mode & 0o777).toBe(0o644);
+  });
+
+  it("copies config.json byte for byte", () => {
+    // Non-ASCII text, a byte that is not valid UTF-8 and no trailing newline: a
+    // text round trip would change this file.
+    const bytes = Buffer.concat([Buffer.from('{"note":"café ✓"}'), Buffer.from([0xff])]);
+    fs.writeFileSync(path.join(source, "config.json"), bytes);
+
+    migrateRoot(source, destination, false);
+
+    expect(fs.readFileSync(path.join(destination, "config.json")).equals(bytes)).toBe(true);
+  });
+
   it("reports why each file was skipped", () => {
     fs.writeFileSync(path.join(source, "config.json"), "{}");
     fs.writeFileSync(path.join(destination, "config.json"), "{}");

@@ -1,5 +1,5 @@
 /**
- * Unit tests for writePrivateFileSync (owner-only writes for credential files)
+ * Unit tests for writePrivateFileSync and tightenPrivateFileSync (owner-only credential files)
  *
  * Verifies:
  * - A new file is created at 0600 (POSIX)
@@ -27,7 +27,7 @@ vi.mock("fs", async (importOriginal) => {
   };
 });
 
-import { writePrivateFileSync, wasReadableByOthers } from "../../../src/services/private-file.js";
+import { writePrivateFileSync, tightenPrivateFileSync, wasReadableByOthers } from "../../../src/services/private-file.js";
 
 const isWindows = process.platform === "win32";
 
@@ -140,5 +140,97 @@ describe("writePrivateFileSync", () => {
     expect(fs.readFileSync(p, "utf-8")).toBe("new");
     expect(result.tightenError).toBe("mode-unchanged");
     expect(wasReadableByOthers(result)).toBe(true);
+  });
+});
+
+describe("tightenPrivateFileSync", () => {
+  let dir: string;
+  let p: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "gitmem-tighten-"));
+    p = path.join(dir, "config.json");
+    vi.mocked(fs.chmodSync).mockClear();
+    vi.mocked(fs.writeFileSync).mockClear();
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it.skipIf(isWindows)("sets an existing 0644 file to 0600 without touching its contents", () => {
+    fs.writeFileSync(p, "keep");
+    fs.chmodSync(p, 0o644);
+    vi.mocked(fs.writeFileSync).mockClear();
+
+    const result = tightenPrivateFileSync(p);
+
+    expect(fs.statSync(p).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(p, "utf-8")).toBe("keep");
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(result.previousMode).toBe(0o644);
+    expect(wasReadableByOthers(result)).toBe(true);
+    expect(result.tightenError).toBeNull();
+  });
+
+  it.skipIf(isWindows)("leaves an already-0600 file alone and does not call chmod", () => {
+    fs.writeFileSync(p, "keep");
+    fs.chmodSync(p, 0o600);
+    vi.mocked(fs.chmodSync).mockClear();
+
+    const result = tightenPrivateFileSync(p);
+
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+    expect(result.previousMode).toBe(0o600);
+    expect(wasReadableByOthers(result)).toBe(false);
+  });
+
+  it.skipIf(isWindows)("does nothing for a missing file", () => {
+    const result = tightenPrivateFileSync(p);
+
+    expect(fs.existsSync(p)).toBe(false);
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ previousMode: null, tightenError: null });
+  });
+
+  it.skipIf(isWindows)("tightens a symlink's target and leaves the link in place", () => {
+    const target = path.join(dir, "target.json");
+    fs.writeFileSync(target, "keep");
+    fs.chmodSync(target, 0o644);
+    fs.symlinkSync(target, p);
+
+    tightenPrivateFileSync(p);
+
+    expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+    expect(fs.lstatSync(p).isSymbolicLink()).toBe(true);
+  });
+
+  it.skipIf(isWindows)("returns the error code when chmod throws, and does not throw", () => {
+    fs.writeFileSync(p, "keep");
+    fs.chmodSync(p, 0o644);
+    vi.mocked(fs.chmodSync).mockImplementationOnce(() => {
+      throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+    });
+
+    const result = tightenPrivateFileSync(p);
+
+    expect(result.tightenError).toBe("EPERM");
+  });
+
+  it.skipIf(isWindows)("flags a chmod that returns but changes nothing as mode-unchanged", () => {
+    fs.writeFileSync(p, "keep");
+    fs.chmodSync(p, 0o644);
+    vi.mocked(fs.chmodSync).mockImplementationOnce(() => undefined);
+
+    expect(tightenPrivateFileSync(p).tightenError).toBe("mode-unchanged");
+  });
+
+  it.skipIf(!isWindows)("is a no-op on Windows: no stat result, no chmod", () => {
+    fs.writeFileSync(p, "keep");
+
+    const result = tightenPrivateFileSync(p);
+
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+    expect(result).toEqual({ previousMode: null, tightenError: null });
   });
 });

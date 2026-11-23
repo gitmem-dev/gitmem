@@ -82,7 +82,8 @@ You don't have to paste secrets into a terminal. The activate command resolves c
 OpenRouter key and, if `activate` applied the schema over `DATABASE_URL`, that connection string.
 
 - **macOS and Linux:** the file is readable only by your user account (mode `0600`). A file from an older version is
-  tightened the next time `activate` or `deactivate` writes it, and the command says so. To do it now:
+  tightened when the gitmem server starts, and the next time `activate` or `deactivate` writes it. `license-cache.json`
+  is tightened the same way, and `migrate-root` writes the `config.json` it copies at `0600`. To do it now:
   `chmod 600 ~/.gitmem/config.json`.
 - **Windows:** file modes don't apply. By default the file is inside your user profile, which other standard accounts
   can't open (SYSTEM and administrators still can). If your gitmem directory is outside your profile, restrict the
@@ -100,7 +101,8 @@ OpenRouter key and, if `activate` applied the schema over `DATABASE_URL`, that c
   wrapper that injects them (a secret manager's run command). Writing them into an `env` block of an MCP client
   configuration file (`.mcp.json`, `claude_desktop_config.json`) puts the keys back into a plaintext file.
 - `--no-save-keys` only stops new writes. Values that an earlier `activate` already saved stay in `config.json` until
-  you remove them by hand. `deactivate` removes them too, but it also deactivates this machine's license.
+  you remove them by hand. `activate --no-save-keys` lists the ones still there and points to `deactivate`, which
+  removes them too, but it also deactivates this machine's license.
 
 ## Routing OpenRouter calls through a proxy or gateway
 

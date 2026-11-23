@@ -172,6 +172,8 @@ gitmem at the gateway with three environment variables, give it the stand-ins in
   never sent there.
 - A plain `http` base on a host that is not `localhost`, `127.0.0.0/8` or `::1` works, with one warning that the license
   key is sent unencrypted.
+- The check follows redirects, as the built-in one does. A `307` or `308` answer sends the same body, `p_api_key`
+  included, on to the address in its `Location` header, so have the gateway forward the check rather than redirect it.
 - A cached answer counts only for the URL that gave it: after you set, change or unset the variable, gitmem checks the
   license again instead of reusing another server's answer.
 - `deactivate` does not use the variable. It always asks gitmem's license server to free the device, so run it where the
@@ -180,8 +182,8 @@ gitmem at the gateway with three environment variables, give it the stand-ins in
 ### One machine is one activation
 
 Each distinct install id takes one of the license's device slots. Every gitmem process on a licensed machine should
-send that machine's own install id, so that however many processes (agents, editors, scripts) run there, the machine
-counts once.
+send that machine's own install id, so that however many processes (editors, scripts, other tools) run there, the
+machine counts once.
 
 - The server sends the `install_id` from the `config.json` in its gitmem directory (`unknown` when there is none).
   Processes that share the machine's gitmem directory already send the same id.

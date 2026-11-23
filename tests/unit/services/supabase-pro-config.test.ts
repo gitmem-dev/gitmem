@@ -8,7 +8,9 @@
  * - SUPABASE_KEY alone is used, as getProConfig() accepts it
  * - the environment wins over config.json, and SUPABASE_SERVICE_ROLE_KEY over SUPABASE_KEY
  * - with neither set, the answer is the one each site gave before
- * and that no other src/ file reads the key or URL directly (guard).
+ * that `check --full` reads the values before its timed runs and the decay
+ * module when it loads, and that no other src/ file reads the key or URL
+ * directly (guard).
  *
  * Nothing here touches the network or the developer's store: fetch is stubbed,
  * the store is a temp folder and the cache is a stand-in.
@@ -70,6 +72,8 @@ const FILE_URL = "https://file-project.example";
 const ROLE_KEY = "test-service-role-key-env";
 const ALT_KEY = "test-supabase-key-env";
 const FILE_KEY = "test-supabase-key-file";
+// What config.json holds after a value has been read, in the read-once cases.
+const LATER_CONFIG = { supabase_url: "https://later-project.example", supabase_key: "test-supabase-key-later" };
 
 const EMBEDDING_BODY = { data: [{ embedding: new Array(1536).fill(0.1) }] };
 
@@ -90,13 +94,22 @@ function collectTsFiles(dir: string): string[] {
 }
 
 /**
+ * A read of one of `names` from the environment by name: `process.env.X` or
+ * `process.env["X"]`, the same through an alias named `env`, or
+ * `const { X } = process.env`. A name built at run time is not caught.
+ */
+function envRead(names: string): RegExp {
+  return new RegExp(`\\benv(?:\\.|\\[\\s*["'\`])(?:${names})\\b|\\{[^}]*\\b(?:${names})\\b[^}]*\\}\\s*=\\s*[\\w.]*\\benv\\b`);
+}
+
+/**
  * Direct reads: `key` is SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY from the
  * environment, `url` is SUPABASE_URL from the environment, `file` is
  * config.json's supabase_url or supabase_key.
  */
 const DIRECT_READS = {
-  key: /process\.env(?:\.|\[\s*["'`])(?:SUPABASE_SERVICE_ROLE_KEY|SUPABASE_KEY)\b/,
-  url: /process\.env(?:\.|\[\s*["'`])SUPABASE_URL\b/,
+  key: envRead("SUPABASE_SERVICE_ROLE_KEY|SUPABASE_KEY"),
+  url: envRead("SUPABASE_URL"),
   file: /\.supabase_(?:url|key)\b|\[\s*["'`]supabase_(?:url|key)["'`]\s*\]/,
 };
 type DirectRead = keyof typeof DIRECT_READS;
@@ -299,6 +312,39 @@ describe("the Supabase URL and key come from getProConfig() at every call site",
 
       expect(sent(site)).toEqual([]);
       site.expectUnset(result);
+    });
+  });
+
+  describe("two sites read the values once", () => {
+    const siteNamed = (name: string) => SITES.find((site) => site.name === name)!;
+
+    it("gitmem check --full reads them before its five timed runs, so each run times the request only", async () => {
+      const site = siteNamed("gitmem check --full (recall benchmark)");
+      configure(site, { ...site.envWhenConfigured }, { supabase_url: FILE_URL, supabase_key: FILE_KEY });
+      // From the first timed request on, config.json names another project;
+      // a read inside the timed function would pick it up in runs 2 to 5.
+      const answer = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (url: unknown) => {
+        if (site.isRequest(String(url))) writeFileSync(CONFIG_PATH, JSON.stringify(LATER_CONFIG));
+        return answer(url);
+      });
+
+      await site.run();
+
+      expect(sent(site)).toHaveLength(5);
+      expectSentWith(site, FILE_URL, FILE_KEY);
+    });
+
+    it("the decay module reads them when it loads, as the storage layer does", async () => {
+      const site = siteNamed("the behavioral decay refresh");
+      configure(site, {}, { supabase_url: FILE_URL, supabase_key: FILE_KEY });
+      const decay = await import("../../../src/services/behavioral-decay.js");
+      writeFileSync(CONFIG_PATH, JSON.stringify(LATER_CONFIG));
+
+      await decay.refreshBehavioralScores();
+      await decay.fetchDismissalCounts(["00000000-0000-4000-8000-000000000001"]);
+
+      expectSentWith(site, FILE_URL, FILE_KEY);
     });
   });
 });

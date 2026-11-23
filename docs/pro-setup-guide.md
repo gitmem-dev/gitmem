@@ -126,6 +126,70 @@ Set `OPENROUTER_BASE_URL` to send every OpenRouter request (embeddings, transcri
 - gitmem reads it once when it starts; restart your editor after changing it.
 - The model name is unchanged (`openai/text-embedding-3-small`), so the endpoint has to accept it.
 
+## Routing Supabase calls and the license check through a gateway
+
+With a gateway (or proxy) that holds the real keys, the processes that run gitmem only need stand-in values. Point
+gitmem at the gateway with three environment variables, give it the stand-ins in `GITMEM_API_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY` and `OPENROUTER_API_KEY`, and keep keys out of `config.json` with
+`npx gitmem-mcp activate --no-save-keys`.
+
+| Calls | Base URL | Where gitmem puts the key |
+|-------|----------|---------------------------|
+| Supabase (memory, search, transcripts) | `SUPABASE_URL` | `apikey` and `Authorization: Bearer` headers (storage calls: `Authorization` only) |
+| OpenRouter (embeddings, variants, `check`) | `OPENROUTER_BASE_URL` (see above) | `Authorization: Bearer` header |
+| License check | `GITMEM_LICENSE_URL` | JSON body, field `p_api_key` |
+
+### Supabase
+
+- `SUPABASE_URL` is already a base URL. gitmem calls `<SUPABASE_URL>/rest/v1/...` (tables, and functions under
+  `/rest/v1/rpc/`) and `<SUPABASE_URL>/storage/v1/object/...` (transcripts), so the gateway has to pass both paths
+  through to your project.
+- gitmem only checks that a key is set, so a stand-in works. The gateway replaces it in the headers before it
+  forwards a call.
+- Set `GITMEM_SEARCH_MODE`. Without it, gitmem chooses the search mode from the shape of `SUPABASE_URL`: a
+  `*.supabase.co` address gets `local` (searches a cache loaded from Supabase), a `localhost` or private-network address
+  gets `remote` (queries Supabase on each search), and any other host gets `local` with a warning in the server log.
+- With a gateway address, `activate` can apply the schema only over `DATABASE_URL`, because the Management API path needs
+  the project ref from a `*.supabase.co` URL. Or apply it by hand (see Troubleshooting).
+
+### The license check
+
+    export GITMEM_LICENSE_URL="https://gateway.example.com/gitmem-license"
+
+- It is a base URL: the check posts to `<GITMEM_LICENSE_URL>/rest/v1/rpc/gitmem_validate_license` with the same headers
+  and body as the built-in check. The license key is in the body field `p_api_key`, next to the install id in
+  `p_install_id`. The gateway replaces the stand-in in `p_api_key` with the real key and forwards the request to
+  gitmem's license server, `https://cjptxyezuxdiinufgrrm.supabase.co/rest/v1/rpc/gitmem_validate_license`. The `apikey`
+  and `Authorization` headers carry gitmem's public anon key, not yours: pass them through unchanged.
+- Unset or blank, the check goes to gitmem's license server, as before.
+- It is read from the environment only, like `OPENROUTER_BASE_URL`: not read from `config.json`, and `activate` does not
+  save it. Set it for every process that runs gitmem; `activate` uses it too when it is set. gitmem reads it when it
+  starts; restart your editor after changing it.
+- A value that isn't an `http` or `https` URL, or that contains a username, password, query string or fragment, is
+  refused with one warning, and no license check is made. The license then counts as invalid: the server log shows
+  `Validation failed: GITMEM_LICENSE_URL is not usable; no license check was made` and `Tier updated: free`, and
+  `activate` stops with that error and saves nothing. It never falls back to gitmem's license server, so a stand-in is
+  never sent there.
+- A plain `http` base on a host that is not `localhost`, `127.0.0.0/8` or `::1` works, with one warning that the license
+  key is sent unencrypted.
+- A cached answer counts only for the URL that gave it: after you set, change or unset the variable, gitmem checks the
+  license again instead of reusing another server's answer.
+- `deactivate` does not use the variable. It always asks gitmem's license server to free the device, so run it where the
+  real key is set.
+
+### One machine is one activation
+
+Each distinct install id takes one of the license's device slots. Every gitmem process on a licensed machine should
+send that machine's own install id, so that however many processes (agents, editors, scripts) run there, the machine
+counts once.
+
+- The server sends the `install_id` from the `config.json` in its gitmem directory (`unknown` when there is none).
+  Processes that share the machine's gitmem directory already send the same id.
+- A process with a gitmem directory of its own: put the machine's `install_id` in that directory's `config.json` (it is
+  not a secret), or have the gateway set `p_install_id` to the machine's id when it forwards the check.
+- Don't run `activate` in each process's own directory: where there is no `install_id`, it creates a new one, which
+  registers another device.
+
 ## What gets created
 
 The activate command creates these in your Supabase project (table and view names are prefixed by `GITMEM_TABLE_PREFIX`, default `gitmem_`):
@@ -250,7 +314,7 @@ Most tools also have short aliases (`gm-scar`, `gm-search`, `gm-threads`, etc.) 
 npx gitmem-mcp deactivate
 ```
 
-This removes the device from the license server (freeing a device slot), clears credentials from config, and deletes the license cache. Your Supabase data is preserved — you can re-activate on the same or different device.
+This removes the device from the license server (freeing a device slot), clears credentials from config, and deletes the license cache. Your Supabase data is preserved — you can re-activate on the same or different device. It always uses gitmem's own license server, even with `GITMEM_LICENSE_URL` set.
 
 ## Troubleshooting
 
@@ -277,7 +341,8 @@ npx gitmem-mcp setup             # prints SQL
 
 `create_learning` / `create_decision` return a UUID but the row never shows up in your `*_learnings` table, and there is **no** `PGRST205` error. This means GitMem fell back to **free tier** and wrote to a local `.gitmem/` file instead of Supabase. With `SUPABASE_URL` set, the only path to free tier is an invalid or missing license, so check:
 
-- `GITMEM_API_KEY` is a real `gitmem_pro_...` key (not a placeholder), present in the **same** environment as the MCP server (e.g. the `env` block in `claude_desktop_config.json`, not just your shell).
+- `GITMEM_API_KEY` is a real `gitmem_pro_...` key (not a placeholder, unless `GITMEM_LICENSE_URL` sends the check through a gateway that puts the real key in), present in the **same** environment as the MCP server (e.g. the `env` block in `claude_desktop_config.json`, not just your shell).
+- If `GITMEM_LICENSE_URL` is set, the startup log has no `GITMEM_LICENSE_URL is not usable` warning.
 - The license validated — the startup log shows `Tier: pro`, not `Tier: free` / `Tier updated: free`.
 - The device limit (3) is not exhausted — see below.
 
@@ -293,7 +358,7 @@ npx gitmem-mcp deactivate   # on the device you want to free
 
 ### Connection test fails
 
-Verify your `SUPABASE_URL` ends with `.supabase.co` and your service role key is the full JWT (starts with `eyJ`).
+Verify your `SUPABASE_URL` ends with `.supabase.co` (or is your gateway's address) and your service role key is the full JWT (starts with `eyJ`; with a gateway, the stand-in the gateway replaces).
 
 ### Recall returns no results
 

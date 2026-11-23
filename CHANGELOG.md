@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   store, with the same bytes. It used to keep the source's mode, usually `0644`, and so left the copy readable by
   other accounts.
 
+### Added
+
+- **`GITMEM_LICENSE_URL` sends the license check through a gateway**, so the license key can stay in a gateway or
+  secret manager and the processes that run gitmem hold only a stand-in. It is a base URL: the check posts to
+  `<GITMEM_LICENSE_URL>/rest/v1/rpc/gitmem_validate_license` with the same headers and body, the key in `p_api_key`.
+  It is read from the environment only; `activate` does not save it. Unset, nothing changes. A value that isn't an
+  http(s) URL, or has a username, password, query or fragment in it, is refused with a warning, and no license check is
+  made: the license counts as invalid (the server runs on the free tier, `activate` stops). It never falls back to
+  gitmem's license server. A plain `http` base on a non-local host works but warns once. A cached license answer now
+  counts only for the URL that gave it. `deactivate` always uses gitmem's license server.
+- **The Pro setup guide explains routing Supabase calls, OpenRouter calls and the license check through a gateway**
+  that holds the real keys, with `activate --no-save-keys`: the paths and headers a gateway has to handle, why to set
+  `GITMEM_SEARCH_MODE`, and that every gitmem process on a licensed machine sends the machine's own install id, since
+  one machine is one activation.
+
 ### Changed
 
 - **`activate --no-save-keys` says when earlier keys are still in `config.json`.** It names which of `api_key`,

@@ -174,7 +174,7 @@ describe("activate command", () => {
       for (const key of CREDENTIAL_KEYS.filter((k) => k !== "api_key")) expect(config).not.toHaveProperty(key);
     });
 
-    it("says which earlier keys are still in the file and that deactivate removes them", async () => {
+    it("says which earlier keys are still in the file and that deactivate --keys-only removes them", async () => {
       fs.writeFileSync(
         configPath,
         JSON.stringify({ api_key: "gitmem_dev_old", supabase_key: "eyJ-old-service-role" }),
@@ -184,7 +184,7 @@ describe("activate command", () => {
 
       expect(out).toContain("Credentials not saved");
       expect(out).toContain(`api_key, supabase_key from an earlier activate are still in ${configPath}`);
-      expect(out).toContain("npx gitmem-mcp deactivate");
+      expect(out).toContain("Run: npx gitmem-mcp deactivate --keys-only to remove them");
       expect(out).not.toContain("gitmem_dev_old");
       expect(out).not.toContain("eyJ-old-service-role");
     });

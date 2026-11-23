@@ -204,7 +204,7 @@ describe("deactivate --keys-only", () => {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   });
 
-  it("removes the five keys, keeps every other field as it was, deletes the cache and makes no request (AC-U3.1)", async () => {
+  it("removes the five keys, keeps every other field as it was, deletes the cache and makes no request", async () => {
     // Interleaved, written the way activate writes the file.
     fs.writeFileSync(
       configPath,
@@ -259,22 +259,55 @@ describe("deactivate --keys-only", () => {
     expect(getLicenseKey()).toBe("gitmem_dev_from_env_test");
   });
 
-  it("leaves a file with none of the keys untouched, says so and exits 0; the same with no config.json", async () => {
+  it("leaves a file with none of the keys untouched, still deletes the cache, says so and exits 0; the same with no config.json", async () => {
+    // After activate --no-save-keys, the cache can hold the start of a key that came from the environment.
+    const cache = JSON.stringify({ valid: true, tier: "pro", api_key_prefix: "gitmem_dev_from_..." });
     const text = JSON.stringify(OTHER); // compact, so a rewrite would show
     fs.writeFileSync(configPath, text);
+    fs.writeFileSync(cachePath, cache);
 
     await main(["--keys-only"]);
 
     expect(fs.readFileSync(configPath, "utf-8")).toBe(text);
     expect(out).toContain(`No saved keys in ${configPath}`);
+    expect(fs.existsSync(cachePath)).toBe(false);
+    expect(out).toContain("Removed license-cache.json");
 
     fs.rmSync(configPath);
+    fs.writeFileSync(cachePath, cache);
+    out = "";
     await main(["--keys-only"]);
 
     expect(fs.existsSync(configPath)).toBe(false);
     expect(out).toContain("No config.json found");
+    expect(fs.existsSync(cachePath)).toBe(false);
+    expect(out).toContain("Removed license-cache.json");
     expect(exitSpy).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("exits 1 on a config.json that is not valid JSON and leaves it as it was", async () => {
+    const text = JSON.stringify({ ...OTHER, ...KEYS }).slice(0, -1); // the closing brace cut off
+    fs.writeFileSync(configPath, text);
+
+    await expect(main(["--keys-only"])).rejects.toThrow("process.exit called");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(out).toContain("Error reading config.json");
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(text);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(out).not.toContain(KEYS.api_key);
+  });
+
+  it("warns and still exits 0 when the cache can't be removed", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+    fs.mkdirSync(cachePath); // a folder in its place: removing it as a file fails on every platform
+
+    await main(["--keys-only"]);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(out).toContain(`Could not remove ${cachePath}. Delete it by hand.`);
+    expect(out).not.toContain("Removed license-cache.json");
   });
 
   it("without --keys-only, still releases the device", async () => {

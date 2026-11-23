@@ -11,10 +11,12 @@
  *
  * Async validation (validateLicense()):
  *   - Called in runServer() startup (non-blocking)
- *   - POST to hardcoded validation endpoint with api_key + install_id
+ *   - POST to hardcoded validation endpoint with api_key + install_id, or to
+ *     GITMEM_LICENSE_URL's base when it is set (getLicenseCheckUrl)
  *   - Success: cache to ~/.gitmem/license-cache.json (72h TTL)
  *   - Failure: downgrade _tier to free, log warning
  *   - Network error: honor existing cache if valid, else downgrade
+ *   - GITMEM_LICENSE_URL set but unusable: no request, no cache, invalid
  */
 
 import * as fs from "fs";
@@ -22,9 +24,11 @@ import * as path from "path";
 import { getGitmemDir, getInstallId } from "./gitmem-dir.js";
 import { writePrivateFileSync } from "./private-file.js";
 
+// The path the license check posts to, under the built-in URL or GITMEM_LICENSE_URL.
+const VALIDATION_PATH = "/rest/v1/rpc/gitmem_validate_license";
 // Hardcoded validation endpoint — calls RPC directly on our Supabase via PostgREST.
-// Users never see or configure this URL.
-const VALIDATION_URL = "https://cjptxyezuxdiinufgrrm.supabase.co/rest/v1/rpc/gitmem_validate_license";
+// Users only replace it to route the check through a gateway (GITMEM_LICENSE_URL).
+const VALIDATION_URL = `https://cjptxyezuxdiinufgrrm.supabase.co${VALIDATION_PATH}`;
 // Anon key for our project (safe to embed — RPC is SECURITY DEFINER, RLS blocks direct table access)
 const VALIDATION_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqcHR4eWV6dXhkaWludWZncnJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxODY3MDMsImV4cCI6MjA4MTc2MjcwM30.L0oZy3LYCMikmZ15IUU5DnfJmucM37DJ14nUkM3AreY";
 
@@ -42,6 +46,8 @@ interface LicenseCache {
   tier: string;
   validated_at: string;
   api_key_prefix: string;
+  /** The URL that gave this answer. Absent in a cache written before GITMEM_LICENSE_URL. */
+  validation_url?: string;
 }
 
 /**
@@ -113,24 +119,24 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
- * Resolve the OpenRouter base URL from the OPENROUTER_BASE_URL environment variable.
+ * Read a base URL from the environment variable `name`.
  *
  * Environment only — never read from config.json or saved by `activate`, like
- * GITMEM_TABLE_PREFIX. Unset, empty or whitespace-only → the default.
+ * GITMEM_TABLE_PREFIX. Unset, empty or whitespace-only → undefined, so the
+ * caller uses its default.
  *
- * Returns null (after one warning that never prints the value) when the value is
- * not an absolute http(s) URL or contains a username, password, query or fragment.
- * Callers must then make no OpenRouter request: never fall back to openrouter.ai.
+ * Returns null (after one warning that never prints the value; `effect` says
+ * what happens then) when the value is not an absolute http(s) URL or contains
+ * a username, password, query or fragment. Callers must then make no request
+ * with it: never fall back to their default. A plain-http base on a host that is
+ * not loopback is returned, with one warning that `keyName` is sent unencrypted.
  */
-export function getOpenRouterBaseUrl(): string | null {
-  const trimmed = (process.env.OPENROUTER_BASE_URL ?? "").trim();
-  if (!trimmed) return DEFAULT_OPENROUTER_BASE_URL;
+function readBaseUrlFromEnv(name: string, effect: string, keyName: string): string | null | undefined {
+  const trimmed = (process.env[name] ?? "").trim();
+  if (!trimmed) return undefined;
 
   const unusable = (reason: string): null => {
-    warnBaseUrlOnce(
-      `unusable:${reason}`,
-      `OPENROUTER_BASE_URL is not usable (${reason}); OpenRouter calls are off until it is fixed.`,
-    );
+    warnBaseUrlOnce(`${name}:unusable:${reason}`, `${name} is not usable (${reason}); ${effect}.`);
     return null;
   };
 
@@ -153,13 +159,26 @@ export function getOpenRouterBaseUrl(): string | null {
   }
 
   if (parsed.protocol === "http:" && !isLoopbackHost(parsed.hostname)) {
-    warnBaseUrlOnce(
-      "cleartext",
-      "OPENROUTER_BASE_URL uses http to a non-local host; the OpenRouter key is sent unencrypted.",
-    );
+    warnBaseUrlOnce(`${name}:cleartext`, `${name} uses http to a non-local host; ${keyName} is sent unencrypted.`);
   }
 
   return trimmed.replace(/\/+$/, "");
+}
+
+/**
+ * Resolve the OpenRouter base URL from the OPENROUTER_BASE_URL environment variable
+ * (readBaseUrlFromEnv). Unset or blank → the default.
+ *
+ * Returns null when the value is unusable. Callers must then make no OpenRouter
+ * request: never fall back to openrouter.ai.
+ */
+export function getOpenRouterBaseUrl(): string | null {
+  const base = readBaseUrlFromEnv(
+    "OPENROUTER_BASE_URL",
+    "OpenRouter calls are off until it is fixed",
+    "the OpenRouter key",
+  );
+  return base === undefined ? DEFAULT_OPENROUTER_BASE_URL : base;
 }
 
 /**
@@ -171,6 +190,29 @@ export function getOpenRouterUrl(endpoint: "embeddings" | "chat/completions" | "
 }
 
 /**
+ * URL the license check posts to.
+ *
+ * GITMEM_LICENSE_URL is a base URL, read like OPENROUTER_BASE_URL
+ * (readBaseUrlFromEnv): when it is set, the check posts to
+ * `<base>/rest/v1/rpc/gitmem_validate_license` with the same headers and body,
+ * so a gateway that holds the license key can forward the check. Unset or
+ * blank → the built-in URL.
+ *
+ * Returns null when the value is unusable: the check must then not be made, and
+ * never falls back to the built-in URL. `deactivate` does not use this; it keeps
+ * the built-in URL (getValidationUrl).
+ */
+export function getLicenseCheckUrl(): string | null {
+  const base = readBaseUrlFromEnv(
+    "GITMEM_LICENSE_URL",
+    "no license check is made and the license counts as invalid until it is fixed",
+    "the license key",
+  );
+  if (base === undefined) return VALIDATION_URL;
+  return base === null ? null : `${base}${VALIDATION_PATH}`;
+}
+
+/**
  * Read cached license validation result
  */
 function readLicenseCache(): LicenseCache | null {
@@ -179,6 +221,15 @@ function readLicenseCache(): LicenseCache | null {
     if (!fs.existsSync(cachePath)) return null;
 
     const raw = JSON.parse(fs.readFileSync(cachePath, "utf-8")) as LicenseCache;
+
+    // An answer counts only for the URL that gave it, so setting, changing or
+    // unsetting GITMEM_LICENSE_URL never reuses another server's answer. A cache
+    // with no validation_url predates the variable and came from the built-in URL.
+    if ((raw.validation_url ?? VALIDATION_URL) !== getLicenseCheckUrl()) {
+      console.error("[gitmem:license] Cache is from another license URL; not used");
+      return null;
+    }
+
     const validatedAt = new Date(raw.validated_at).getTime();
     const now = Date.now();
 
@@ -241,13 +292,21 @@ export function getCachedLicenseTier(): string | null {
  * Returns the validation result.
  *
  * This is async and should be called non-blocking during startup.
+ *
+ * With GITMEM_LICENSE_URL set but unusable it makes no request and reads no
+ * cache: the result is invalid, so the server drops to free and `activate` stops.
  */
 export async function validateLicense(apiKey: string, installId: string): Promise<LicenseValidationResult> {
+  const url = getLicenseCheckUrl();
+  if (url === null) {
+    return { valid: false, tier: null, message: "GITMEM_LICENSE_URL is not usable; no license check was made" };
+  }
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-    const response = await fetch(VALIDATION_URL, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -280,6 +339,7 @@ export async function validateLicense(apiKey: string, installId: string): Promis
         tier: data.tier,
         validated_at: new Date().toISOString(),
         api_key_prefix: apiKey.substring(0, 16) + "...",
+        validation_url: url,
       });
     }
 
@@ -299,7 +359,8 @@ export async function validateLicense(apiKey: string, installId: string): Promis
 }
 
 /**
- * Get the validation URL (for diagnostics/testing)
+ * Get the built-in validation URL (for diagnostics/testing). `deactivate` builds
+ * its URL from it, so it never follows GITMEM_LICENSE_URL.
  */
 export function getValidationUrl(): string {
   return VALIDATION_URL;

@@ -7,6 +7,7 @@
  * - Non-credential fields are preserved (project, install_id, feedback_enabled)
  * - License cache is cleared
  * - No error when already deactivated
+ * - The device is released on the built-in license server, whatever GITMEM_LICENSE_URL says
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -36,7 +37,22 @@ describe("deactivate command", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("releases the device on the built-in license server even with GITMEM_LICENSE_URL set", async () => {
+    // The deactivation URL is fixed when the module loads, so load it with the variable set.
+    vi.stubEnv("GITMEM_LICENSE_URL", "http://127.0.0.1:8787/license-gw");
+    vi.resetModules();
+    const fresh = await import("../../../src/commands/deactivate.js");
+    fs.writeFileSync(path.join(TEST_DIR, "config.json"), JSON.stringify({ api_key: "gitmem_pro_abc123" }));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await fresh.main([]);
+
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]));
+    expect(urls).toEqual(["https://cjptxyezuxdiinufgrrm.supabase.co/rest/v1/rpc/gitmem_deactivate_device"]);
   });
 
   it.skipIf(process.platform === "win32")("tightens a 0644 config.json and says so (AC-15.1)", async () => {

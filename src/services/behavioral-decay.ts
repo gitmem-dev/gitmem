@@ -13,9 +13,12 @@
 
 import { isConfigured, safeInFilter } from "./supabase-client.js";
 import { getTableName } from "./tier.js";
+import { getProConfig } from "./license.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "";
+// Read once at load, as supabase-client.ts does: environment first, then config.json.
+const _proConfig = getProConfig();
+const SUPABASE_URL = _proConfig.supabaseUrl;
+const SUPABASE_KEY = _proConfig.supabaseKey;
 const SUPABASE_REST_URL = SUPABASE_URL ? `${SUPABASE_URL}/rest/v1` : "";
 
 export interface BehavioralRefreshResult {

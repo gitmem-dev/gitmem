@@ -292,22 +292,21 @@ export async function processTranscript(
     // 3. Batch insert into database
     if (allChunks.length > 0) {
       // Use direct REST API for batch insert (more efficient than MCP)
-      const SUPABASE_URL = process.env.SUPABASE_URL || "";
-      const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      const { supabaseUrl, supabaseKey } = getProConfig();
 
-      if (!SUPABASE_URL || !SUPABASE_KEY) {
+      if (!supabaseUrl || !supabaseKey) {
         throw new Error("Supabase configuration missing");
       }
 
-      const restUrl = `${SUPABASE_URL}/rest/v1/${getTableName("transcript_chunks")}?on_conflict=session_id,chunk_index`;
+      const restUrl = `${supabaseUrl}/rest/v1/${getTableName("transcript_chunks")}?on_conflict=session_id,chunk_index`;
 
       const response = await fetch(restUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Content-Profile": "public",
-          "Authorization": `Bearer ${SUPABASE_KEY}`,
-          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${supabaseKey}`,
+          "apikey": supabaseKey,
           "Prefer": "return=minimal,resolution=merge-duplicates",
         },
         body: JSON.stringify(allChunks),

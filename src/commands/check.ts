@@ -27,7 +27,7 @@ import {
 import { getCache, CacheService } from "../services/cache.js";
 import { getTier, hasSupabase } from "../services/tier.js";
 import { getGitmemDir } from "../services/gitmem-dir.js";
-import { getOpenRouterUrl } from "../services/license.js";
+import { getOpenRouterUrl, getProConfig } from "../services/license.js";
 
 // Report version for schema compatibility
 const REPORT_VERSION = "1.0.0";
@@ -80,8 +80,7 @@ export async function runQuickCheck(): Promise<{
 
   // Detect tier and configuration
   const tier = getTier();
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const { supabaseUrl, supabaseKey } = getProConfig();
   const openaiKey = process.env.OPENAI_API_KEY;
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   const ollamaUrl = process.env.OLLAMA_URL;
@@ -451,14 +450,13 @@ async function runFullCheck(): Promise<DiagnosticReport["benchmarks"]> {
   // Recall benchmark (if Supabase configured)
   if (hasSupabase()) {
     console.error("  Running recall benchmark...");
+    // Read once, outside the timed function, so each run times the request only.
+    const { supabaseUrl, supabaseKey } = getProConfig();
     try {
       benchmarks.recall = await runBenchmark(
         "recall",
         async () => {
           // Simulate recall by doing a search
-          const supabaseUrl = process.env.SUPABASE_URL;
-          const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
           await fetch(`${supabaseUrl}/rest/v1/gitmem_learnings?select=id,title&limit=5`, {
             headers: {
               apikey: supabaseKey!,

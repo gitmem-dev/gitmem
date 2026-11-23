@@ -11,6 +11,7 @@
 import { embed } from "../services/embedding.js";
 import { Timer, buildPerformanceData } from "../services/metrics.js";
 import { getProject } from "../services/session-state.js";
+import { getProConfig } from "../services/license.js";
 import type { Project, PerformanceData, PerformanceBreakdown } from "../types/index.js";
 
 export interface SearchTranscriptsParams {
@@ -121,10 +122,9 @@ export async function searchTranscripts(
     }
 
     // 2. Call match_transcript_chunks RPC via PostgREST
-    const SUPABASE_URL = process.env.SUPABASE_URL || "";
-    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    const { supabaseUrl, supabaseKey } = getProConfig();
 
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
+    if (!supabaseUrl || !supabaseKey) {
       const latencyMs = timer.stop();
       return {
         query: params.query,
@@ -136,7 +136,7 @@ export async function searchTranscripts(
     }
 
     const rpcTimer = new Timer();
-    const rpcUrl = `${SUPABASE_URL}/rest/v1/rpc/match_transcript_chunks`;
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/match_transcript_chunks`;
 
     const rpcBody = {
       query_embedding: `[${queryEmbedding.join(",")}]`,
@@ -151,8 +151,8 @@ export async function searchTranscripts(
         "Content-Type": "application/json",
         "Content-Profile": "public",
         "Accept-Profile": "public",
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
-        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${supabaseKey}`,
+        "apikey": supabaseKey,
       },
       body: JSON.stringify(rpcBody),
     });

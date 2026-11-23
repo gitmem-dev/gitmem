@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.5] - 2026-11-22
+
+The two Security items and the `--no-save-keys` note were contributed by Tyler (TenTides) in pull request #79.
+
 ### Security
 
 - **An existing `config.json` and `license-cache.json` are tightened to owner-only (`0600`) when the gitmem server

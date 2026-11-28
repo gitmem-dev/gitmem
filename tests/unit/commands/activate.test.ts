@@ -4,7 +4,7 @@
  * Verifies what activate leaves on disk and prints, not the order of its steps:
  * - config.json is written owner-only (0600), an older open file is tightened
  *   and the command says so, and a chmod failure warns without stopping
- * - OPENROUTER_BASE_URL is never saved
+ * - OPENROUTER_BASE_URL and GITMEM_LICENSE_URL are never saved
  * - --no-save-keys writes none of the credentials, keeps what is already there,
  *   and is accepted before or after the license key
  * - without the option the credentials are saved as before
@@ -70,7 +70,7 @@ describe("activate command", () => {
     fs.mkdirSync(WORK_DIR, { recursive: true });
 
     for (const name of ["GITMEM_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "OPENROUTER_API_KEY",
-      "OPENROUTER_BASE_URL", "DATABASE_URL", "SUPABASE_ACCESS_TOKEN"]) {
+      "OPENROUTER_BASE_URL", "GITMEM_LICENSE_URL", "DATABASE_URL", "SUPABASE_ACCESS_TOKEN"]) {
       vi.stubEnv(name, undefined);
     }
     for (const [name, value] of Object.entries(ENV_VALUES)) vi.stubEnv(name, value);
@@ -143,6 +143,17 @@ describe("activate command", () => {
 
     expect(readConfig()).not.toHaveProperty("openrouter_base_url");
     expect(fs.readFileSync(configPath, "utf-8")).not.toContain("gw.example");
+  });
+
+  it("never saves GITMEM_LICENSE_URL, with or without --no-save-keys", async () => {
+    vi.stubEnv("GITMEM_LICENSE_URL", "http://127.0.0.1:8787/license-gw");
+
+    await main([]);
+    expect(fs.readFileSync(configPath, "utf-8")).not.toContain("license-gw");
+
+    fs.rmSync(configPath, { force: true });
+    await main(["--no-save-keys"]);
+    expect(fs.readFileSync(configPath, "utf-8")).not.toContain("license-gw");
   });
 
   describe("--no-save-keys", () => {

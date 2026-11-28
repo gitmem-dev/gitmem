@@ -7,6 +7,7 @@
  * - getCachedLicenseTier() reads/validates cache TTL
  * - clearLicenseCache() removes cache file
  * - Re-activation safety (config not destroyed)
+ * - OPENROUTER_BASE_URL and GITMEM_LICENSE_URL (environment-only base URLs)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -37,6 +38,7 @@ describe("license service", () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     delete process.env.SUPABASE_KEY;
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GITMEM_LICENSE_URL;
   });
 
   afterEach(() => {
@@ -411,5 +413,182 @@ describe("license service", () => {
       expect(mod.getOpenRouterBaseUrl()).toBe(value);
       expect(warnings()).toEqual([]);
     });
+  });
+
+  describe("GITMEM_LICENSE_URL", () => {
+    // The warnings are once per process, so each case loads a fresh copy of the module.
+    type LicenseModule = typeof import("../../../src/services/license.js");
+    let mod: LicenseModule;
+    let stderr: ReturnType<typeof vi.spyOn>;
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const BUILT_IN = "https://cjptxyezuxdiinufgrrm.supabase.co/rest/v1/rpc/gitmem_validate_license";
+    const cachePath = () => path.join(TEST_DIR, "license-cache.json");
+    const warnings = (): string[] =>
+      stderr.mock.calls.map((c) => c.map(String).join(" ")).filter((l) => l.includes("GITMEM_LICENSE_URL"));
+    const requests = () =>
+      fetchMock.mock.calls.map(([url, init]) => ({
+        url: String(url),
+        method: init?.method,
+        headers: init?.headers,
+        body: init?.body,
+      }));
+
+    beforeEach(async () => {
+      delete process.env.GITMEM_LICENSE_URL;
+      vi.resetModules();
+      stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+      fetchMock = vi.fn(
+        async () => new Response(JSON.stringify([{ valid: true, tier: "pro", message: "ok" }]), { status: 200 }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      mod = await import("../../../src/services/license.js");
+    });
+
+    afterEach(() => {
+      delete process.env.GITMEM_LICENSE_URL;
+      stderr.mockRestore();
+      vi.unstubAllGlobals();
+    });
+
+    it("posts to <base>/rest/v1/rpc/gitmem_validate_license with the same headers and body", async () => {
+      await mod.validateLicense("gitmem_dev_standin", "machine-install-id");
+      process.env.GITMEM_LICENSE_URL = " http://127.0.0.1:8787/license-gw/ ";
+      await mod.validateLicense("gitmem_dev_standin", "machine-install-id");
+
+      const [builtIn, gateway] = requests();
+      expect(builtIn.url).toBe(BUILT_IN);
+      expect(gateway.url).toBe("http://127.0.0.1:8787/license-gw/rest/v1/rpc/gitmem_validate_license");
+      expect(gateway.method).toBe("POST");
+      expect(gateway.headers).toEqual(builtIn.headers);
+      expect(JSON.parse(String(gateway.body))).toEqual({ p_api_key: "gitmem_dev_standin", p_install_id: "machine-install-id" });
+      expect(gateway.body).toBe(builtIn.body);
+    });
+
+    it("posts to the built-in URL when unset, empty or blank, with no warning", async () => {
+      for (const value of [undefined, "", "   "]) {
+        if (value === undefined) delete process.env.GITMEM_LICENSE_URL;
+        else process.env.GITMEM_LICENSE_URL = value;
+        await mod.validateLicense("gitmem_dev_test", "install-1");
+      }
+
+      expect(requests().map((r) => r.url)).toEqual([BUILT_IN, BUILT_IN, BUILT_IN]);
+      expect(warnings()).toEqual([]);
+    });
+
+    it("is not read from config.json", async () => {
+      fs.writeFileSync(
+        path.join(TEST_DIR, "config.json"),
+        JSON.stringify({ license_url: "https://gw.example", gitmem_license_url: "https://gw.example" }),
+      );
+
+      await mod.validateLicense("gitmem_dev_test", "install-1");
+
+      expect(requests().map((r) => r.url)).toEqual([BUILT_IN]);
+    });
+
+    it.each([
+      ["ftp://gw.example/license", "http or https"],
+      ["https://user:s3cret@gw.example", "username or password"],
+      ["gateway-host", "not a URL"],
+      ["https://gw.example/?key=abc123", "query or fragment"],
+      ["https://gw.example/#x", "query or fragment"],
+      ["https://gw.example/?", "query or fragment"],
+      ["https://gw.example/#", "query or fragment"],
+    ])("refuses %s: no request, no fallback, invalid, one warning without the value", async (value, reason) => {
+      process.env.GITMEM_LICENSE_URL = value;
+
+      const first = await mod.validateLicense("gitmem_dev_standin", "install-1");
+      const second = await mod.validateLicense("gitmem_dev_standin", "install-1");
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      for (const result of [first, second]) {
+        expect(result).toEqual({
+          valid: false,
+          tier: null,
+          message: "GITMEM_LICENSE_URL is not usable; no license check was made",
+        });
+      }
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain(reason);
+      expect(w[0]).toContain("license counts as invalid");
+      for (const part of ["gw.example", "s3cret", "abc123", "gateway-host"]) expect(w[0]).not.toContain(part);
+    });
+
+    it("does not use a cached answer from the built-in URL once it is set, even offline", async () => {
+      fs.writeFileSync(
+        cachePath(),
+        JSON.stringify({
+          valid: true,
+          tier: "dev",
+          validated_at: new Date().toISOString(),
+          api_key_prefix: "gitmem_pro_test...",
+        }),
+      );
+      expect(mod.getCachedLicenseTier()).toBe("dev");
+
+      process.env.GITMEM_LICENSE_URL = "http://127.0.0.1:8787";
+      expect(mod.getCachedLicenseTier()).toBeNull();
+
+      fetchMock.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+      const result = await mod.validateLicense("gitmem_dev_standin", "install-1");
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain("Network error");
+    });
+
+    it("does not use a cached answer from the gateway once it is changed or unset", async () => {
+      process.env.GITMEM_LICENSE_URL = "http://127.0.0.1:8787";
+      await mod.validateLicense("gitmem_dev_standin", "install-1");
+      expect(mod.getCachedLicenseTier()).toBe("pro");
+
+      process.env.GITMEM_LICENSE_URL = "http://127.0.0.1:9797";
+      expect(mod.getCachedLicenseTier()).toBeNull();
+
+      delete process.env.GITMEM_LICENSE_URL;
+      expect(mod.getCachedLicenseTier()).toBeNull();
+    });
+
+    it("ignores a valid cached answer when the value is unusable", async () => {
+      fs.writeFileSync(
+        cachePath(),
+        JSON.stringify({
+          valid: true,
+          tier: "pro",
+          validated_at: new Date().toISOString(),
+          api_key_prefix: "gitmem_pro_test...",
+        }),
+      );
+      process.env.GITMEM_LICENSE_URL = "ftp://gw.example";
+
+      expect(mod.getCachedLicenseTier()).toBeNull();
+      expect((await mod.validateLicense("gitmem_dev_standin", "install-1")).valid).toBe(false);
+      expect(warnings()).toHaveLength(1);
+    });
+
+    it("accepts a plain-http base on a non-local host with one cleartext warning", async () => {
+      process.env.GITMEM_LICENSE_URL = "http://gw.internal:8080";
+
+      await mod.validateLicense("gitmem_dev_standin", "install-1");
+      await mod.validateLicense("gitmem_dev_standin", "install-1");
+
+      const w = warnings();
+      expect(w).toHaveLength(1);
+      expect(w[0]).toContain("the license key is sent unencrypted");
+      expect(w[0]).not.toContain("gw.internal");
+      expect(requests()[0].url).toBe("http://gw.internal:8080/rest/v1/rpc/gitmem_validate_license");
+    });
+
+    it.each(["http://localhost:8080", "http://127.0.0.2", "http://[::1]:8080", "https://gw.internal"])(
+      "does not warn for %s",
+      async (value) => {
+        process.env.GITMEM_LICENSE_URL = value;
+
+        await mod.validateLicense("gitmem_dev_standin", "install-1");
+
+        expect(requests()[0].url).toBe(`${value}/rest/v1/rpc/gitmem_validate_license`);
+        expect(warnings()).toEqual([]);
+      },
+    );
   });
 });

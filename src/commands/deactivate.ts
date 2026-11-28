@@ -17,7 +17,8 @@ import {
 } from "../services/license.js";
 import { writePrivateFileSync, wasReadableByOthers } from "../services/private-file.js";
 
-// Same infra endpoint as validation — just different RPC
+// Same infra endpoint as validation — just different RPC. Always the built-in
+// one: GITMEM_LICENSE_URL routes the license check only, never deactivation.
 const DEACTIVATION_URL =
   getValidationUrl().replace("gitmem_validate_license", "gitmem_deactivate_device");
 const VALIDATION_ANON_KEY =

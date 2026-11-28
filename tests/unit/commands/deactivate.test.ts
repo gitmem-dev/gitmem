@@ -21,7 +21,15 @@ vi.mock("../../../src/services/gitmem-dir.js", () => ({
   getInstallId: () => "test-install-id",
 }));
 
+// Pass-through spy, so a test can see which writer wrote config.json.
+vi.mock("../../../src/services/private-file.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/services/private-file.js")>();
+  return { ...actual, writePrivateFileSync: vi.fn(actual.writePrivateFileSync) };
+});
+
 import { main } from "../../../src/commands/deactivate.js";
+import { getLicenseKey } from "../../../src/services/license.js";
+import { writePrivateFileSync } from "../../../src/services/private-file.js";
 
 describe("deactivate command", () => {
   beforeEach(() => {
@@ -144,5 +152,190 @@ describe("deactivate command", () => {
     const result = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     expect(result.project).toBe("my-project");
     expect(result.install_id).toBe("device-xyz");
+  });
+});
+
+/**
+ * deactivate --keys-only: the saved credentials and the license cache go, every
+ * other field stays, no request is made (the device stays registered), and only
+ * key names are printed. Any other argument is refused before anything happens.
+ */
+describe("deactivate --keys-only", () => {
+  const configPath = path.join(TEST_DIR, "config.json");
+  const cachePath = path.join(TEST_DIR, "license-cache.json");
+  const KEYS = {
+    api_key: "gitmem_pro_keysonly_test",
+    supabase_url: "https://keysonly-test.supabase.co",
+    supabase_key: "eyJ-keysonly-service-role",
+    openrouter_key: "sk-or-keysonly-test",
+    database_url: "postgresql://postgres:keysonly-pw@db.keysonly.test:5432/postgres",
+  };
+  const OTHER = {
+    project: "my-project",
+    install_id: "device-xyz",
+    feedback_enabled: true,
+    a_later_setting: { nested: [1, 2] },
+  };
+  let out: string;
+  let exitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fs.mkdirSync(TEST_DIR, { recursive: true });
+    vi.stubEnv("GITMEM_API_KEY", undefined);
+    // Answers like the real endpoint, so a request would succeed if one were made.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify([{ success: true, message: "Device removed" }]), { status: 200 })),
+    );
+    out = "";
+    const capture = (...a: unknown[]) => {
+      out += a.map(String).join(" ") + "\n";
+    };
+    vi.spyOn(console, "log").mockImplementation(capture);
+    vi.spyOn(console, "error").mockImplementation(capture);
+    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as never);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    fs.rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("removes the five keys, keeps every other field as it was, deletes the cache and makes no request", async () => {
+    // Interleaved, written the way activate writes the file.
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ project: OTHER.project, ...KEYS, install_id: OTHER.install_id, feedback_enabled: true,
+        a_later_setting: OTHER.a_later_setting }, null, 2),
+    );
+    fs.writeFileSync(cachePath, JSON.stringify({ valid: true, tier: "pro", api_key_prefix: "gitmem_pro_keyso..." }));
+
+    await main(["--keys-only"]);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(JSON.stringify(OTHER, null, 2));
+    expect(fs.existsSync(cachePath)).toBe(false);
+    expect(out).toContain("this device stays registered");
+  });
+
+  it("names the keys it removed and prints no value", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, api_key: KEYS.api_key, database_url: KEYS.database_url }));
+
+    await main(["--keys-only"]);
+
+    expect(out).toContain(`Removed api_key, database_url from ${configPath}`);
+    for (const value of Object.values(KEYS)) expect(out).not.toContain(value);
+  });
+
+  it("writes config.json through the owner-only writer", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+
+    await main(["--keys-only"]);
+
+    expect(vi.mocked(writePrivateFileSync).mock.calls.map((c) => c[0])).toEqual([configPath]);
+  });
+
+  it.skipIf(process.platform === "win32")("leaves config.json at 0600 and says when it tightened it", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+    fs.chmodSync(configPath, 0o644);
+
+    await main(["--keys-only"]);
+
+    expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+    expect(out).toContain("(was 0644)");
+  });
+
+  it("afterwards a license-key read finds none in the file and takes GITMEM_API_KEY", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+
+    await main(["--keys-only"]);
+
+    expect(getLicenseKey()).toBeNull();
+    vi.stubEnv("GITMEM_API_KEY", "gitmem_dev_from_env_test");
+    expect(getLicenseKey()).toBe("gitmem_dev_from_env_test");
+  });
+
+  it("leaves a file with none of the keys untouched, still deletes the cache, says so and exits 0; the same with no config.json", async () => {
+    // After activate --no-save-keys, the cache can hold the start of a key that came from the environment.
+    const cache = JSON.stringify({ valid: true, tier: "pro", api_key_prefix: "gitmem_dev_from_..." });
+    const text = JSON.stringify(OTHER); // compact, so a rewrite would show
+    fs.writeFileSync(configPath, text);
+    fs.writeFileSync(cachePath, cache);
+
+    await main(["--keys-only"]);
+
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(text);
+    expect(out).toContain(`No saved keys in ${configPath}`);
+    expect(fs.existsSync(cachePath)).toBe(false);
+    expect(out).toContain("Removed license-cache.json");
+
+    fs.rmSync(configPath);
+    fs.writeFileSync(cachePath, cache);
+    out = "";
+    await main(["--keys-only"]);
+
+    expect(fs.existsSync(configPath)).toBe(false);
+    expect(out).toContain("No config.json found");
+    expect(fs.existsSync(cachePath)).toBe(false);
+    expect(out).toContain("Removed license-cache.json");
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("exits 1 on a config.json that is not valid JSON and leaves it as it was", async () => {
+    const text = JSON.stringify({ ...OTHER, ...KEYS }).slice(0, -1); // the closing brace cut off
+    fs.writeFileSync(configPath, text);
+
+    await expect(main(["--keys-only"])).rejects.toThrow("process.exit called");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(out).toContain("Error reading config.json");
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(text);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(out).not.toContain(KEYS.api_key);
+  });
+
+  it("warns and still exits 0 when the cache can't be removed", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+    fs.mkdirSync(cachePath); // a folder in its place: removing it as a file fails on every platform
+
+    await main(["--keys-only"]);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(out).toContain(`Could not remove ${cachePath}. Delete it by hand.`);
+    expect(out).not.toContain("Removed license-cache.json");
+  });
+
+  it("without --keys-only, still releases the device", async () => {
+    fs.writeFileSync(configPath, JSON.stringify({ ...OTHER, ...KEYS }));
+
+    await main([]);
+
+    expect(vi.mocked(fetch).mock.calls.map((c) => String(c[0]))).toEqual([
+      expect.stringContaining("/rest/v1/rpc/gitmem_deactivate_device"),
+    ]);
+  });
+
+  it.each([
+    { label: "a misspelt --keys-only", args: ["--key-only"] },
+    { label: "--keys-only with another option", args: ["--keys-only", "--force"] },
+    { label: "a license key given as an argument", args: [KEYS.api_key] },
+  ])("refuses $label with exit 1, and changes and sends nothing", async ({ args }) => {
+    const text = JSON.stringify({ ...OTHER, ...KEYS });
+    fs.writeFileSync(configPath, text);
+    fs.writeFileSync(cachePath, "{}");
+
+    await expect(main(args)).rejects.toThrow("process.exit called");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(text);
+    expect(fs.existsSync(cachePath)).toBe(true);
+    expect(out).toContain("Usage: npx gitmem-mcp deactivate [--keys-only]");
+    expect(out).not.toContain(KEYS.api_key);
   });
 });
